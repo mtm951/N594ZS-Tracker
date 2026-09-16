@@ -5,3 +5,4 @@ document.getElementById('photoFile').addEventListener('change',e=>{const f=e.tar
 document.getElementById('entityFile').addEventListener('change',async e=>{const files=[...(e.target.files||[])],type=e.target.dataset.entityType,id=Number(e.target.dataset.entityId);e.target.value='';if(!type||!id||!files.length)return;await saveSelectedFiles(type,id,files)});
 document.getElementById('importFile').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{await importBackupObject(JSON.parse(r.result))}catch(err){alert('Could not import backup: '+err.message)}finally{e.target.value=''}};r.readAsText(f)});
 renderAll();
+initCloud();
