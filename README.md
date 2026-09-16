@@ -1,20 +1,32 @@
 # N594ZS Tracker
 
-A local-first project, parts, purchasing, documentation, checklist, and work-history dashboard for **N594ZS**, a Kitfox Model 4-1050.
-
-The tracker is built around deep, clickable records rather than shallow tables. Projects, parts, orders, work-log entries, documents, and checklists each open into detailed workspaces with linked records, notes, costs, blockers, next steps, attachments, and history.
+A shared project, parts, purchasing, documentation, maintenance, checklist, file, and work-history dashboard for **N594ZS**, a Kitfox Model 4-1050.
 
 ## Current version
 
-**v3.1** — dashboard drill-down and fully clickable navigation.
+**v4.0** — persistent multi-device cloud workspace.
 
-Dashboard metric cards and summary sections navigate directly to the relevant filtered records. Examples: High Priority opens active high-priority projects, Blocked / Held Up opens held-up projects, Open Orders opens active orders, inventory rows open part records, work entries open their detailed log records, and project rows open their individual workspaces.
+The app is hosted on GitHub Pages and uses Supabase for authentication, shared record storage, realtime updates, private file storage, activity history, role-based access, Trash/restore, and point-in-time cloud snapshots.
 
-## Data storage
+## Major features
 
-Core records are stored locally in the browser. Uploaded files are stored in IndexedDB. The Settings page includes Core JSON and Full Backup options.
+- Deep clickable project, part, order, work-log, document, checklist, and aircraft records
+- Record-level cloud sync across signed-in devices
+- Private shared file library plus per-record photos/PDFs/screenshots/receipts
+- Aircraft photo stored in shared cloud storage
+- Maintenance page for recurring date/hour items and return-to-service gates
+- Activity history showing what changed and when
+- Trash/restore workflow
+- Owner / Editor / Viewer access controls
+- Global tracker search
+- Manual and automatic daily cloud snapshots
+- System/sync health page and JSON export
+- Installable/offline-capable Progressive Web App shell
+- Local browser cache remains available as an offline fallback
 
-GitHub hosts and versions the application code; it does not by itself synchronize live aircraft data between devices. Multi-device sync will be a later backend feature.
+## Hosting and data
+
+Application code is versioned in this GitHub repository and deployed with GitHub Pages. Live tracker data is stored in Supabase. Uploaded files are stored in the private `n594zs-files` Supabase Storage bucket and are available to authorized signed-in users on any device.
 
 ## Safety / records note
 
