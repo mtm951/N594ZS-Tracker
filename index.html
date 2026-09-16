@@ -45,7 +45,7 @@
   <section class="page" id="page-system"></section>
   <section class="page" id="page-settings"></section>
 </main>
-<div class="footer">N594ZS Tracker v4.2 • W&B calculator • purchase/inventory history • readiness workflow • shared cloud records/files • project-management aid only; required aircraft/engine records remain separate</div>
+<div class="footer">N594ZS Tracker v4.3 • invoice PDFs • W&B calculator • purchase/inventory history • readiness workflow • shared cloud records/files • project-management aid only; required aircraft/engine records remain separate</div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 <input class="file-input" type="file" id="importFile" accept="application/json">
@@ -53,7 +53,10 @@
 <input class="file-input" type="file" id="entityFile" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx,.xls,.xlsx,.csv,.json">
 <input class="file-input" type="file" id="libraryFile" multiple>
 <input class="file-input" type="file" id="purchaseImportFile" accept=".csv,text/csv">
+<input class="file-input" type="file" id="invoiceBulkFile" multiple accept="application/pdf,.pdf">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
 <script src="app-01-seed.js?v=4.0"></script>
 <script src="app-02-data.js?v=4.0"></script>
 <script src="app-02-cloud.js?v=4.0"></script>
@@ -79,6 +82,7 @@
 <script src="app-22-aircraft-polish.js?v=4.1"></script>
 <script src="app-23-wb-purchases.js?v=4.2"></script>
 <script src="app-24-data-polish.js?v=4.2"></script>
+<script src="app-24-invoice-pdfs.js?v=4.3"></script>
 <script src="app-19-pwa.js?v=4.0"></script>
 <script src="app-15-init.js?v=4.0"></script>
 </body>
