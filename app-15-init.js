@@ -7,7 +7,7 @@ document.getElementById('photoFile').addEventListener('change',async e=>{
   if(f.size>3*1024*1024){alert('Please keep the aircraft dashboard photo under 3 MB.');e.target.value='';return}
   try{await saveAircraftPhotoFile(f)}catch(err){console.error(err);alert('Could not save aircraft photo: '+err.message)}finally{e.target.value=''}
 });
-document.getElementById('entityFile').addEventListener('change',async e=>{const files=[...(e.target.files||[])],type=e.target.dataset.entityType,id=Number(e.target.dataset.entityId);e.target.value='';if(!type||!id||!files.length)return;await saveSelectedFiles(type,id,files)});
+document.getElementById('entityFile').addEventListener('change',async e=>{const files=[...(e.target.files||[])],type=e.target.dataset.entityType,rawId=e.target.dataset.entityId,id=/^\d+$/.test(String(rawId||''))?Number(rawId):rawId;e.target.value='';if(!type||!rawId||!files.length)return;await saveSelectedFiles(type,id,files)});
 document.getElementById('importFile').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{await importBackupObject(JSON.parse(r.result))}catch(err){alert('Could not import backup: '+err.message)}finally{e.target.value=''}};r.readAsText(f)});
 renderAll();
 initCloud();
