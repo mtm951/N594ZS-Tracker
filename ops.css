@@ -1,0 +1,4 @@
+/* N594ZS Tracker v4.1 operational workflow */
+.squawk-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.squawk-stats button{border:1px solid var(--line);border-radius:10px;background:#f8fafc;padding:10px;text-align:left;color:var(--text);cursor:pointer}.squawk-stats button:hover{background:#eef5fa;border-color:#9ab8cf}.squawk-stats b{display:block;font-size:20px}.squawk-stats span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+#page-runs table td,#page-squawks table td{vertical-align:top}.run-stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.run-stat-grid .kv{border:1px solid #e7edf2;border-radius:8px;padding:8px}.run-stat-grid .kv span{font-size:10px;color:var(--muted)}
+@media(max-width:760px){.squawk-stats{grid-template-columns:1fr 1fr}}
