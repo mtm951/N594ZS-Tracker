@@ -1,6 +1,7 @@
 const SUPABASE_URL='https://fbjyhodrddsvuesafxce.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_BebbqF7DaM1P6EHlph0DWQ_xoZdSmoa';
 const WORKSPACE_SLUG='n594zs';
+const APP_URL='https://mtm951.github.io/N594ZS-Tracker/';
 let supa=null, cloudSession=null, cloudWorkspaceId=null, cloudRole=null, cloudSaveTimer=null, cloudLoading=false;
 
 function cloudStatusLabel(text,kind=''){
@@ -111,7 +112,7 @@ async function cloudSignIn(e){
 async function cloudSignUp(){
   const email=document.getElementById('cloudEmail').value.trim(),password=document.getElementById('cloudPassword').value;
   if(!email||password.length<6){toast('Enter an email and password of at least 6 characters.','bad');return;}
-  const {data,error}=await supa.auth.signUp({email,password});
+  const {data,error}=await supa.auth.signUp({email,password,options:{emailRedirectTo:APP_URL}});
   if(error){toast(error.message,'bad');return;}
   if(data.session){closeModal();toast('Account created and signed in.','good');}
   else toast('Account created. Check your email to confirm, then sign in.','good');
