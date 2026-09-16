@@ -1,6 +1,7 @@
 function saveDB(message){
   normalizeDB();
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){toast('Could not save browser data: '+e.message,'bad');}
+  queueCloudSave();
   renderAll();
   if(message) toast(message,'good');
 }
