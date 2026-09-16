@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css?v=4.0">
   <link rel="stylesheet" href="enhancements.css?v=4.0">
+  <link rel="stylesheet" href="workflow.css?v=4.1">
 </head>
 <body>
 <header class="topbar">
@@ -22,6 +23,7 @@
 <main class="shell">
   <section class="page active" id="page-dashboard"></section>
   <section class="page" id="page-aircraft"></section>
+  <section class="page" id="page-readiness"></section>
   <section class="page" id="page-projects"></section>
   <section class="page" id="page-parts"></section>
   <section class="page" id="page-orders"></section>
@@ -37,7 +39,7 @@
   <section class="page" id="page-system"></section>
   <section class="page" id="page-settings"></section>
 </main>
-<div class="footer">N594ZS Tracker v4.0 • record-level cloud sync • shared files • activity • backups • offline-capable PWA • project-management aid only; required aircraft/engine records remain separate</div>
+<div class="footer">N594ZS Tracker v4.1 • aircraft readiness workflow • project step checklists • record-level cloud sync • shared files • project-management aid only; required aircraft/engine records remain separate</div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 <input class="file-input" type="file" id="importFile" accept="application/json">
@@ -65,6 +67,7 @@
 <script src="app-17-record-sync.js?v=4.0"></script>
 <script src="app-18-enhancements.js?v=4.0"></script>
 <script src="app-18a-polish.js?v=4.0"></script>
+<script src="app-20-workflow.js?v=4.1"></script>
 <script src="app-19-pwa.js?v=4.0"></script>
 <script src="app-15-init.js?v=4.0"></script>
 </body>
