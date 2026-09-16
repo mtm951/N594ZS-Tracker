@@ -4,14 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0d355e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>N594ZS Tracker</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css?v=4.0">
+  <link rel="stylesheet" href="enhancements.css?v=4.0">
 </head>
 <body>
 <header class="topbar">
   <div class="brand brand-link" role="button" tabindex="0" aria-label="Go to dashboard" onclick="navTo('dashboard')" onkeydown="activateOnEnter(event,()=>navTo('dashboard'))"><span class="plane-logo">✈</span><span>N594ZS Tracker<small>Kitfox Model 4-1050 • project, parts & maintenance workspace</small></span></div>
   <nav class="nav" id="nav"></nav>
-  <div id="cloudStatus" style="margin-left:auto"></div>
+  <div class="global-search"><input id="globalSearchInput" type="search" placeholder="Search tracker…  /" autocomplete="off" oninput="globalSearchChanged(this.value)"></div>
+  <div id="cloudStatus"></div>
 </header>
 <main class="shell">
   <section class="page active" id="page-dashboard"></section>
@@ -19,36 +25,46 @@
   <section class="page" id="page-projects"></section>
   <section class="page" id="page-parts"></section>
   <section class="page" id="page-orders"></section>
+  <section class="page" id="page-maintenance"></section>
+  <section class="page" id="page-files"></section>
   <section class="page" id="page-documents"></section>
   <section class="page" id="page-checklists"></section>
   <section class="page" id="page-logbook"></section>
+  <section class="page" id="page-search"></section>
+  <section class="page" id="page-activity"></section>
   <section class="page" id="page-access"></section>
+  <section class="page" id="page-trash"></section>
+  <section class="page" id="page-system"></section>
   <section class="page" id="page-settings"></section>
 </main>
-<div class="footer">N594ZS Tracker v3.5 • hardened live shared sync + role-based access via Supabase • project-management aid only; required aircraft/engine records remain separate</div>
+<div class="footer">N594ZS Tracker v4.0 • record-level cloud sync • shared files • activity • backups • offline-capable PWA • project-management aid only; required aircraft/engine records remain separate</div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 <input class="file-input" type="file" id="importFile" accept="application/json">
 <input class="file-input" type="file" id="photoFile" accept="image/*">
 <input class="file-input" type="file" id="entityFile" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx,.xls,.xlsx,.csv,.json">
+<input class="file-input" type="file" id="libraryFile" multiple>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app-01-seed.js"></script>
-<script src="app-02-data.js"></script>
-<script src="app-02-cloud.js"></script>
-<script src="app-03-core.js"></script>
-<script src="app-04-dashboard.js"></script>
-<script src="app-05-views.js"></script>
-<script src="app-06-projects.js"></script>
-<script src="app-07-parts.js"></script>
-<script src="app-08-orders.js"></script>
-<script src="app-09-logbook.js"></script>
-<script src="app-10-documents.js"></script>
-<script src="app-11-checklists.js"></script>
-<script src="app-12-aircraft-updates.js"></script>
-<script src="app-13-attachments.js"></script>
-<script src="app-13a-cloud-media.js"></script>
-<script src="app-14-backups.js"></script>
-<script src="app-16-access.js"></script>
-<script src="app-15-init.js"></script>
+<script src="app-01-seed.js?v=4.0"></script>
+<script src="app-02-data.js?v=4.0"></script>
+<script src="app-02-cloud.js?v=4.0"></script>
+<script src="app-03-core.js?v=4.0"></script>
+<script src="app-04-dashboard.js?v=4.0"></script>
+<script src="app-05-views.js?v=4.0"></script>
+<script src="app-06-projects.js?v=4.0"></script>
+<script src="app-07-parts.js?v=4.0"></script>
+<script src="app-08-orders.js?v=4.0"></script>
+<script src="app-09-logbook.js?v=4.0"></script>
+<script src="app-10-documents.js?v=4.0"></script>
+<script src="app-11-checklists.js?v=4.0"></script>
+<script src="app-12-aircraft-updates.js?v=4.0"></script>
+<script src="app-13-attachments.js?v=4.0"></script>
+<script src="app-13a-cloud-media.js?v=4.0"></script>
+<script src="app-14-backups.js?v=4.0"></script>
+<script src="app-16-access.js?v=4.0"></script>
+<script src="app-17-record-sync.js?v=4.0"></script>
+<script src="app-18-enhancements.js?v=4.0"></script>
+<script src="app-19-pwa.js?v=4.0"></script>
+<script src="app-15-init.js?v=4.0"></script>
 </body>
 </html>
