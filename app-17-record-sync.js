@@ -65,6 +65,7 @@ loadCloudState=async function(silent=false){
     lastCloudSyncAt=new Date();
     cloudStatusLabel('Synced');
     if(!silent)toast('Loaded shared N594ZS data.','good');
+    if(typeof ensureDailySnapshot==='function')setTimeout(()=>ensureDailySnapshot(),500);
   }finally{cloudLoading=false;}
 }
 
