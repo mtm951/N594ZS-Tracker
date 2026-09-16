@@ -1,4 +1,9 @@
 function saveDB(message){
+  if(cloudSession&&cloudWorkspaceId&&typeof canCloudEdit==='function'&&!canCloudEdit()){
+    toast('Viewer access is read-only. Changes were not saved.','bad');
+    loadCloudState();
+    return;
+  }
   normalizeDB();
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){toast('Could not save browser data: '+e.message,'bad');}
   queueCloudSave();
@@ -45,7 +50,7 @@ function systemOptions(current){const s=unique([...db.projects.map(x=>x.system),
 function formatBytes(n){if(!n)return '0 B';const u=['B','KB','MB','GB'];let i=0,v=n;while(v>=1024&&i<u.length-1){v/=1024;i++}return `${v.toFixed(i?1:0)} ${u[i]}`}
 
 function renderNav(){document.getElementById('nav').innerHTML=NAV.map(([id,label])=>`<button data-nav="${id}" class="${id===currentPage?'active':''}" onclick="navTo('${id}')">${label}</button>`).join('')}
-function navTo(page){currentPage=page;document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+page)?.classList.add('active');renderNav();window.scrollTo({top:0,behavior:'smooth'})}
+function navTo(page){currentPage=page;document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+page)?.classList.add('active');renderNav();if(page==='access'&&typeof renderAccess==='function')renderAccess();window.scrollTo({top:0,behavior:'smooth'})}
 function setControl(id,value=''){const el=document.getElementById(id);if(el)el.value=value??''}
 function openProjectsView(filters={}){navTo('projects');setControl('projectSearch',filters.query||'');setControl('projectStatus',filters.status||'');setControl('projectSystem',filters.system||'');setControl('projectPriority',filters.priority||'');renderProjectRows()}
 function openOrdersView(status=''){navTo('orders');setControl('orderSearch','');setControl('orderStatus',status||'');renderOrderRows()}
