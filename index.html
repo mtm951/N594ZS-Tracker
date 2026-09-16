@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="enhancements.css?v=4.0">
   <link rel="stylesheet" href="workflow.css?v=4.1">
   <link rel="stylesheet" href="ops.css?v=4.1">
+  <link rel="stylesheet" href="data-tools.css?v=4.2">
 </head>
 <body>
 <header class="topbar">
@@ -24,10 +25,12 @@
 <main class="shell">
   <section class="page active" id="page-dashboard"></section>
   <section class="page" id="page-aircraft"></section>
+  <section class="page" id="page-weightbalance"></section>
   <section class="page" id="page-readiness"></section>
   <section class="page" id="page-projects"></section>
   <section class="page" id="page-parts"></section>
   <section class="page" id="page-orders"></section>
+  <section class="page" id="page-purchases"></section>
   <section class="page" id="page-squawks"></section>
   <section class="page" id="page-maintenance"></section>
   <section class="page" id="page-files"></section>
@@ -42,13 +45,14 @@
   <section class="page" id="page-system"></section>
   <section class="page" id="page-settings"></section>
 </main>
-<div class="footer">N594ZS Tracker v4.1 • readiness workflow • project task checklists • squawks • runs/tests • shared files • project-management aid only; required aircraft/engine records remain separate</div>
+<div class="footer">N594ZS Tracker v4.2 • W&B calculator • purchase/inventory history • readiness workflow • shared cloud records/files • project-management aid only; required aircraft/engine records remain separate</div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 <input class="file-input" type="file" id="importFile" accept="application/json">
 <input class="file-input" type="file" id="photoFile" accept="image/*">
 <input class="file-input" type="file" id="entityFile" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx,.xls,.xlsx,.csv,.json">
 <input class="file-input" type="file" id="libraryFile" multiple>
+<input class="file-input" type="file" id="purchaseImportFile" accept=".csv,text/csv">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app-01-seed.js?v=4.0"></script>
 <script src="app-02-data.js?v=4.0"></script>
@@ -73,6 +77,7 @@
 <script src="app-20-workflow.js?v=4.1"></script>
 <script src="app-21-squawks-runs.js?v=4.1"></script>
 <script src="app-22-aircraft-polish.js?v=4.1"></script>
+<script src="app-23-wb-purchases.js?v=4.2"></script>
 <script src="app-19-pwa.js?v=4.0"></script>
 <script src="app-15-init.js?v=4.0"></script>
 </body>
