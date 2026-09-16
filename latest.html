@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Loading N594ZS Tracker</title><style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f3f6f9;color:#17324c;display:grid;min-height:100vh;place-items:center;padding:24px}.card{max-width:560px;background:#fff;border:1px solid #dbe4eb;border-radius:14px;padding:24px;box-shadow:0 8px 30px rgba(23,50,76,.12)}h1{margin-top:0}.muted{color:#6e7f8e;line-height:1.5}</style></head>
+<body><div class="card"><h1>Loading current N594ZS Tracker…</h1><div class="muted">Fetching the current release directly from the network and bypassing the old cached application shell.</div><p id="status">Preparing…</p></div>
+<script>
+(async()=>{
+  const status=document.getElementById('status');
+  try{
+    if('caches' in window){const keys=await caches.keys();await Promise.all(keys.filter(k=>k.startsWith('n594zs-')).map(k=>caches.delete(k)));}
+    if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.filter(r=>String(r.scope||'').includes('/N594ZS-Tracker/')).map(r=>r.unregister()));}
+    status.textContent='Fetching release 5.0.2…';
+    const stamp=Date.now();
+    const res=await fetch('./index.html?release=5.0.2&bust='+stamp,{cache:'no-store'});
+    if(!res.ok)throw new Error('index.html returned '+res.status);
+    let html=await res.text();
+    html=html.replace(/\?v=[^\"']+/g,'?v=5.0.2-'+stamp).replace(/N594ZS Tracker v5\.0\.1/g,'N594ZS Tracker v5.0.2');
+    html=html.replace('</body>',`<script>window.addEventListener('load',()=>{setTimeout(()=>{if(typeof renderOps!=='function'){console.error('Aircraft Ops module did not load');const n=document.getElementById('nav');if(n)n.insertAdjacentHTML('beforeend','<button style="color:#fff;background:#9d423d" onclick="location.reload()">Aircraft Ops load error</button>');}},800)});<\/script></body>`);
+    document.open();document.write(html);document.close();
+  }catch(err){status.textContent='Could not load current tracker: '+err.message;console.error(err);}
+})();
+</script></body></html>
