@@ -40,7 +40,9 @@ function ensurePurchaseVendorColumns(table){
       table.querySelectorAll('tbody tr.click-row').forEach(row=>{
         const m=/openPurchaseDetail\('([^']+)'\)/.exec(row.getAttribute('onclick')||'');
         const p=m?db.purchases.find(x=>String(x.id)===m[1]):null;
-        const td=document.createElement('td');td.textContent=p?.vendor||'—';row.children[0]?.after(td);
+        const td=document.createElement('td');
+        td.innerHTML=p?.vendor?`<b>${esc(p.vendor)}</b>${p.seller?`<div class="task-note">${esc(p.seller)}</div>`:''}`:'—';
+        row.children[0]?.after(td);
       });
     }
   }else{
