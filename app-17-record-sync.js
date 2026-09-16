@@ -1,7 +1,10 @@
 // ---------- V4 RECORD-LEVEL CLOUD SYNC ----------
 const CLOUD_CLIENT_ID=sessionStorage.getItem('n594zs_client_id')||crypto.randomUUID();
 sessionStorage.setItem('n594zs_client_id',CLOUD_CLIENT_ID);
+const CLOUD_PENDING_KEY='n594zs_pending_cloud_v4';
+const CLOUD_SNAPSHOT_KEY='n594zs_record_snapshot_v4';
 let cloudRecordSnapshot=new Map();
+try{const cached=JSON.parse(localStorage.getItem(CLOUD_SNAPSHOT_KEY)||'{}');cloudRecordSnapshot=new Map(Object.entries(cached));}catch(_e){}
 let cloudReloadTimer=null;
 let lastCloudSyncAt=null;
 
@@ -9,6 +12,7 @@ const RECORD_ARRAYS={project:'projects',part:'parts',order:'orders',log:'logs',d
 const SYNC_RECORD_TYPES=new Set(['aircraft','settings',...Object.keys(RECORD_ARRAYS)]);
 function cloudRecordKey(type,id){return `${type}:${String(id)}`}
 function cloudStableJSON(x){try{return JSON.stringify(x)}catch(_e){return ''}}
+function persistCloudRecordSnapshot(){try{localStorage.setItem(CLOUD_SNAPSHOT_KEY,JSON.stringify(Object.fromEntries(cloudRecordSnapshot)))}catch(_e){}}
 function buildCloudRecordMap(){
   const m=new Map();
   const aircraft=clone(db.aircraft||{});
@@ -36,11 +40,12 @@ async function upsertAllCloudRecords(){
     const {error}=await supa.from('tracker_records').upsert(rows.slice(i,i+50),{onConflict:'workspace_id,record_type,record_id'});
     if(error)throw error;
   }
-  cloudRecordSnapshot=new Map([...buildCloudRecordMap()].map(([k,v])=>[k,cloudStableJSON(v.data)]));
+  cloudRecordSnapshot=new Map([...buildCloudRecordMap()].map(([k,v])=>[k,cloudStableJSON(v.data)]));persistCloudRecordSnapshot();
 }
 
 loadCloudState=async function(silent=false){
   if(!supa||!cloudWorkspaceId)return;
+  if(navigator.onLine&&canCloudEdit()&&localStorage.getItem(CLOUD_PENDING_KEY)==='1'&&cloudRecordSnapshot.size){await saveCloudState();}
   cloudLoading=true;
   try{
     let {data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client').eq('workspace_id',cloudWorkspaceId).is('deleted_at',null);
@@ -59,7 +64,7 @@ loadCloudState=async function(silent=false){
     }
     db=assembleCloudDB(rows||[]);
     normalizeDB();
-    cloudRecordSnapshot=snapshotFromRows(rows||[]);
+    cloudRecordSnapshot=snapshotFromRows(rows||[]);persistCloudRecordSnapshot();
     persistCloudCache();
     renderAll();
     lastCloudSyncAt=new Date();
@@ -71,14 +76,15 @@ loadCloudState=async function(silent=false){
 
 queueCloudSave=function(){
   if(!supa||!cloudSession||!cloudWorkspaceId||cloudLoading||!canCloudEdit())return;
+  localStorage.setItem(CLOUD_PENDING_KEY,'1');
   clearTimeout(cloudSaveTimer);
   cloudStatusLabel(navigator.onLine?'Saving…':'Offline');
-  cloudSaveTimer=setTimeout(saveCloudState,450);
+  if(navigator.onLine)cloudSaveTimer=setTimeout(saveCloudState,450);
 }
 
 saveCloudState=async function(){
   if(!supa||!cloudSession||!cloudWorkspaceId||cloudLoading||!canCloudEdit())return;
-  if(!navigator.onLine){cloudStatusLabel('Offline');return;}
+  if(!navigator.onLine){localStorage.setItem(CLOUD_PENDING_KEY,'1');cloudStatusLabel('Offline');return;}
   try{
     if(typeof migrateAircraftPhotoToCloudIfNeeded==='function'){
       const migrated=await migrateAircraftPhotoToCloudIfNeeded();
@@ -100,7 +106,8 @@ saveCloudState=async function(){
       const {error}=await supa.from('tracker_records').update({deleted_at:now,updated_at:now,updated_by:cloudSession.user.id,updated_client:CLOUD_CLIENT_ID}).eq('workspace_id',cloudWorkspaceId).eq('record_type',type).eq('record_id',id);
       if(error)throw error;
     }
-    cloudRecordSnapshot=new Map([...current].map(([k,v])=>[k,cloudStableJSON(v.data)]));
+    cloudRecordSnapshot=new Map([...current].map(([k,v])=>[k,cloudStableJSON(v.data)]));persistCloudRecordSnapshot();
+    localStorage.removeItem(CLOUD_PENDING_KEY);
     lastCloudSyncAt=new Date();
     cloudStatusLabel('Synced');
     if(typeof renderSystem==='function'&&currentPage==='system')renderSystem();
@@ -124,4 +131,4 @@ startCloudRealtime=function(){
 forceCloudReload=async function(){closeModal();await loadCloudState(true);cloudStatusLabel('Synced');toast('Shared data reloaded.','good')}
 
 window.addEventListener('offline',()=>{if(cloudSession)cloudStatusLabel('Offline')});
-window.addEventListener('online',()=>{if(cloudSession){cloudStatusLabel('Reconnecting…');loadCloudState(true).then(()=>{startCloudRealtime();cloudStatusLabel('Synced');toast('Back online and synced.','good')}).catch(e=>{console.error(e);cloudStatusLabel('Sync pending')})}});
+window.addEventListener('online',()=>{if(cloudSession){cloudStatusLabel('Reconnecting…');const first=localStorage.getItem(CLOUD_PENDING_KEY)==='1'?saveCloudState():Promise.resolve();first.then(()=>loadCloudState(true)).then(()=>{startCloudRealtime();cloudStatusLabel('Synced');toast('Back online and synced.','good')}).catch(e=>{console.error(e);cloudStatusLabel('Sync pending')})}});
