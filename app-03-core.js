@@ -38,8 +38,15 @@ function projectName(id){return projectById(id)?.title||'Unlinked'}
 function partName(id){return partById(id)?.name||'Unlinked'}
 function isClosedOrder(o){return ['Received','Cancelled'].includes(o.status)}
 function toast(text,type=''){const w=document.getElementById('toastWrap');if(!w)return;const d=document.createElement('div');d.className='toast '+type;d.textContent=text;w.appendChild(d);setTimeout(()=>d.remove(),3200)}
-function modalHeader(title,subtitle=''){return `<div class="modal-head"><div><div class="modal-title">${esc(title)}</div>${subtitle?`<div class="muted small" style="margin-top:3px">${esc(subtitle)}</div>`:''}</div><button class="icon-btn" onclick="closeModal()">✕</button></div>`}
-function openModal(html,wide=false){const m=document.getElementById('modal');const b=document.getElementById('modalBox');b.className='modal-box'+(wide?' wide':'');b.innerHTML=html;m.classList.add('open')}
+function modalHeader(title,subtitle=''){return `<div class="modal-head"><div><div class="modal-title">${esc(title)}</div>${subtitle?`<div class="muted small" style="margin-top:3px">${esc(subtitle)}</div>`:''}</div><button class="icon-btn" data-modal-close onclick="closeModal()" aria-label="Close">✕</button></div>`}
+function openModal(html,wide=false){
+  const m=document.getElementById('modal'),b=document.getElementById('modalBox');
+  b.className='modal-box'+(wide?' wide':'');b.innerHTML=html;
+  if(!b.querySelector('[data-modal-close]')){
+    b.insertAdjacentHTML('afterbegin','<button class="icon-btn" data-modal-close onclick="closeModal()" aria-label="Close popup" title="Close" style="position:sticky;top:0;float:right;z-index:25;margin:-4px -4px 8px 8px;background:#fff">✕</button>');
+  }
+  m.classList.add('open');
+}
 function closeModal(){document.getElementById('modal').classList.remove('open');currentDetail=null;objectUrls.forEach(URL.revokeObjectURL);objectUrls=[]}
 function field(label,id,value='',type='text',extra=''){return `<div><label for="${id}">${esc(label)}</label><input id="${id}" type="${type}" value="${esc(value)}" ${extra}></div>`}
 function textareaField(label,id,value='',extraClass='full'){return `<div class="${extraClass}"><label for="${id}">${esc(label)}</label><textarea id="${id}">${esc(value)}</textarea></div>`}
@@ -57,3 +64,10 @@ function openOrdersView(status=''){navTo('orders');setControl('orderSearch','');
 function openPartsView(filters={}){navTo('parts');setControl('partSearch',filters.query||'');setControl('partSystem',filters.system||'');setControl('partStatus',filters.status||'');renderPartRows()}
 function openLogsView(filters={}){navTo('logbook');setControl('logSearch',filters.query||'');setControl('logSystem',filters.system||'');renderLogRows()}
 function activateOnEnter(event,fn){if(event.key==='Enter'||event.key===' '){event.preventDefault();fn()}}
+
+// Modal escape hatches: X is universal; Escape and backdrop-click also close popups.
+if(!window.__n594zsModalEscapeBound){
+  window.__n594zsModalEscapeBound=true;
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('modal')?.classList.contains('open'))closeModal()});
+  document.addEventListener('click',e=>{const m=document.getElementById('modal');if(e.target===m&&m.classList.contains('open'))closeModal()});
+}
