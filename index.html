@@ -11,6 +11,7 @@
 <header class="topbar">
   <div class="brand brand-link" role="button" tabindex="0" aria-label="Go to dashboard" onclick="navTo('dashboard')" onkeydown="activateOnEnter(event,()=>navTo('dashboard'))"><span class="plane-logo">✈</span><span>N594ZS Tracker<small>Kitfox Model 4-1050 • project, parts & maintenance workspace</small></span></div>
   <nav class="nav" id="nav"></nav>
+  <div id="cloudStatus" style="margin-left:auto"></div>
 </header>
 <main class="shell">
   <section class="page active" id="page-dashboard"></section>
@@ -23,14 +24,16 @@
   <section class="page" id="page-logbook"></section>
   <section class="page" id="page-settings"></section>
 </main>
-<div class="footer">N594ZS Tracker v3.1 • local-first • project-management aid only; required aircraft/engine records remain separate</div>
+<div class="footer">N594ZS Tracker v3.2 • shared sync via Supabase • project-management aid only; required aircraft/engine records remain separate</div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 <input class="file-input" type="file" id="importFile" accept="application/json">
 <input class="file-input" type="file" id="photoFile" accept="image/*">
 <input class="file-input" type="file" id="entityFile" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx,.xls,.xlsx,.csv,.json">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app-01-seed.js"></script>
 <script src="app-02-data.js"></script>
+<script src="app-02-cloud.js"></script>
 <script src="app-03-core.js"></script>
 <script src="app-04-dashboard.js"></script>
 <script src="app-05-views.js"></script>
