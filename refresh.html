@@ -3,36 +3,78 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Refresh N594ZS Tracker</title>
+  <title>Repair N594ZS Tracker</title>
   <style>
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f3f6f9;color:#17324c;display:grid;min-height:100vh;place-items:center;padding:24px}
     .card{max-width:560px;background:#fff;border:1px solid #dbe4eb;border-radius:14px;padding:24px;box-shadow:0 8px 30px rgba(23,50,76,.12)}
-    h1{margin-top:0}.muted{color:#6e7f8e;line-height:1.5}.status{margin-top:16px;font-weight:700}
+    h1{margin-top:0}.muted{color:#6e7f8e;line-height:1.5}.status{margin-top:16px;font-weight:700}.button{display:none;margin-top:18px;padding:11px 14px;border-radius:8px;border:0;background:#2d7fd1;color:white;font-weight:800;text-decoration:none;text-align:center}
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Updating N594ZS Tracker…</h1>
-    <div class="muted">This clears only the tracker’s cached website files and service worker. Your Supabase account, cloud records, receipts and aircraft data are not deleted.</div>
-    <div class="status" id="status">Preparing update…</div>
+    <h1>Repairing N594ZS Tracker…</h1>
+    <div class="muted">This updates only the tracker application shell. Your Supabase account, cloud records, receipts, aircraft data and local tracker database are not deleted.</div>
+    <div class="status" id="status">Checking app version…</div>
+    <a class="button" id="openBtn" href="./?fresh=v501" target="_blank" rel="noopener">Open updated tracker</a>
   </div>
 <script>
 (async()=>{
-  const status=document.getElementById('status');
+  const status=document.getElementById('status'),btn=document.getElementById('openBtn');
+  const go=()=>location.replace('./?fresh=v501-'+Date.now());
   try{
-    status.textContent='Removing old app cache…';
-    if('serviceWorker' in navigator){
-      const regs=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.filter(r=>r.scope.includes('/N594ZS-Tracker/')).map(r=>r.unregister()));
-    }
     if('caches' in window){
+      status.textContent='Clearing old tracker cache…';
       const keys=await caches.keys();
       await Promise.all(keys.filter(k=>k.startsWith('n594zs-')).map(k=>caches.delete(k)));
     }
-    status.textContent='Loading the current tracker…';
-    location.replace('./?fresh='+Date.now());
+    if(!('serviceWorker' in navigator)){
+      status.textContent='Cache cleared. Loading current tracker…';
+      go();return;
+    }
+
+    status.textContent='Installing the current app shell…';
+    let switched=false;
+    const onChange=()=>{
+      if(switched)return;switched=true;
+      status.textContent='Updated app activated. Reloading…';
+      setTimeout(go,150);
+    };
+    navigator.serviceWorker.addEventListener('controllerchange',onChange,{once:true});
+
+    // Register the current worker under the existing tracker scope. Using a
+    // unique script URL forces Android Chrome to perform a network update check.
+    const reg=await navigator.serviceWorker.register('./sw.js?v=5.0.1&repair='+Date.now(),{scope:'./',updateViaCache:'none'});
+    await reg.update().catch(()=>{});
+
+    const activate=worker=>{try{worker?.postMessage({type:'SKIP_WAITING'})}catch(_e){}};
+    if(reg.waiting)activate(reg.waiting);
+    if(reg.installing){
+      const w=reg.installing;
+      w.addEventListener('statechange',()=>{
+        if(w.state==='installed')activate(reg.waiting||w);
+        if(w.state==='activated')onChange();
+      });
+    }
+
+    // If this page was not previously controlled, the new registration may be
+    // active without a controllerchange event. Verify and continue.
+    setTimeout(async()=>{
+      if(switched)return;
+      const current=await navigator.serviceWorker.getRegistration('./');
+      if(current?.waiting)activate(current.waiting);
+      if(current?.active && !current.waiting && !current.installing){
+        status.textContent='Current app shell installed. Opening a fresh page…';
+        btn.style.display='block';
+        // A new top-level client is not retained by an obsolete controller.
+        window.open('./?fresh=v501-'+Date.now(),'_blank');
+      }else{
+        status.textContent='Update installed. Tap below to open a completely fresh tracker tab.';
+        btn.style.display='block';
+      }
+    },2500);
   }catch(err){
-    status.textContent='Update cleanup hit an error. Reload this page once: '+err.message;
+    status.textContent='Automatic repair could not finish: '+err.message+' — tap below to open a fresh tracker tab.';
+    btn.style.display='block';
   }
 })();
 </script>
