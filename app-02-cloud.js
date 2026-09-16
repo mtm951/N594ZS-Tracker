@@ -2,7 +2,7 @@ const SUPABASE_URL='https://fbjyhodrddsvuesafxce.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_BebbqF7DaM1P6EHlph0DWQ_xoZdSmoa';
 const WORKSPACE_SLUG='n594zs';
 const APP_URL='https://mtm951.github.io/N594ZS-Tracker/';
-let supa=null, cloudSession=null, cloudWorkspaceId=null, cloudRole=null, cloudSaveTimer=null, cloudLoading=false;
+let supa=null, cloudSession=null, cloudWorkspaceId=null, cloudRole=null, cloudSaveTimer=null, cloudLoading=false, cloudChannel=null;
 
 function cloudStatusLabel(text,kind=''){
   const el=document.getElementById('cloudStatus');
@@ -12,6 +12,7 @@ function cloudStatusLabel(text,kind=''){
 }
 
 function canCloudEdit(){return !cloudSession||!cloudWorkspaceId||cloudRole==='owner'||cloudRole==='editor'}
+function persistCloudCache(){try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(_e){}}
 
 async function initCloud(){
   try{
@@ -22,7 +23,7 @@ async function initCloud(){
     supa.auth.onAuthStateChange(async(_event,session)=>{
       cloudSession=session||null;
       if(cloudSession) await connectWorkspaceAndLoad();
-      else {cloudWorkspaceId=null;cloudRole=null;cloudStatusLabel('Sign in to sync');if(typeof renderAccess==='function')renderAccess();}
+      else {stopCloudRealtime();cloudWorkspaceId=null;cloudRole=null;cloudStatusLabel('Sign in to sync');if(typeof renderAccess==='function')renderAccess();}
     });
     if(cloudSession) await connectWorkspaceAndLoad();
     else cloudStatusLabel('Sign in to sync');
@@ -53,26 +54,34 @@ async function connectWorkspaceAndLoad(){
       cloudRole=membership.role;
     }
     await loadCloudState();
+    startCloudRealtime();
     cloudStatusLabel('Synced');
     if(typeof renderAccess==='function')renderAccess();
   }catch(err){console.error(err);cloudStatusLabel('Sync error');toast('Cloud sync error: '+err.message,'bad');}
 }
 
-async function loadCloudState(){
+async function loadCloudState(silent=false){
   if(!supa||!cloudWorkspaceId)return;
   cloudLoading=true;
   try{
-    const {data,error}=await supa.from('app_state').select('data,updated_at').eq('workspace_id',cloudWorkspaceId).maybeSingle();
+    const {data,error}=await supa.from('app_state').select('data,updated_at,updated_by').eq('workspace_id',cloudWorkspaceId).maybeSingle();
     if(error) throw error;
     const remote=data?.data;
-    if(remote && Object.keys(remote).length){
+    if(remote&&Object.keys(remote).length){
       db=remote;
       normalizeDB();
-      try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(_e){}
+      persistCloudCache();
       renderAll();
-      toast('Loaded shared N594ZS data.','good');
+      if(!silent)toast('Loaded shared N594ZS data.','good');
     }else if(canCloudEdit()){
-      await saveCloudState();
+      if(typeof migrateAircraftPhotoToCloudIfNeeded==='function')await migrateAircraftPhotoToCloudIfNeeded();
+      normalizeDB();
+      const payload={workspace_id:cloudWorkspaceId,data:db,updated_by:cloudSession.user.id,updated_at:new Date().toISOString()};
+      const {error:saveError}=await supa.from('app_state').upsert(payload,{onConflict:'workspace_id'});
+      if(saveError)throw saveError;
+      persistCloudCache();
+      renderAll();
+      toast('Shared workspace initialized from this device.','good');
     }
   }finally{cloudLoading=false;}
 }
@@ -91,6 +100,35 @@ async function saveCloudState(){
     if(error) throw error;
     cloudStatusLabel('Synced');
   }catch(err){console.error('Cloud save failed',err);cloudStatusLabel('Sync pending');toast('Saved locally; cloud sync failed: '+err.message,'bad');}
+}
+
+function stopCloudRealtime(){
+  if(cloudChannel&&supa){supa.removeChannel(cloudChannel);}
+  cloudChannel=null;
+}
+
+function startCloudRealtime(){
+  stopCloudRealtime();
+  if(!supa||!cloudSession||!cloudWorkspaceId)return;
+  cloudChannel=supa.channel(`n594zs-state-${cloudWorkspaceId}`)
+    .on('postgres_changes',{event:'*',schema:'public',table:'app_state',filter:`workspace_id=eq.${cloudWorkspaceId}`},payload=>{
+      if(cloudLoading)return;
+      const remote=payload.new?.data;
+      if(!remote||!Object.keys(remote).length)return;
+      const fromOther=!!(payload.new?.updated_by&&payload.new.updated_by!==cloudSession?.user?.id);
+      cloudLoading=true;
+      try{
+        db=remote;
+        normalizeDB();
+        persistCloudCache();
+        renderAll();
+        cloudStatusLabel('Synced');
+      }finally{cloudLoading=false;}
+      if(fromOther)toast('N594ZS updated from another device.','good');
+    })
+    .subscribe(status=>{
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')cloudStatusLabel('Sync degraded');
+    });
 }
 
 function openCloudAuth(){
@@ -121,8 +159,8 @@ async function cloudSignUp(){
 function openCloudAccount(){
   const email=cloudSession?.user?.email||'Signed in';
   const role=cloudRole?cloudRole[0].toUpperCase()+cloudRole.slice(1):'No workspace access';
-  openModal(`${modalHeader('Cloud account',email)}<div class="card soft-card"><b>Shared sync is active</b><div class="muted small" style="margin-top:6px">Workspace role: <b>${esc(role)}</b>. Changes to projects, parts, orders, logs, documents, checklists, aircraft data and attachments are shared according to that role.</div></div><div class="modal-actions"><button class="secondary" onclick="closeModal();navTo('access')">People & Access</button><button class="secondary" onclick="forceCloudReload()">Reload shared data</button><button class="danger" onclick="cloudSignOut()">Sign out</button></div>`,false);
+  openModal(`${modalHeader('Cloud account',email)}<div class="card soft-card"><b>Shared sync is active</b><div class="muted small" style="margin-top:6px">Workspace role: <b>${esc(role)}</b>. Projects, parts, orders, logs, documents, checklists, aircraft data and shared files sync across signed-in devices. Changes from another open device are applied live.</div></div><div class="modal-actions"><button class="secondary" onclick="closeModal();navTo('access')">People & Access</button><button class="secondary" onclick="forceCloudReload()">Reload shared data</button><button class="danger" onclick="cloudSignOut()">Sign out</button></div>`,false);
 }
 
-async function forceCloudReload(){closeModal();await loadCloudState();}
-async function cloudSignOut(){await supa.auth.signOut();closeModal();toast('Signed out. Local data remains on this device.','good');}
+async function forceCloudReload(){closeModal();await loadCloudState(true);cloudStatusLabel('Synced');toast('Shared data reloaded.','good');}
+async function cloudSignOut(){stopCloudRealtime();await supa.auth.signOut();closeModal();toast('Signed out. Local data remains on this device.','good');}
