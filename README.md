@@ -1,33 +1,35 @@
 # N594ZS Tracker
 
-A shared project, parts, purchasing, documentation, maintenance, checklist, file, and work-history dashboard for **N594ZS**, a Kitfox Model 4-1050.
+A shared project, parts, maintenance, documentation, discrepancy, and work-history workspace for **N594ZS**, a Kitfox Model 4-1050 with a Rotax 912 ULS.
+
+Live app: **https://mtm951.github.io/N594ZS-Tracker/**
 
 ## Current version
 
-**v4.0** — persistent multi-device cloud workspace.
+**v4.1** adds an aircraft-oriented workflow on top of the v4 shared-cloud foundation.
 
-The app is hosted on GitHub Pages and uses Supabase for authentication, shared record storage, realtime updates, private file storage, activity history, role-based access, Trash/restore, and point-in-time cloud snapshots.
+### Aircraft workflow
 
-## Major features
+- **Readiness** view with Installation/Build, Before Engine Start, Ground Test, Before Flight, Return-to-Service, and Later/Optional phases.
+- Project dependencies, Focus Today, definition-of-done/verification notes, blockers, orders, files, and linked work.
+- **Step-by-step task checklist inside every project**, with ordered steps, per-step notes, completion tracking, and optional automatic project-progress calculation.
+- **Squawks** for discrepancies, severity/status, linked corrective projects, resolution history, and shared photos/files.
+- **Runs / Tests** for structured engine-run, ground/taxi-test, and flight-test observations with recorded indications and attachments.
+- Recurring date/hour **Maintenance** tracking.
+- Shared project/part/order/work/document/checklist attachments plus a general shared **Files** library.
 
-- Deep clickable project, part, order, work-log, document, checklist, and aircraft records
-- Record-level cloud sync across signed-in devices
-- Private shared file library plus per-record photos/PDFs/screenshots/receipts
-- Aircraft photo stored in shared cloud storage
-- Maintenance page for recurring date/hour items and return-to-service gates
-- Activity history showing what changed and when
-- Trash/restore workflow
-- Owner / Editor / Viewer access controls
-- Global tracker search
-- Manual and automatic daily cloud snapshots
-- System/sync health page and JSON export
-- Installable/offline-capable Progressive Web App shell
-- Local browser cache remains available as an offline fallback
+### Shared cloud foundation
 
-## Hosting and data
+- Supabase authentication and role-based access (Owner / Editor / Viewer).
+- Record-level cloud sync across signed-in devices.
+- Private shared file storage.
+- Activity history, Trash/restore, snapshots/backups, global search, sync/offline status, and PWA installation support.
+- GitHub Pages hosts the app; GitHub Actions validates JavaScript syntax before deployment.
 
-Application code is versioned in this GitHub repository and deployed with GitHub Pages. Live tracker data is stored in Supabase. Uploaded files are stored in the private `n594zs-files` Supabase Storage bucket and are available to authorized signed-in users on any device.
+## Storage model
+
+Tracker records sync through Supabase as individual cloud records. Local browser storage remains a working cache/offline fallback. Photos, PDFs, screenshots, receipts, manuals, and other uploaded files are stored in private Supabase Storage and are available on any authorized signed-in device.
 
 ## Safety / records note
 
-N594ZS Tracker is a project-management aid. It does not replace required aircraft or engine logbook entries, manufacturer instructions, operating limitations, inspections, maintenance requirements, or required signoffs. A completion badge in the app is a project status, not an airworthiness determination.
+N594ZS Tracker is a project-management and record-organization aid. It does not itself establish airworthiness, replace required aircraft or engine logbook entries, substitute for current manufacturer instructions or operating limitations, satisfy required inspections, or replace required maintenance approvals/signoffs. A project gate or checklist status reflects tracker state only.
