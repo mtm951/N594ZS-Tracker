@@ -34,7 +34,35 @@ renderAircraft=function(){
   const card=page.querySelector('.card.span-8');if(card){const note=document.createElement('div');note.className=ready?'notice':'danger-note';note.style.marginTop='12px';note.innerHTML=ready?`<b>Current W&B:</b> ${Number(current.emptyWeight).toFixed(1)} lb at ${wbCgForConfig(current).toFixed(2)} in. <button class="linkbtn" onclick="navTo('weightbalance')">Open loading calculator →</button>`:`<b>Current 912 empty W&B is pending final weighing.</b> The 523 lb / 12.2 in values are retained only as the 2018 historical configuration. <button class="linkbtn" onclick="navTo('weightbalance')">Open W&B →</button>`;card.appendChild(note)}
 };
 
-// Add a fast one-at-a-time reconciliation flow so historical purchase records become useful inventory/history without guessing.
+// Keep purchase disposition and physical Parts inventory tied together.
+function purchaseRemainingQty(p){return p.remainingQty===''?num(p.qty):num(p.remainingQty)}
+function ensurePurchaseInInventory(p,qty=purchaseRemainingQty(p)){
+  if(!p||qty<=0)return null;
+  if(p.inventoryApplied&&p.inventoryPartId)return partById(Number(p.inventoryPartId));
+  let part=p.inventoryPartId?partById(Number(p.inventoryPartId)):null;
+  if(!part&&p.pn)part=db.parts.find(x=>x.partNo&&x.partNo.toLowerCase()===p.pn.toLowerCase());
+  if(!part&&!p.pn)part=db.parts.find(x=>x.name&&p.description&&x.name.toLowerCase()===p.description.toLowerCase());
+  if(!part){
+    part={id:uid(),name:p.description||p.pn||'Purchased part',description:p.description||'',partNo:p.pn||'',system:p.system||'General',partType:'Inventory',unit:'ea',stockQty:0,minQty:'',status:'On Hand',vendor:p.vendor||'',url:p.productUrl||p.sourceUrl||'',unitCost:p.unitPrice||'',location:p.location||'',purchaseDate:p.shipDate||'',notes:`Created from purchase history${p.invoice?` invoice ${p.invoice}`:''}.`,linkedProjectIds:p.projectId?[Number(p.projectId)]:[],updates:[]};
+    db.parts.push(part);
+  }
+  part.stockQty=(part.stockQty===''?0:num(part.stockQty))+qty;
+  part.status='On Hand';
+  if(!part.vendor&&p.vendor)part.vendor=p.vendor;
+  if(!part.location&&p.location)part.location=p.location;
+  part.linkedProjectIds=arr(part.linkedProjectIds);
+  if(p.projectId&&!part.linkedProjectIds.includes(Number(p.projectId)))part.linkedProjectIds.push(Number(p.projectId));
+  p.inventoryPartId=part.id;p.inventoryApplied=true;p.disposition='On Hand';p.remainingQty=qty;
+  return part;
+}
+applyPurchaseToInventory=function(id){
+  const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
+  if(p.inventoryApplied)return toast('This purchase is already linked to inventory.','good');
+  const qty=purchaseRemainingQty(p);if(qty<=0)return alert('Set a positive remaining quantity before adding this purchase to inventory.');
+  ensurePurchaseInInventory(p,qty);saveDB(`${qty} added to inventory.`);openPurchaseDetail(id);
+};
+
+// One-at-a-time reconciliation flow for historical purchase records.
 const renderPurchasesReconcileBase=renderPurchases;
 renderPurchases=function(){
   renderPurchasesReconcileBase();
@@ -45,9 +73,19 @@ function openPurchaseReconcile(startId=null){
   if(startId){const i=rows.findIndex(x=>String(x.id)===String(startId));if(i>0)rows=[...rows.slice(i),...rows.slice(0,i)]}
   const p=rows[0];if(!p){toast('Purchase history is fully reconciled.','good');renderPurchases();return}
   const remaining=rows.length;
-  openModal(`${modalHeader('Reconcile Purchase',`${remaining} historical line${remaining===1?'':'s'} still unknown`)}<div class="detail-card"><div class="kv"><span>Date</span><b>${esc(p.shipDate||'Unknown')}</b></div><div class="kv"><span>Invoice</span><b>${esc(p.invoice||'—')}</b></div><div class="kv"><span>Part number</span><b>${esc(p.pn||'—')}</b></div><div class="detail-section"><label>Description</label><div class="detail-text"><b>${esc(p.description)}</b></div></div><div class="kv"><span>Purchased</span><b>${p.qty} @ ${fmtMoney(p.unitPrice)}</b></div><div class="kv"><span>System</span><b>${esc(p.system||'General')}</b></div></div><div class="notice" style="margin-top:10px">Choose what happened to this purchase. “On Hand” sets remaining quantity to the purchased quantity; Installed/Consumed/Returned/Sold set remaining to zero. You can edit the record later for partial quantities.</div><div class="modal-actions" style="flex-wrap:wrap"><button class="secondary" onclick="skipPurchaseReconcile('${esc(p.id)}')">Skip</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Returned')">Returned</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Sold')">Sold</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Consumed')">Consumed</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Installed')">Installed</button><button class="primary" onclick="setPurchaseDisposition('${esc(p.id)}','On Hand')">On Hand</button></div>`);
+  openModal(`${modalHeader('Reconcile Purchase',`${remaining} historical line${remaining===1?'':'s'} still unknown`)}<div class="detail-card"><div class="kv"><span>Date</span><b>${esc(p.shipDate||'Unknown')}</b></div><div class="kv"><span>Invoice</span><b>${esc(p.invoice||'—')}</b></div><div class="kv"><span>Part number</span><b>${esc(p.pn||'—')}</b></div><div class="detail-section"><label>Description</label><div class="detail-text"><b>${esc(p.description)}</b></div></div><div class="kv"><span>Purchased</span><b>${p.qty} @ ${fmtMoney(p.unitPrice)}</b></div><div class="kv"><span>System</span><b>${esc(p.system||'General')}</b></div></div><div class="notice" style="margin-top:10px">Choose what happened to this purchase. If some or all of it is still physically on hand, enter the quantity below. Choosing <b>On Hand</b> now creates or updates the matching Parts inventory record automatically.</div><div style="margin-top:10px"><label>Quantity still on hand</label><input id="reconcileRemaining" type="number" min="0" step="any" value="${esc(p.qty)}"></div><div class="modal-actions" style="flex-wrap:wrap"><button class="secondary" onclick="skipPurchaseReconcile('${esc(p.id)}')">Skip</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Returned')">Returned</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Sold')">Sold</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Consumed')">Consumed</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Installed')">Installed</button><button class="primary" onclick="setPurchaseDisposition('${esc(p.id)}','On Hand')">On Hand</button></div>`);
 }
-function setPurchaseDisposition(id,disposition){const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;p.disposition=disposition;p.remainingQty=disposition==='On Hand'?num(p.qty):0;saveDB();openPurchaseReconcile()}
+function setPurchaseDisposition(id,disposition){
+  const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
+  if(disposition==='On Hand'){
+    const qty=val('reconcileRemaining')===''?num(p.qty):num(val('reconcileRemaining'));
+    if(qty<=0)return alert('Enter the quantity that is still on hand.');
+    p.disposition='On Hand';p.remainingQty=qty;ensurePurchaseInInventory(p,qty);
+  }else{
+    p.disposition=disposition;p.remainingQty=0;
+  }
+  saveDB();openPurchaseReconcile();
+}
 function skipPurchaseReconcile(id){const rows=db.purchases.filter(x=>x.disposition==='Unknown').sort((a,b)=>(b.shipDate||'').localeCompare(a.shipDate||''));const i=rows.findIndex(x=>String(x.id)===String(id)),next=rows[(i+1)%rows.length];if(!next||String(next.id)===String(id)){closeModal();return}openPurchaseReconcile(next.id)}
 
 // Ensure post-load rendering picks up the corrected historical categories and W&B annotation.
