@@ -11,3 +11,12 @@ document.getElementById('entityFile').addEventListener('change',async e=>{const 
 document.getElementById('importFile').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{await importBackupObject(JSON.parse(r.result))}catch(err){alert('Could not import backup: '+err.message)}finally{e.target.value=''}};r.readAsText(f)});
 renderAll();
 initCloud();
+
+// Load small, optional post-init UX layers without disturbing the core script order.
+(function(){
+  if(document.querySelector('script[data-assistant-collapse]'))return;
+  const s=document.createElement('script');
+  s.src='app-44-assistant-collapse.js?v=5.4.1';
+  s.dataset.assistantCollapse='1';
+  document.body.appendChild(s);
+})();
