@@ -71,7 +71,16 @@ async function connectWorkspaceAndLoad(){
     startCloudRealtime();
     markCloudSynced();
     if(typeof renderAccess==='function')renderAccess();
-  }catch(err){console.error(err);cloudStatusLabel('Sync error');toast('Cloud sync error: '+err.message,'bad');}
+  }catch(err){
+    console.error(err);
+    if(err?.code==='N594ZS_CONFLICT'||/Cloud conflict needs review/i.test(err?.message||'')){
+      cloudStatusLabel('Conflict');
+      toast(err.message||'Cloud conflict needs review; nothing was overwritten.','bad');
+    }else{
+      cloudStatusLabel('Sync error');
+      toast('Cloud sync error: '+err.message,'bad');
+    }
+  }
 }
 
 async function loadCloudState(silent=false){
