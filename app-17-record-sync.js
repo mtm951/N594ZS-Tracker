@@ -5,13 +5,24 @@ const CLOUD_PENDING_KEY='n594zs_pending_cloud_v4';
 const CLOUD_SNAPSHOT_KEY='n594zs_record_snapshot_v4';
 let cloudRecordSnapshot=new Map();
 try{const cached=JSON.parse(localStorage.getItem(CLOUD_SNAPSHOT_KEY)||'{}');cloudRecordSnapshot=new Map(Object.entries(cached));}catch(_e){}
-let cloudReloadTimer=null;
+let cloudReloadTimer=null, cloudRemoteReloadPending=false;
 let lastCloudSyncAt=null;
 
 const RECORD_ARRAYS={project:'projects',part:'parts',order:'orders',log:'logs',document:'docs',checklist:'checklists',maintenance:'maintenance'};
 const SYNC_RECORD_TYPES=new Set(['aircraft','settings',...Object.keys(RECORD_ARRAYS)]);
 function cloudRecordKey(type,id){return `${type}:${String(id)}`}
-function cloudStableJSON(x){try{return JSON.stringify(x)}catch(_e){return ''}}
+function cloudCanonicalJSONValue(x){
+  if(Array.isArray(x))return x.map(cloudCanonicalJSONValue);
+  if(x&&typeof x==='object'){
+    const out={};Object.keys(x).sort().forEach(k=>{out[k]=cloudCanonicalJSONValue(x[k])});return out;
+  }
+  return x;
+}
+function cloudStableJSON(x){try{return JSON.stringify(cloudCanonicalJSONValue(x))}catch(_e){return ''}}
+for(const [k,v] of cloudRecordSnapshot){
+  try{cloudRecordSnapshot.set(k,cloudStableJSON(JSON.parse(v)))}catch(_e){}
+}
+persistCloudRecordSnapshot();
 function persistCloudRecordSnapshot(){try{localStorage.setItem(CLOUD_SNAPSHOT_KEY,JSON.stringify(Object.fromEntries(cloudRecordSnapshot)))}catch(_e){}}
 function buildCloudRecordMap(){
   const m=new Map();
@@ -64,7 +75,9 @@ loadCloudState=async function(silent=false){
     }
     db=assembleCloudDB(rows||[]);
     normalizeDB();
-    cloudRecordSnapshot=snapshotFromRows(rows||[]);persistCloudRecordSnapshot();
+    // Snapshot the normalized in-memory state, not the raw row JSON. Otherwise
+    // harmless normalization defaults can look like unsaved local edits later.
+    cloudRecordSnapshot=new Map([...buildCloudRecordMap()].map(([k,v])=>[k,cloudStableJSON(v.data)]));persistCloudRecordSnapshot();
     persistCloudCache();
     renderAll();
     lastCloudSyncAt=new Date();
@@ -77,6 +90,7 @@ loadCloudState=async function(silent=false){
 queueCloudSave=function(){
   if(!supa||!cloudSession||!cloudWorkspaceId||cloudLoading||!canCloudEdit())return;
   localStorage.setItem(CLOUD_PENDING_KEY,'1');
+  cloudDirty=true;
   clearTimeout(cloudSaveTimer);
   cloudStatusLabel(navigator.onLine?'Saving…':'Offline');
   if(navigator.onLine)cloudSaveTimer=setTimeout(saveCloudState,450);
@@ -108,8 +122,13 @@ saveCloudState=async function(){
     }
     cloudRecordSnapshot=new Map([...current].map(([k,v])=>[k,cloudStableJSON(v.data)]));persistCloudRecordSnapshot();
     localStorage.removeItem(CLOUD_PENDING_KEY);
+    cloudDirty=false;
     lastCloudSyncAt=new Date();
     cloudStatusLabel('Synced');
+    if(cloudRemoteReloadPending){
+      cloudRemoteReloadPending=false;
+      setTimeout(()=>loadCloudState(true).catch(e=>{console.warn('Deferred cloud refresh failed',e);cloudStatusLabel('Reconnecting…')}),75);
+    }
     if(typeof renderSystem==='function'&&currentPage==='system')renderSystem();
   }catch(err){console.error('Record sync failed',err);cloudStatusLabel('Sync pending');toast('Saved locally; cloud sync failed: '+err.message,'bad');}
 }
@@ -123,9 +142,25 @@ startCloudRealtime=function(){
       const row=payload.new||payload.old||{};
       if(row.updated_client===CLOUD_CLIENT_ID)return;
       clearTimeout(cloudReloadTimer);
-      cloudReloadTimer=setTimeout(async()=>{try{await loadCloudState(true);toast('N594ZS updated from another device.','good')}catch(e){console.error(e)}},250);
+      cloudReloadTimer=setTimeout(async()=>{
+        try{
+          // Never reload over a local save that is still pending. Remember that
+          // the cloud changed and refresh from the canonical server state after
+          // the local save finishes instead.
+          if(cloudDirty||localStorage.getItem(CLOUD_PENDING_KEY)==='1'){
+            cloudRemoteReloadPending=true;
+            return;
+          }
+          await loadCloudState(true);
+          cloudRemoteReloadPending=false;
+          toast('N594ZS updated from another device.','good');
+        }catch(e){console.warn('Realtime refresh deferred',e);cloudStatusLabel('Reconnecting…')}
+      },350);
     })
-    .subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')cloudStatusLabel('Sync degraded');});
+    .subscribe(status=>{
+      if(status==='SUBSCRIBED')cloudStatusLabel(localStorage.getItem(CLOUD_PENDING_KEY)==='1'?'Saving…':'Synced');
+      else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED')cloudStatusLabel('Reconnecting…');
+    });
 }
 
 forceCloudReload=async function(){closeModal();await loadCloudState(true);cloudStatusLabel('Synced');toast('Shared data reloaded.','good')}
