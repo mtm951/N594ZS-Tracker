@@ -9,12 +9,12 @@
   <title>N594ZS Tracker</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=5.5.1">
-  <link rel="stylesheet" href="enhancements.css?v=5.5.1">
-  <link rel="stylesheet" href="workflow.css?v=5.5.1">
-  <link rel="stylesheet" href="ops.css?v=5.5.1">
-  <link rel="stylesheet" href="data-tools.css?v=5.5.1">
-  <link rel="stylesheet" href="aircraft-ops.css?v=5.5.1">
+  <link rel="stylesheet" href="styles.css?v=5.5.2">
+  <link rel="stylesheet" href="enhancements.css?v=5.5.2">
+  <link rel="stylesheet" href="workflow.css?v=5.5.2">
+  <link rel="stylesheet" href="ops.css?v=5.5.2">
+  <link rel="stylesheet" href="data-tools.css?v=5.5.2">
+  <link rel="stylesheet" href="aircraft-ops.css?v=5.5.2">
 </head>
 <body>
 <header class="topbar">
@@ -48,7 +48,7 @@
   <section class="page" id="page-system"></section>
   <section class="page" id="page-settings"></section>
 </main>
-<div class="footer">N594ZS Tracker v5.5.1 • clickable Purchases metric drill-downs • reliability & recovery hardening • verified backups + cloud conflict protection • inventory ledger + Reserve → Use + Quick Add 2.0 • data-aware assistant • project-management aid only; required aircraft/engine records remain separate</div>
+<div class="footer">N594ZS Tracker v5.5.2 • sync stabilization + clearer conflict handling • clickable Purchases metric drill-downs • reliability & recovery hardening • verified backups + cloud conflict protection • inventory ledger + Reserve → Use + Quick Add 2.0 • data-aware assistant • project-management aid only; required aircraft/engine records remain separate</div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 <input class="file-input" type="file" id="importFile" accept="application/json">
@@ -60,55 +60,55 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
-<script src="app-01-seed.js?v=5.5.1"></script>
+<script src="app-01-seed.js?v=5.5.2"></script>
 <script>if(!NAV.some(x=>x[0]==='ops')){const i=NAV.findIndex(x=>x[0]==='readiness');const j=i>=0?i+1:Math.max(0,NAV.findIndex(x=>x[0]==='projects'));NAV.splice(j<0?NAV.length:j,0,['ops','Aircraft Ops']);}</script>
-<script src="app-02-data.js?v=5.5.1"></script>
-<script src="app-02-cloud.js?v=5.5.1"></script>
-<script src="app-03-core.js?v=5.5.1"></script>
-<script src="app-04-dashboard.js?v=5.5.1"></script>
-<script src="app-05-views.js?v=5.5.1"></script>
-<script src="app-06-projects.js?v=5.5.1"></script>
-<script src="app-07-parts.js?v=5.5.1"></script>
-<script src="app-08-orders.js?v=5.5.1"></script>
-<script src="app-09-logbook.js?v=5.5.1"></script>
-<script src="app-10-documents.js?v=5.5.1"></script>
-<script src="app-11-checklists.js?v=5.5.1"></script>
-<script src="app-12-aircraft-updates.js?v=5.5.1"></script>
-<script src="app-13-attachments.js?v=5.5.1"></script>
-<script src="app-13a-cloud-media.js?v=5.5.1"></script>
-<script src="app-14-backups.js?v=5.5.1"></script>
-<script src="app-16-access.js?v=5.5.1"></script>
-<script src="app-17-record-sync.js?v=5.5.1"></script>
-<script src="app-18-enhancements.js?v=5.5.1"></script>
-<script src="app-18a-polish.js?v=5.5.1"></script>
-<script src="app-20-workflow.js?v=5.5.1"></script>
-<script src="app-21-squawks-runs.js?v=5.5.1"></script>
-<script src="app-22-aircraft-polish.js?v=5.5.1"></script>
-<script src="app-23-wb-purchases.js?v=5.5.1"></script>
-<script src="app-24-data-polish.js?v=5.5.1"></script>
-<script src="app-24-invoice-pdfs.js?v=5.5.1"></script>
-<script src="app-25-multivendor.js?v=5.5.1"></script>
-<script src="app-26-purchase-source-links.js?v=5.5.1"></script>
-<script src="app-27-receipt-attachments.js?v=5.5.1"></script>
-<script src="app-28-purchase-sort.js?v=5.5.1"></script>
-<script src="app-46-purchase-metric-drilldowns.js?v=5.5.1"></script>
-<script src="app-29-equipment.js?v=5.5.1"></script>
-<script src="app-30-part-descriptions.js?v=5.5.1"></script>
-<script src="app-31-equipment-save-fix.js?v=5.5.1"></script>
-<script src="app-32-purchase-delete.js?v=5.5.1"></script>
-<script src="app-33-aircraft-ops.js?v=5.5.1"></script>
-<script src="app-34-related-media.js?v=5.5.1"></script>
-<script src="app-35-navigation-ux.js?v=5.5.1"></script>
-<script src="app-41-mobile-modal-viewport.js?v=5.5.1"></script>
-<script src="app-36-searchable-part-picker.js?v=5.5.1"></script>
-<script src="app-37-part-picker-combo.js?v=5.5.1"></script>
-<script src="app-38-smart-workflow.js?v=5.5.1"></script>
-<script src="app-42-inventory-workflow.js?v=5.5.1"></script>
-<script src="app-43-assistant.js?v=5.5.1"></script>
-<script src="app-45-reliability.js?v=5.5.1"></script>
-<script src="app-40-aircraft-ops-runtime.js?v=5.5.1"></script>
-<script src="app-39-aircraft-ops-stable.js?v=5.5.1"></script>
-<script src="app-19-pwa.js?v=5.5.1"></script>
-<script src="app-15-init.js?v=5.5.1"></script>
+<script src="app-02-data.js?v=5.5.2"></script>
+<script src="app-02-cloud.js?v=5.5.2"></script>
+<script src="app-03-core.js?v=5.5.2"></script>
+<script src="app-04-dashboard.js?v=5.5.2"></script>
+<script src="app-05-views.js?v=5.5.2"></script>
+<script src="app-06-projects.js?v=5.5.2"></script>
+<script src="app-07-parts.js?v=5.5.2"></script>
+<script src="app-08-orders.js?v=5.5.2"></script>
+<script src="app-09-logbook.js?v=5.5.2"></script>
+<script src="app-10-documents.js?v=5.5.2"></script>
+<script src="app-11-checklists.js?v=5.5.2"></script>
+<script src="app-12-aircraft-updates.js?v=5.5.2"></script>
+<script src="app-13-attachments.js?v=5.5.2"></script>
+<script src="app-13a-cloud-media.js?v=5.5.2"></script>
+<script src="app-14-backups.js?v=5.5.2"></script>
+<script src="app-16-access.js?v=5.5.2"></script>
+<script src="app-17-record-sync.js?v=5.5.2"></script>
+<script src="app-18-enhancements.js?v=5.5.2"></script>
+<script src="app-18a-polish.js?v=5.5.2"></script>
+<script src="app-20-workflow.js?v=5.5.2"></script>
+<script src="app-21-squawks-runs.js?v=5.5.2"></script>
+<script src="app-22-aircraft-polish.js?v=5.5.2"></script>
+<script src="app-23-wb-purchases.js?v=5.5.2"></script>
+<script src="app-24-data-polish.js?v=5.5.2"></script>
+<script src="app-24-invoice-pdfs.js?v=5.5.2"></script>
+<script src="app-25-multivendor.js?v=5.5.2"></script>
+<script src="app-26-purchase-source-links.js?v=5.5.2"></script>
+<script src="app-27-receipt-attachments.js?v=5.5.2"></script>
+<script src="app-28-purchase-sort.js?v=5.5.2"></script>
+<script src="app-46-purchase-metric-drilldowns.js?v=5.5.2"></script>
+<script src="app-29-equipment.js?v=5.5.2"></script>
+<script src="app-30-part-descriptions.js?v=5.5.2"></script>
+<script src="app-31-equipment-save-fix.js?v=5.5.2"></script>
+<script src="app-32-purchase-delete.js?v=5.5.2"></script>
+<script src="app-33-aircraft-ops.js?v=5.5.2"></script>
+<script src="app-34-related-media.js?v=5.5.2"></script>
+<script src="app-35-navigation-ux.js?v=5.5.2"></script>
+<script src="app-41-mobile-modal-viewport.js?v=5.5.2"></script>
+<script src="app-36-searchable-part-picker.js?v=5.5.2"></script>
+<script src="app-37-part-picker-combo.js?v=5.5.2"></script>
+<script src="app-38-smart-workflow.js?v=5.5.2"></script>
+<script src="app-42-inventory-workflow.js?v=5.5.2"></script>
+<script src="app-43-assistant.js?v=5.5.2"></script>
+<script src="app-45-reliability.js?v=5.5.2"></script>
+<script src="app-40-aircraft-ops-runtime.js?v=5.5.2"></script>
+<script src="app-39-aircraft-ops-stable.js?v=5.5.2"></script>
+<script src="app-19-pwa.js?v=5.5.2"></script>
+<script src="app-15-init.js?v=5.5.2"></script>
 </body>
 </html>
