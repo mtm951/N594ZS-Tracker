@@ -3,13 +3,15 @@
 // Refine automatic purchase categorization: generic AN/MS hardware should not be mistaken for fuel-system parts.
 purchaseSystem=function(desc,pn=''){
   const s=`${pn} ${desc}`.toLowerCase();
+  // Specific assemblies win over generic material words such as "wire".
+  // Example: "PROP BOLT ... DRILLED HEAD FOR SAFETY WIRE" is Propeller, not Electrical.
+  if(/prop bolt|propeller|\bprop\b/.test(s))return 'Propeller';
   if(/wire|connector|terminal|sub-d|switch|breaker|fuse|relay|solder sleeve|spiral wrap|heat shrink|battery|electrical|expando|expandable slv/.test(s))return 'Electrical';
   if(/probe|cht|egt|whelen|light|antenna|avion|instrument|pitot|static|sender/.test(s))return 'Avionics / Instruments';
   if(/rotax|spark plug|oil vent|oil filter|loctite 648|filter wrench/.test(s))return 'Engine';
   if(/poly.?fiber|poly.?tak|\bmek\b|fabric|aerothane|poly.?spray/.test(s))return 'Fabric / Airframe';
   if(/tire|wheel|brake|tailwheel|hydraulic fluid|bearing/.test(s))return 'Landing Gear';
   if(/coolant|radiator|heater hose/.test(s))return 'Cooling';
-  if(/prop bolt|propeller|\bprop\b/.test(s))return 'Propeller';
   if(/exhaust|muffler/.test(s))return 'Exhaust';
   if(/fuel|super flex|hose adapter|nylon reducer|3003-0 tube|\btube\b|tubing|flare|\bfitting|npt|valve|gascolator|fuel filter|an818|an819|an833|an924|an929|an913/.test(s))return 'Fuel';
   if(/bolt|nut|washer|cotter|screw|rivet|clamp|camloc|grommet|an3-|an4-|an6-|an7-|an960|an970|an310|an365|an742|ms21919|ms24665|hardware/.test(s))return 'Hardware';
@@ -18,7 +20,7 @@ purchaseSystem=function(desc,pn=''){
 };
 
 // Reclassify CSV-derived lines with the refined rules. Manual edits remain untouched.
-for(const p of arr(db.purchases))if(p.source==='Aircraft Spruce CSV')p.system=purchaseSystem(p.description,p.pn);
+for(const p of arr(db.purchases))if(p.source==='Aircraft Spruce CSV'&&!p.systemManual)p.system=purchaseSystem(p.description,p.pn);
 
 // Aircraft page should never imply the old 582 empty W&B is the current 912 empty condition.
 const renderAircraftWbPolishBase=renderAircraft;
@@ -90,4 +92,4 @@ function skipPurchaseReconcile(id){const rows=db.purchases.filter(x=>x.dispositi
 
 // Ensure post-load rendering picks up the corrected historical categories and W&B annotation.
 const renderAllDataPolishBase=renderAll;
-renderAll=function(){for(const p of arr(db.purchases))if(p.source==='Aircraft Spruce CSV')p.system=purchaseSystem(p.description,p.pn);renderAllDataPolishBase()};
+renderAll=function(){for(const p of arr(db.purchases))if(p.source==='Aircraft Spruce CSV'&&!p.systemManual)p.system=purchaseSystem(p.description,p.pn);renderAllDataPolishBase()};
