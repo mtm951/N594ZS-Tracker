@@ -65,6 +65,7 @@
   function badge(t,cls=''){return `<span class="assistant-tag ${cls}">${aEsc(t)}</span>`}
   function buttonItem(kind,id,title,reason,right='',tags=[]){return `<button class="assistant-item" data-assist-kind="${aEsc(kind)}" data-assist-id="${aEsc(String(id))}"><div class="assistant-item-head"><b>${aEsc(title)}</b>${right?`<span>${aEsc(right)}</span>`:''}</div><div class="assistant-reason">${aEsc(reason)}</div>${tags.map(t=>badge(t)).join('')}</button>`}
   function staticItem(title,reason,right='',tags=[]){return `<div class="assistant-item assistant-item-static"><div class="assistant-item-head"><b>${aEsc(title)}</b>${right?`<span>${aEsc(right)}</span>`:''}</div><div class="assistant-reason">${aEsc(reason)}</div>${tags.map(t=>badge(t)).join('')}</div>`}
+  function actionItem(action,title,reason,right='',tags=[]){return `<button class="assistant-item" data-assist-action="${aEsc(action)}"><div class="assistant-item-head"><b>${aEsc(title)}</b>${right?`<span>${aEsc(right)}</span>`:''}</div><div class="assistant-reason">${aEsc(reason)}</div>${tags.map(t=>badge(t)).join('')}</button>`}
   function empty(msg){return `<div class="assistant-empty">${aEsc(msg)}</div>`}
 
   function assistantToday(){
@@ -90,13 +91,13 @@
   }
   function assistantAttention(){
     const a=attentionState(),chunks=[];
-    if(a.blocked.length)chunks.push(staticItem(`${a.blocked.length} blocked / held-up project${a.blocked.length===1?'':'s'}`,'Open the Projects view to resolve blockers.','', ['projects']));
+    if(a.blocked.length)chunks.push(actionItem('blocked-projects',`${a.blocked.length} blocked / held-up project${a.blocked.length===1?'':'s'}`,'Open the blocked-project list and jump straight to a project.','', ['projects']));
     if(a.shortages.length)chunks.push(...a.shortages.slice(0,5).map(p=>buttonItem('part',p.id,p.name,`Reservations exceed available stock. Free quantity: ${freeQty(p)} ${p.unit||'ea'}.`,'',['shortage'])));
     if(a.criticalSquawks.length)chunks.push(...a.criticalSquawks.slice(0,5).map(s=>buttonItem('squawk',s.id,s.title||s.description||'Critical squawk',s.notes||s.description||'Open critical squawk.',s.severity||'', ['critical'])));
-    if(a.unknownPurchases.length)chunks.push(staticItem(`${a.unknownPurchases.length} purchase${a.unknownPurchases.length===1?'':'s'} need reconciliation`,'Disposition is blank or Unknown.','',['purchases']));
-    if(a.unverified.length)chunks.push(staticItem(`${a.unverified.length} spec${a.unverified.length===1?'':'s'} need verification`,'Aircraft Ops has source/setup values marked for verification.','',['ops']));
-    if(a.failedInspections)chunks.push(staticItem(`${a.failedInspections} failed inspection finding${a.failedInspections===1?'':'s'}`,'Review the Inspections workspace in Aircraft Ops.','',['inspection']));
-    if(a.noLocation.length)chunks.push(staticItem(`${a.noLocation.length} on-hand part${a.noLocation.length===1?'':'s'} have no storage location`,'Not urgent, but filling these in will make inventory search much more useful.','',['data quality']));
+    if(a.unknownPurchases.length)chunks.push(actionItem('unknown-purchases',`${a.unknownPurchases.length} purchase${a.unknownPurchases.length===1?'':'s'} need reconciliation`,'Open the unresolved purchase list.','',['purchases']));
+    if(a.unverified.length)chunks.push(actionItem('unverified-specs',`${a.unverified.length} spec${a.unverified.length===1?'':'s'} need verification`,'Open Specs / Setup in Aircraft Ops.','',['ops']));
+    if(a.failedInspections)chunks.push(actionItem('failed-inspections',`${a.failedInspections} failed inspection finding${a.failedInspections===1?'':'s'}`,'Open the Inspections workspace in Aircraft Ops.','',['inspection']));
+    if(a.noLocation.length)chunks.push(actionItem('missing-locations',`${a.noLocation.length} on-hand part${a.noLocation.length===1?'':'s'} have no storage location`,'Open a searchable list and add storage locations where useful.','',['data quality']));
     return {title:'What needs attention?',html:chunks.length?`<div class="assistant-list">${chunks.join('')}</div>`:empty('Nothing obvious is flagged by the tracker right now.')};
   }
   function assistantRecent(){
@@ -117,11 +118,11 @@
   }
   function assistantMissing(){
     const a=attentionState();const {projects,parts}=lists();const noNext=projects.filter(isOpenProject).filter(p=>!text(p.nextStep));const noPN=parts.filter(p=>!text(p.partNo));const chunks=[];
-    if(a.noLocation.length)chunks.push(staticItem(`${a.noLocation.length} on-hand parts missing storage location`,'Add bin/shelf/location so search can tell you where the item actually is.'));
-    if(noNext.length)chunks.push(staticItem(`${noNext.length} open projects missing a next step`,'Adding a next step makes Today recommendations much more useful.'));
-    if(noPN.length)chunks.push(staticItem(`${noPN.length} parts/materials without a part number/spec`,'Some consumables legitimately will not have one; review only where useful.'));
-    if(a.unverified.length)chunks.push(staticItem(`${a.unverified.length} specs marked Needs Verification`,'Verify against source documentation in Aircraft Ops.'));
-    if(a.unknownPurchases.length)chunks.push(staticItem(`${a.unknownPurchases.length} purchases not reconciled`,'Set Installed, Consumed, On Hand, Returned, Sold, etc.'));
+    if(a.noLocation.length)chunks.push(actionItem('missing-locations',`${a.noLocation.length} on-hand parts missing storage location`,'Open a searchable list and add bin/shelf/location where useful.'));
+    if(noNext.length)chunks.push(actionItem('missing-next-steps',`${noNext.length} open projects missing a next step`,'Open the projects that need a next step.'));
+    if(noPN.length)chunks.push(actionItem('missing-part-numbers',`${noPN.length} parts/materials without a part number/spec`,'Open a searchable list; some consumables legitimately will not have one.'));
+    if(a.unverified.length)chunks.push(actionItem('unverified-specs',`${a.unverified.length} specs marked Needs Verification`,'Open Specs / Setup in Aircraft Ops.'));
+    if(a.unknownPurchases.length)chunks.push(actionItem('unknown-purchases',`${a.unknownPurchases.length} purchases not reconciled`,'Open the unresolved purchase list and set Installed, Consumed, On Hand, Returned, Sold, etc.'));
     return {title:'Data-quality opportunities',html:chunks.length?`<div class="assistant-list">${chunks.join('')}</div>`:empty('The tracker does not currently see obvious data-quality gaps in these categories.')};
   }
   function assistantBlocked(){
@@ -159,6 +160,35 @@
     page.insertAdjacentElement('afterbegin',card);setAnswer('today');
   }
 
+  function openAttentionList(action){
+    const {projects,parts}=lists();
+    let title='',rows=[],kind='project',placeholder='Search…';
+    if(action==='blocked-projects'){title='Blocked / Held-Up Projects';rows=projects.filter(isOpenProject).filter(isBlockedProject);kind='project';placeholder='Search blocked projects…'}
+    else if(action==='missing-locations'){title='On-Hand Parts Missing Storage Location';rows=parts.filter(p=>{let q=null;try{q=typeof partPhysicalOnHand==='function'?partPhysicalOnHand(p):(typeof partAvailable==='function'?partAvailable(p):p.stockQty)}catch(_e){q=p.stockQty}return n(q)>0&&!text(p.location)});kind='part';placeholder='Search part, PN, system, vendor…'}
+    else if(action==='missing-next-steps'){title='Open Projects Missing a Next Step';rows=projects.filter(isOpenProject).filter(p=>!text(p.nextStep));kind='project';placeholder='Search projects…'}
+    else if(action==='missing-part-numbers'){title='Parts / Materials Missing a Part Number';rows=parts.filter(p=>!text(p.partNo));kind='part';placeholder='Search part, system, vendor…'}
+    else return;
+    const modalId='assistantActionListBody';
+    openModal(modalHeader(title,rows.length+' record'+(rows.length===1?'':'s'))+`<div class="controls" style="margin:8px 0 12px"><input id="assistantActionSearch" type="search" placeholder="${aEsc(placeholder)}"></div><div id="${modalId}"></div><div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>`,true);
+    const render=()=>{
+      const q=lower(document.getElementById('assistantActionSearch')?.value);
+      const filtered=rows.filter(x=>!q||lower([x.title,x.name,x.partNo,x.system,x.vendor,x.blockers,x.nextStep].join(' ')).includes(q));
+      const box=document.getElementById(modalId);if(!box)return;
+      box.innerHTML=`<div class="assistant-list">${filtered.map(x=>kind==='project'
+        ?buttonItem('project',x.id,x.title,text(x.blockers)||text(x.nextStep)||'Open project',x.system||'',isBlockedProject(x)?['blocked']:[])
+        :buttonItem('part',x.id,x.name||x.partNo||'Part',[x.partNo,x.system,x.vendor].filter(Boolean).join(' • ')||'Part / material',x.stockQty!==''?`${x.stockQty} ${x.unit||'ea'}`:'',['data quality'])
+      ).join('')||empty('No matching records.')}</div>`;
+    };
+    document.getElementById('assistantActionSearch')?.addEventListener('input',render);
+    render();
+  }
+  function openAssistantAction(action){
+    if(['blocked-projects','missing-locations','missing-next-steps','missing-part-numbers'].includes(action))return openAttentionList(action);
+    if(action==='unknown-purchases'){if(typeof openPurchaseMetricDrilldown==='function')return openPurchaseMetricDrilldown('unknown');if(typeof navTo==='function')return navTo('purchases')}
+    if(action==='unverified-specs'){if(typeof navTo==='function')navTo('ops');if(typeof setOpsTab==='function')setTimeout(()=>setOpsTab('specs'),0);return}
+    if(action==='failed-inspections'){if(typeof navTo==='function')navTo('ops');if(typeof setOpsTab==='function')setTimeout(()=>setOpsTab('inspections'),0);return}
+  }
+
   function openEntity(kind,id){
     const numeric=/^\d+(?:\.\d+)?$/.test(String(id))?Number(id):id;
     try{
@@ -172,6 +202,7 @@
   }
   document.addEventListener('click',e=>{
     const q=e.target.closest?.('[data-assist-question]');if(q){e.preventDefault();setAnswer(q.dataset.assistQuestion);return}
+    const action=e.target.closest?.('[data-assist-action]');if(action){e.preventDefault();openAssistantAction(action.dataset.assistAction);return}
     const item=e.target.closest?.('[data-assist-kind][data-assist-id]');if(item){e.preventDefault();openEntity(item.dataset.assistKind,item.dataset.assistId);return}
     if(e.target.closest?.('#n594AssistantAskBtn')){e.preventDefault();window.n594AssistantAsk()}
   });
