@@ -16,7 +16,7 @@ initCloud();
 (function(){
   if(document.querySelector('script[data-assistant-collapse]'))return;
   const s=document.createElement('script');
-  s.src='app-44-assistant-collapse.js?v=5.5.5';
+  s.src='app-44-assistant-collapse.js?v=5.5.6';
   s.dataset.assistantCollapse='1';
   document.body.appendChild(s);
 })();
