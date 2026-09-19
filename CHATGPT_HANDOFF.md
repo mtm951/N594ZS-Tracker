@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.9.4**
+- Current release: **v5.9.5**
 
 ## v5.9.0 Systems workspace
 
@@ -52,6 +52,13 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Current Project Priorities, Blockers / Holds, Recent Work, Parts Inventory, Open Orders, and Quick Actions can each be collapsed independently.
 - Collapse choices are stored in `db.settings.dashboardCollapsedSections` and sync through the existing singleton settings record.
 - The aircraft summary, high-level metrics, readiness strip, and independently collapsible N594ZS Assistant remain visible.
+
+### v5.9.5 rearrangeable Dashboard sections
+
+- The six collapsible Dashboard section tiles can be reordered by dragging their handle on desktop.
+- Move earlier / Move later arrow controls provide reliable rearranging on phones and tablets.
+- The chosen order is stored in `db.settings.dashboardSectionOrder` and syncs through the existing singleton settings record.
+- Aircraft identity, readiness, the Assistant, and top metrics remain anchored so essential context stays predictable.
 
 These identifiers are not credentials. Never expose secrets, service-role keys, access tokens, or private authentication material.
 
