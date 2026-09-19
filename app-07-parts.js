@@ -1,11 +1,14 @@
 // ---------- PARTS ----------
+function partOnOrderQty(partId){
+  return db.orders.filter(o=>o.partId===partId&&!o.inventoryApplied&&['Ordered','Backordered'].includes(o.status)).reduce((sum,o)=>sum+num(o.qty),0);
+}
 function openPartModal(id=null,projectId=null){
   const p=id?partById(id):{name:'',partNo:'',system:'',unit:'ea',stockQty:'',minQty:'',status:'On Hand',vendor:'',url:'',unitCost:'',location:'',purchaseDate:'',notes:'',linkedProjectIds:projectId?[projectId]:[]};
   openModal(`${modalHeader(id?'Edit Part':'Add Part')}<div class="form-grid">
     <div class="full"><label>Part / material name</label><input id="ptName" value="${esc(p.name)}"></div>
     ${field('Part number / specification','ptPN',p.partNo)}
     <div><label>System</label><select id="ptSystem">${systemOptions(p.system)}</select></div>
-    ${field('Unit','ptUnit',p.unit||'ea')}${field('Quantity acquired / on hand','ptStock',p.stockQty,'number','step="any"')}
+    ${field('Unit','ptUnit',p.unit||'ea')}${field('Quantity on hand','ptStock',p.stockQty,'number','step="any"')}
     ${field('Minimum / reorder qty','ptMin',p.minQty,'number','step="any"')}
     <div><label>Status</label><select id="ptStatus">${['On Hand','Installed','Verify','Need','Order','Backordered','Retired'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${field('Vendor / source','ptVendor',p.vendor)}${field('Unit price','ptCost',p.unitCost,'number','step="0.01" min="0"')}
@@ -23,8 +26,9 @@ function openPartDetail(id){
   const linkedProjects=unique([...p.linkedProjectIds,...db.projects.filter(pr=>pr.partsUsed.some(x=>x.partId===id)).map(pr=>pr.id)]).map(projectById).filter(Boolean);
   const docs=db.docs.filter(d=>d.linkedPartIds.includes(id));
   const available=partAvailable(p);
+  const onOrder=partOnOrderQty(id);
   openModal(`${modalHeader(p.name,p.partNo?`PN / Spec: ${p.partNo}`:p.system)}
-    <div class="summary-strip"><div class="summary-cell"><div class="lab">Status</div><div class="val">${pill(p.status)}</div></div><div class="summary-cell"><div class="lab">Available</div><div class="val">${available===null?'—':esc(available+' '+(p.unit||''))}</div></div><div class="summary-cell"><div class="lab">Used in logs</div><div class="val">${esc(partConsumedQty(id)+' '+(p.unit||''))}</div></div><div class="summary-cell"><div class="lab">Unit Price</div><div class="val">${db.settings.showCosts?fmtMoney(p.unitCost):'Hidden'}</div></div></div>
+    <div class="summary-strip"><div class="summary-cell"><div class="lab">Status</div><div class="val">${pill(p.status)}</div></div><div class="summary-cell"><div class="lab">On Hand</div><div class="val">${available===null?'—':esc(available+' '+(p.unit||''))}</div></div><div class="summary-cell"><div class="lab">On Order</div><div class="val">${esc(onOrder+' '+(p.unit||''))}</div></div><div class="summary-cell"><div class="lab">Used in logs</div><div class="val">${esc(partConsumedQty(id)+' '+(p.unit||''))}</div></div><div class="summary-cell"><div class="lab">Unit Price</div><div class="val">${db.settings.showCosts?fmtMoney(p.unitCost):'Hidden'}</div></div></div>
     <div class="detail-grid"><div>
       <div class="detail-card"><div class="section-tools"><h3>Part Record</h3><button class="icon-btn" onclick="openPartModal(${id})">Edit</button></div><div class="grid"><div class="span-6"><div class="kv"><span>System</span><b>${esc(p.system||'—')}</b></div><div class="kv"><span>Vendor</span><b>${esc(p.vendor||'—')}</b></div><div class="kv"><span>Location</span><b>${esc(p.location||'—')}</b></div></div><div class="span-6"><div class="kv"><span>Quantity recorded</span><b>${p.stockQty===''?'—':esc(p.stockQty+' '+(p.unit||''))}</b></div><div class="kv"><span>Reorder level</span><b>${p.minQty===''?'—':esc(p.minQty+' '+(p.unit||''))}</b></div><div class="kv"><span>Purchase date</span><b>${esc(p.purchaseDate||'—')}</b></div></div></div><div class="detail-section"><label>Notes / Specifications</label><div class="detail-text">${esc(p.notes||'No notes.')}</div></div>${isURL(p.url)?`<div class="action-row" style="margin-top:10px"><button class="btn secondary" onclick="window.open('${esc(p.url)}','_blank')">Open Product / Vendor Page</button></div>`:''}</div>
       <div class="detail-card"><div class="section-tools"><h3>Consumption / Installation History</h3><button class="icon-btn" onclick="openLogModal(null,null,${id})">+ Log Use</button></div>${consumed.length?`<div class="table-wrap"><table class="subtable"><thead><tr><th>Date</th><th>Work</th><th>Qty</th><th>Cost</th></tr></thead><tbody>${consumed.map(x=>`<tr class="click-row" onclick="openLogDetail(${x.log.id})"><td>${esc(x.log.date)}</td><td>${esc(x.log.work)}</td><td>${esc(x.item.qty)} ${esc(x.item.unit||p.unit||'')}</td><td>${db.settings.showCosts?fmtMoney(num(x.item.qty)*num(x.item.unitCost)):'Hidden'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No work-log consumption entries linked to this part.</div>'}</div>
