@@ -1,6 +1,6 @@
 // ---------- PARTS ----------
 function partOnOrderQty(partId){
-  return db.orders.filter(o=>o.partId===partId&&!o.inventoryApplied&&['Ordered','Backordered'].includes(o.status)).reduce((sum,o)=>sum+num(o.qty),0);
+  return db.orders.filter(o=>o.partId===partId&&!o.inventoryApplied&&['Ordered','Backordered','Shipped'].includes(o.status)).reduce((sum,o)=>sum+(typeof orderRemainingQty==='function'?orderRemainingQty(o):num(o.qty)),0);
 }
 function openPartModal(id=null,projectId=null){
   const p=id?partById(id):{name:'',partNo:'',system:'',unit:'ea',stockQty:'',minQty:'',status:'On Hand',vendor:'',url:'',unitCost:'',location:'',purchaseDate:'',notes:'',linkedProjectIds:projectId?[projectId]:[]};

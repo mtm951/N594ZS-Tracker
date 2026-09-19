@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release at creation of this handoff: **v5.5.8**
+- Current release: **v5.7.0**
 
 These identifiers are not credentials. Never expose secrets, service-role keys, access tokens, or private authentication material.
 
@@ -67,6 +67,8 @@ The tracker should help answer:
 - Parts inventory, reservations and transaction/adjustment history
 - Reserve → Use workflow tied to work-log consumption
 - Orders / things to buy
+  - Vendor/reference grouping, partial receipts and receive-entire-order workflow
+  - Ordered quantities stay separate from on-hand inventory until received
 - Purchases, invoices/order records, vendor history, receipts and source provenance
 - Purchase summary drill-downs
 - Aircraft Ops:
