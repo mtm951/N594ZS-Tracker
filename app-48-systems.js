@@ -52,6 +52,12 @@
     const purchases=A(db.purchases).filter(x=>systemMatches(x,name));
     const equipment=A(db.equipment).filter(x=>systemMatches(x,name));
     const specs=A(db.specs).filter(x=>systemMatches(x,name));
+    const orders=A(db.orders).filter(o=>{
+      const pr=o?.projectId&&typeof projectById==='function'?projectById(o.projectId):null;
+      const pt=o?.partId&&typeof partById==='function'?partById(o.partId):null;
+      return systemMatches(pr,name)||systemMatches(pt,name);
+    });
+    const openOrders=orders.filter(o=>typeof isClosedOrder==='function'?!isClosedOrder(o):!['Received','Cancelled'].includes(o.status));
     const activeProjects=projects.filter(openProject);
     const unresolvedSquawks=squawks.filter(openSquawk);
     const installedEquipment=equipment.filter(x=>x.status==='Installed');
@@ -59,11 +65,11 @@
     const purchaseSpend=purchases.reduce((s,p)=>s+purchaseTotal(p),0);
     const projectCostTotal=projects.reduce((s,p)=>s+(typeof projectCost==='function'?Number(projectCost(p)||0):0),0);
     const incomingParts=parts.reduce((s,p)=>s+(typeof partOnOrderQty==='function'?Number(partOnOrderQty(p.id)||0):0),0);
-    return {name,projects,activeProjects,parts,logs,docs,checklists,maintenance,dueMaintenance,squawks,unresolvedSquawks,purchases,purchaseSpend,projectCostTotal,equipment,installedEquipment,specs,incomingParts};
+    return {name,projects,activeProjects,parts,orders,openOrders,logs,docs,checklists,maintenance,dueMaintenance,squawks,unresolvedSquawks,purchases,purchaseSpend,projectCostTotal,equipment,installedEquipment,specs,incomingParts};
   }
 
   function totalRecords(d){
-    return d.projects.length+d.parts.length+d.logs.length+d.docs.length+d.checklists.length+d.maintenance.length+d.squawks.length+d.purchases.length+d.equipment.length+d.specs.length;
+    return d.projects.length+d.parts.length+d.orders.length+d.logs.length+d.docs.length+d.checklists.length+d.maintenance.length+d.squawks.length+d.purchases.length+d.equipment.length+d.specs.length;
   }
 
   function health(d){
@@ -84,7 +90,7 @@
         <div><b>${d.installedEquipment.length}</b><span>installed items</span></div>
         <div><b>${d.dueMaintenance.length}</b><span>maintenance alerts</span></div>
       </div>
-      <div class="system-card-foot"><span>${d.parts.length} parts • ${d.docs.length} docs • ${d.logs.length} work entries</span><span>${latest?`Last work ${esc(latest.date||'—')}`:'No work logged'} →</span></div>
+      <div class="system-card-foot"><span>${d.parts.length} parts • ${d.openOrders.length} open orders • ${d.docs.length} docs</span><span>${latest?`Last work ${esc(latest.date||'—')}`:'No work logged'} →</span></div>
     </button>`;
   }
 
@@ -145,20 +151,21 @@
 
     page.innerHTML=`<div class="grid">
       <div class="card span-12 system-detail-hero"><div class="toolbar"><div><button class="system-back" onclick="showAllSystems()">← All Systems</button><div class="system-title-line"><h1>${esc(name)}</h1><span class="system-health ${h.cls}">${esc(h.label)}</span></div><div class="muted">Everything in the tracker associated with this aircraft system.</div></div><div class="action-row"><button class="primary" onclick="openSystemProjectModal(${J(name)})">+ Project</button><button class="secondary" onclick="openSystemSquawkModal(${J(name)})">+ Squawk</button><button class="secondary" onclick="openSystemWorkModal(${J(name)})">+ Work Entry</button></div></div>
-        <div class="summary-strip system-summary"><div><span>Active projects</span><b>${active.length}</b></div><div><span>Open squawks</span><b>${squawks.length}</b></div><div><span>Installed equipment</span><b>${d.installedEquipment.length}</b></div><div><span>Maintenance alerts</span><b>${d.dueMaintenance.length}</b></div><div><span>Parts</span><b>${parts.length}</b></div><div><span>Documents</span><b>${docs.length}</b></div><div><span>Work entries</span><b>${logs.length}</b></div><div><span>Recorded purchases</span><b>${visibleCost(d.purchaseSpend)}</b></div></div>
+        <div class="summary-strip system-summary"><div><span>Active projects</span><b>${active.length}</b></div><div><span>Open squawks</span><b>${squawks.length}</b></div><div><span>Installed equipment</span><b>${d.installedEquipment.length}</b></div><div><span>Maintenance alerts</span><b>${d.dueMaintenance.length}</b></div><div><span>Parts</span><b>${parts.length}</b></div><div><span>Open orders</span><b>${d.openOrders.length}</b></div><div><span>Documents</span><b>${docs.length}</b></div><div><span>Work entries</span><b>${logs.length}</b></div><div><span>Recorded purchases</span><b>${visibleCost(d.purchaseSpend)}</b></div></div>
       </div>
 
       ${panel('Active Projects','View all',`openProjectsView({system:${J(name)}})`,active.map(p=>rowButton(esc(p.title),`${esc(p.priority)} • ${esc(p.status)} • ${p.percent||0}%`,esc(p.nextStep||'Open'),`openProjectDetail(${p.id})`)).join(''))}
-      ${panel('Open Squawks','All squawks',`navTo('squawks')`,squawks.map(s=>rowButton(esc(s.title),`${esc(s.severity)} • ${esc(s.status)}`,esc(s.discoveredDate||'—'),`openSquawkDetail(${s.id})`)).join(''))}
+      ${panel('Open Squawks','Filtered squawks',`openSystemSquawksView(${J(name)})`,squawks.map(s=>rowButton(esc(s.title),`${esc(s.severity)} • ${esc(s.status)}`,esc(s.discoveredDate||'—'),`openSquawkDetail(${s.id})`)).join(''))}
 
       ${panel('Installed Equipment','Equipment',`openSystemEquipmentView(${J(name)})`,equipment.map(e=>rowButton(esc(e.name),`${esc(e.manufacturer||'')} ${esc(e.model||'')}`.trim()||esc(e.category||''),esc(e.status||''),`openEquipmentDetail(${e.id})`)).join(''))}
       ${panel('Maintenance','Maintenance',`navTo('maintenance')`,maintenance.map(m=>{const due=maintenanceDueInfo(m);return rowButton(esc(m.title),esc(m.notes||m.basis||''),pill(due.status),`openMaintenanceModal(${m.id})`)}).join(''))}
 
       ${panel('Parts & Materials','Filtered parts',`openPartsView({system:${J(name)}})`,parts.slice(0,12).map(p=>{const on=typeof partAvailable==='function'?partAvailable(p):p.stockQty;const incoming=typeof partOnOrderQty==='function'?partOnOrderQty(p.id):0;return rowButton(esc(p.name),esc(p.partNo||p.vendor||''),`${on===null?'—':esc(on)} on hand${incoming?` • ${esc(incoming)} incoming`:''}`,`openPartDetail(${p.id})`)}).join('')+(parts.length>12?`<button class="system-more" onclick="openPartsView({system:${J(name)}})">+ ${parts.length-12} more parts</button>`:''))}
-      ${panel('Documents','Documents',`navTo('documents')`,docs.slice(0,10).map(x=>rowButton(esc(x.name),esc(x.type||x.publisher||''),esc(x.revision?`Rev ${x.revision}`:''),`openDocumentDetail(${x.id})`)).join('')+(docs.length>10?`<div class="tiny muted">+ ${docs.length-10} more documents</div>`:''))}
+      ${panel('Open Orders','All orders',`navTo('orders')`,d.openOrders.map(o=>rowButton(esc(o.item||'Order'),esc(o.vendor||o.status||''),`${esc(o.qty||'—')} ${esc(o.unit||'')}`,`openOrderDetail(${o.id})`)).join(''))}
+      ${panel('Documents','Filtered documents',`openSystemDocumentsView(${J(name)})`,docs.slice(0,10).map(x=>rowButton(esc(x.name),esc(x.type||x.publisher||''),esc(x.revision?`Rev ${x.revision}`:''),`openDocumentDetail(${x.id})`)).join('')+(docs.length>10?`<div class="tiny muted">+ ${docs.length-10} more documents</div>`:''))}
 
       ${panel('Recent Work','Work Log',`openLogsView({system:${J(name)}})`,logs.slice(0,10).map(l=>rowButton(`${esc(l.date||'—')} • ${esc(l.work)}`,esc(l.observations||l.notes||''),l.laborHours?`${esc(l.laborHours)} hr`:'',`openLogDetail(${l.id})`)).join(''))}
-      ${panel('Purchases & Cost','Purchases',`navTo('purchases')`,purchases.slice(0,10).map(p=>rowButton(esc(p.pn||p.description||'Purchase'),`${esc(p.shipDate||'—')} • ${esc(p.vendor||'')}`,db.settings?.showCosts?money(purchaseTotal(p)):'Hidden',`openPurchaseDetail(${J(String(p.id))})`)).join('')+(purchases.length?`<div class="system-total"><span>Recorded merchandise spend for this system</span><b>${visibleCost(d.purchaseSpend)}</b></div>`:''))}
+      ${panel('Purchases & Cost','Filtered purchases',`openSystemPurchasesView(${J(name)})`,purchases.slice(0,10).map(p=>rowButton(esc(p.pn||p.description||'Purchase'),`${esc(p.shipDate||'—')} • ${esc(p.vendor||'')}`,db.settings?.showCosts?money(purchaseTotal(p)):'Hidden',`openPurchaseDetail(${J(String(p.id))})`)).join('')+(purchases.length?`<div class="system-total"><span>Recorded merchandise spend for this system</span><b>${visibleCost(d.purchaseSpend)}</b></div>`:''))}
 
       ${panel('Checklists','Checklists',`navTo('checklists')`,checklists.map(c=>{const done=A(c.items).filter(x=>x.done).length;return rowButton(esc(c.name),esc(c.trigger||c.purpose||''),`${done}/${A(c.items).length}`,`openChecklistDetail(${c.id})`)}).join(''))}
       ${panel('Reference Specs','Aircraft Ops',`navTo('ops')`,specs.map(s=>rowButton(esc(s.title),esc(s.source||s.notes||''),esc(`${s.value||'—'} ${s.units||''}`.trim()),`openSpecDetail(${J(String(s.id))})`)).join(''))}
@@ -177,6 +184,9 @@
   window.openSystemSquawkModal=function(name){openSquawkModal();setControl('sqSystem',name)};
   window.openSystemWorkModal=function(name){openLogModal();setControl('lgSystem',name)};
   window.openSystemEquipmentView=function(name){navTo('equipment');setTimeout(()=>{setControl('equipmentSystem',name);if(typeof renderEquipmentRows==='function')renderEquipmentRows()},0)};
+  window.openSystemSquawksView=function(name){navTo('squawks');setTimeout(()=>{setControl('squawkSearch',name);setControl('squawkStatus','Active');if(typeof renderSquawkRows==='function')renderSquawkRows()},0)};
+  window.openSystemDocumentsView=function(name){navTo('documents');setTimeout(()=>{setControl('docSearch',name);if(typeof renderDocRows==='function')renderDocRows()},0)};
+  window.openSystemPurchasesView=function(name){navTo('purchases');setTimeout(()=>{setControl('purchaseSearch','');setControl('purchaseSystem',name);if(typeof renderPurchaseRows==='function')renderPurchaseRows()},0)};
 
   const renderAllBase=renderAll;
   renderAll=function(){renderAllBase();renderSystems()};
