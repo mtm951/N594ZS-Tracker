@@ -36,7 +36,7 @@ savePart=function(id,projectId=null){
 renderPartRows=function(){
   const el=document.getElementById('partRows');if(!el)return;
   const q=(val('partSearch')||'').toLowerCase(),sys=val('partSystem'),st=val('partStatus');
-  const rows=db.parts.filter(p=>(!q||[p.name,p.description,p.partNo,p.system,p.vendor,p.notes,p.location].join(' ').toLowerCase().includes(q))&&(!sys||p.system===sys)&&(!st||p.status===st));
+  const rows=db.parts.filter(p=>(!q||[p.name,p.description,p.partNo,p.system,p.vendor,p.notes,p.location].join(' ').toLowerCase().includes(q))&&(!sys||(typeof systemRecordMatches==='function'?systemRecordMatches(p,sys,'parts'):p.system===sys))&&(!st||p.status===st));
   el.innerHTML=rows.map(p=>`<tr class="click-row" onclick="openPartDetail(${p.id})"><td><div class="task-title">${esc(p.name)}</div><div class="task-note">${esc(p.description||p.notes||'')}</div></td><td>${esc(p.partNo||'—')}</td><td>${esc(p.system||'—')}</td><td>${partAvailable(p)===null?'—':esc(partAvailable(p)+' '+(p.unit||''))}</td><td>${esc(partConsumedQty(p.id)+' '+(p.unit||''))}</td><td>${pill(p.status)}</td><td>${esc(p.vendor||'—')}</td><td>${db.settings.showCosts?fmtMoney(p.unitCost):'Hidden'}</td><td><button class="icon-btn" onclick="event.stopPropagation();openPartModal(${p.id})">Edit</button></td></tr>`).join('')||'<tr><td colspan="9" class="empty">No matching parts.</td></tr>';
 };
 

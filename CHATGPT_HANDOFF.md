@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.9.1**
+- Current release: **v5.9.2**
 
 ## v5.9.0 Systems workspace
 
@@ -33,6 +33,13 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Renaming a derived system automatically keeps its former name as an alias so existing records remain linked.
 - Deleting a system never deletes underlying records; it moves linked records to Unassigned and removes only the system metadata.
 - Prefer stable aircraft subsystems as top-level systems (for example Electrical, Engine, Fuel System, Propeller, Landing Gear, Brakes, Flight Controls, Panel / Avionics, Airframe / Fabric, and Cooling). Use projects for discrete jobs.
+
+### v5.9.2 consolidated systems and tile ordering
+
+- The overview consolidates legacy categories into stable aircraft systems without deleting or duplicating records: Aircraft, Airframe, Fabric / Airframe, and Records / W&B appear under Airframe / Fabric; Avionics / Instruments appears under Panel / Avionics; Exhaust and Project appear under Engine; Fuel appears under Fuel System.
+- Canonical-aware filters keep legacy records visible when drilling into Projects, Parts, Equipment, Purchases, and Work Log.
+- System tiles can be rearranged with desktop drag-and-drop or the Move earlier / Move later actions in each tile's three-dot menu.
+- The chosen order is stored in `db.settings.systemOrder` and syncs through the existing singleton settings record; no Supabase migration is required.
 
 These identifiers are not credentials. Never expose secrets, service-role keys, access tokens, or private authentication material.
 
