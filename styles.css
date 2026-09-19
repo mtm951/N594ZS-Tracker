@@ -44,3 +44,7 @@ input,select,textarea{width:100%;border:1px solid #c8d5df;border-radius:7px;back
 .order-group-row td{background:#eef5fb;border-top:2px solid #9abbd2;padding:12px 10px}
 .order-group-row .section-tools{margin:0;align-items:center}
 @media(max-width:700px){.order-group-row .section-tools{align-items:flex-start}.order-group-row .btn{width:auto;white-space:nowrap}}
+.entity-link-card{cursor:pointer;transition:border-color .12s ease,background .12s ease,transform .12s ease}
+.entity-link-card:hover{border-color:#91b9d7;background:#f7fbfe;transform:translateY(-1px)}
+.entity-link-card:focus-within{border-color:#6ea8d3;box-shadow:0 0 0 3px rgba(47,127,211,.12)}
+.entity-link-empty{border-style:dashed;background:#fbfdff}
