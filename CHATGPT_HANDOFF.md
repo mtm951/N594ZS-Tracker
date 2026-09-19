@@ -14,7 +14,18 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.7.2**
+- Current release: **v5.9.0**
+
+## v5.9.0 Systems workspace
+
+- `app-48-systems.js` provides the first-class Systems tab and saved system overview records.
+- System dashboards derive linked projects, squawks, equipment, parts, orders, maintenance, documents, work logs, purchases, checklists, and references from existing records.
+- `db.systems` stores only system-level metadata: canonical name, aliases, description, purpose, readiness override, next action, blockers, notes, and representative image URL.
+- System metadata syncs through the existing `tracker_records` table using record type `system`; no Supabase schema migration is required.
+- Orders now support a direct `system` value and otherwise inherit their system from their linked project or part.
+- Filtered drilldowns preserve the selected system across Orders, Maintenance, Checklists, Documents, Equipment, Purchases, Squawks, Projects, Parts, and Work Log.
+- The Unassigned workflow can classify records in bulk. The merge workflow rewrites system names while preserving the former name as an alias; it never deletes underlying records.
+- Readiness is a tracker-derived workflow signal, not an airworthiness determination or return-to-service authorization.
 
 These identifiers are not credentials. Never expose secrets, service-role keys, access tokens, or private authentication material.
 

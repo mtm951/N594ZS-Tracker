@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION='5.8.1';
+const APP_VERSION='5.9.0';
 const DB_KEY='n594zs_v3';
 const OLD_DB_KEY='n594zs_v2';
 const NAV=[
@@ -10,6 +10,7 @@ const NAV=[
 
 const SEED={
   version:3,
+  systems:[],
   aircraft:{
     tail:'N594ZS',model:'Kitfox Model 4-1050',engine:'Rotax 912 ULS',hp:'100',gross:'1050',
     emptyWeight:'',emptyCg:'',airframeHours:'',engineHours:'',annualDate:'',

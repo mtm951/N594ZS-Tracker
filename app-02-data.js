@@ -32,10 +32,10 @@ let objectUrls=[];
 function normalizeDB(){
   db.version=3;
   db.aircraft={...clone(SEED.aircraft),...(db.aircraft||{})};
-  db.projects=arr(db.projects);db.parts=arr(db.parts);db.orders=arr(db.orders);db.logs=arr(db.logs);db.docs=arr(db.docs);db.checklists=arr(db.checklists);db.settings={...clone(SEED.settings),...(db.settings||{})};
+  db.projects=arr(db.projects);db.parts=arr(db.parts);db.orders=arr(db.orders);db.logs=arr(db.logs);db.docs=arr(db.docs);db.checklists=arr(db.checklists);db.systems=arr(db.systems);db.settings={...clone(SEED.settings),...(db.settings||{})};
   db.projects.forEach(x=>{x.partsUsed=arr(x.partsUsed);x.updates=arr(x.updates);x.percent=Math.max(0,Math.min(100,num(x.percent)));x.summary=x.summary||'';x.plan=x.plan||'';x.nextStep=x.nextStep||'';x.blockers=x.blockers||''});
   db.parts.forEach(x=>{x.linkedProjectIds=arr(x.linkedProjectIds);x.updates=arr(x.updates);if(x.stockQty===undefined)x.stockQty='';if(x.minQty===undefined)x.minQty='';x.partNo=x.partNo||'';x.vendor=x.vendor||'';x.url=x.url||'';x.location=x.location||'';x.purchaseDate=x.purchaseDate||''});
-  db.orders.forEach(x=>{x.updates=arr(x.updates);x.partId=x.partId||null;x.projectId=x.projectId||null;x.inventoryApplied=!!x.inventoryApplied;x.blockerReason=x.blockerReason||''});
+  db.orders.forEach(x=>{x.updates=arr(x.updates);x.partId=x.partId||null;x.projectId=x.projectId||null;x.system=x.system||'';x.inventoryApplied=!!x.inventoryApplied;x.blockerReason=x.blockerReason||''});
   db.logs.forEach(x=>{x.projectIds=arr(x.projectIds);x.consumedParts=arr(x.consumedParts);x.observations=x.observations||'';x.blockers=x.blockers||'';x.nextStep=x.nextStep||'';x.notes=x.notes||''});
   db.docs.forEach(x=>{x.linkedProjectIds=arr(x.linkedProjectIds);x.linkedPartIds=arr(x.linkedPartIds);x.linkedLogIds=arr(x.linkedLogIds);x.updates=arr(x.updates);x.revision=x.revision||'';x.issueDate=x.issueDate||'';x.system=x.system||'';x.publisher=x.publisher||'';x.notes=x.notes||''});
   db.checklists.forEach(c=>{c.items=arr(c.items);c.purpose=c.purpose||'';c.system=c.system||'';c.trigger=c.trigger||'';c.notes=c.notes||'';c.projectId=c.projectId||null;c.items.forEach(i=>{i.note=i.note||''})});

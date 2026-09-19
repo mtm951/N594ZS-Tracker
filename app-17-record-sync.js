@@ -8,7 +8,7 @@ try{const cached=JSON.parse(localStorage.getItem(CLOUD_SNAPSHOT_KEY)||'{}');clou
 let cloudReloadTimer=null, cloudRemoteReloadPending=false;
 let lastCloudSyncAt=null;
 
-const RECORD_ARRAYS={project:'projects',part:'parts',order:'orders',log:'logs',document:'docs',checklist:'checklists',maintenance:'maintenance'};
+const RECORD_ARRAYS={project:'projects',part:'parts',order:'orders',log:'logs',document:'docs',checklist:'checklists',maintenance:'maintenance',system:'systems'};
 const SYNC_RECORD_TYPES=new Set(['aircraft','settings',...Object.keys(RECORD_ARRAYS)]);
 function cloudRecordKey(type,id){return `${type}:${String(id)}`}
 function cloudCanonicalJSONValue(x){
@@ -34,7 +34,7 @@ function buildCloudRecordMap(){
   return m;
 }
 function snapshotFromRows(rows){const m=new Map();for(const r of rows||[]){if(r.deleted_at||!SYNC_RECORD_TYPES.has(r.record_type))continue;m.set(cloudRecordKey(r.record_type,r.record_id),cloudStableJSON(r.data))}return m}
-function blankCloudDB(){return {version:4,aircraft:clone(SEED.aircraft),projects:[],parts:[],orders:[],logs:[],docs:[],checklists:[],maintenance:[],settings:clone(SEED.settings)}}
+function blankCloudDB(){return {version:4,aircraft:clone(SEED.aircraft),projects:[],parts:[],orders:[],logs:[],docs:[],checklists:[],maintenance:[],systems:[],settings:clone(SEED.settings)}}
 function assembleCloudDB(rows){
   const out=blankCloudDB();
   for(const r of rows||[]){
