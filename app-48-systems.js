@@ -15,6 +15,7 @@
   const A=v=>Array.isArray(v)?v:[];
   const T=v=>String(v??'').trim();
   const same=(a,b)=>T(a).toLowerCase()===T(b).toLowerCase();
+  const J=v=>esc(JSON.stringify(T(v)));
   const money=v=>typeof fmtMoney==='function'?fmtMoney(v):('$'+Number(v||0).toFixed(2));
   const visibleCost=v=>db.settings?.showCosts?money(v):'Hidden';
   const purchaseTotal=p=>Number(p?.qty||0)*Number(p?.unitPrice||0);
@@ -75,7 +76,7 @@
   function systemCard(d){
     const h=health(d);
     const latest=[...d.logs].sort((a,b)=>T(b.date).localeCompare(T(a.date)))[0];
-    return `<button class="system-card" onclick="openSystemDashboard(${JSON.stringify(d.name)})">
+    return `<button class="system-card" onclick="openSystemDashboard(${J(d.name)})">
       <div class="system-card-head"><div><span class="system-kicker">AIRCRAFT SYSTEM</span><h2>${esc(d.name)}</h2></div><span class="system-health ${h.cls}">${esc(h.label)}</span></div>
       <div class="system-card-metrics">
         <div><b>${d.activeProjects.length}</b><span>active projects</span></div>
@@ -143,24 +144,24 @@
     const specs=[...d.specs].sort((a,b)=>String(a.title||'').localeCompare(String(b.title||'')));
 
     page.innerHTML=`<div class="grid">
-      <div class="card span-12 system-detail-hero"><div class="toolbar"><div><button class="system-back" onclick="showAllSystems()">← All Systems</button><div class="system-title-line"><h1>${esc(name)}</h1><span class="system-health ${h.cls}">${esc(h.label)}</span></div><div class="muted">Everything in the tracker associated with this aircraft system.</div></div><div class="action-row"><button class="primary" onclick="openSystemProjectModal(${JSON.stringify(name)})">+ Project</button><button class="secondary" onclick="openSystemSquawkModal(${JSON.stringify(name)})">+ Squawk</button><button class="secondary" onclick="openSystemWorkModal(${JSON.stringify(name)})">+ Work Entry</button></div></div>
+      <div class="card span-12 system-detail-hero"><div class="toolbar"><div><button class="system-back" onclick="showAllSystems()">← All Systems</button><div class="system-title-line"><h1>${esc(name)}</h1><span class="system-health ${h.cls}">${esc(h.label)}</span></div><div class="muted">Everything in the tracker associated with this aircraft system.</div></div><div class="action-row"><button class="primary" onclick="openSystemProjectModal(${J(name)})">+ Project</button><button class="secondary" onclick="openSystemSquawkModal(${J(name)})">+ Squawk</button><button class="secondary" onclick="openSystemWorkModal(${J(name)})">+ Work Entry</button></div></div>
         <div class="summary-strip system-summary"><div><span>Active projects</span><b>${active.length}</b></div><div><span>Open squawks</span><b>${squawks.length}</b></div><div><span>Installed equipment</span><b>${d.installedEquipment.length}</b></div><div><span>Maintenance alerts</span><b>${d.dueMaintenance.length}</b></div><div><span>Parts</span><b>${parts.length}</b></div><div><span>Documents</span><b>${docs.length}</b></div><div><span>Work entries</span><b>${logs.length}</b></div><div><span>Recorded purchases</span><b>${visibleCost(d.purchaseSpend)}</b></div></div>
       </div>
 
-      ${panel('Active Projects','View all',`openProjectsView({system:${JSON.stringify(name)}})`,active.map(p=>rowButton(esc(p.title),`${esc(p.priority)} • ${esc(p.status)} • ${p.percent||0}%`,esc(p.nextStep||'Open'),`openProjectDetail(${p.id})`)).join(''))}
+      ${panel('Active Projects','View all',`openProjectsView({system:${J(name)}})`,active.map(p=>rowButton(esc(p.title),`${esc(p.priority)} • ${esc(p.status)} • ${p.percent||0}%`,esc(p.nextStep||'Open'),`openProjectDetail(${p.id})`)).join(''))}
       ${panel('Open Squawks','All squawks',`navTo('squawks')`,squawks.map(s=>rowButton(esc(s.title),`${esc(s.severity)} • ${esc(s.status)}`,esc(s.discoveredDate||'—'),`openSquawkDetail(${s.id})`)).join(''))}
 
-      ${panel('Installed Equipment','Equipment',`openSystemEquipmentView(${JSON.stringify(name)})`,equipment.map(e=>rowButton(esc(e.name),`${esc(e.manufacturer||'')} ${esc(e.model||'')}`.trim()||esc(e.category||''),esc(e.status||''),`openEquipmentDetail(${e.id})`)).join(''))}
+      ${panel('Installed Equipment','Equipment',`openSystemEquipmentView(${J(name)})`,equipment.map(e=>rowButton(esc(e.name),`${esc(e.manufacturer||'')} ${esc(e.model||'')}`.trim()||esc(e.category||''),esc(e.status||''),`openEquipmentDetail(${e.id})`)).join(''))}
       ${panel('Maintenance','Maintenance',`navTo('maintenance')`,maintenance.map(m=>{const due=maintenanceDueInfo(m);return rowButton(esc(m.title),esc(m.notes||m.basis||''),pill(due.status),`openMaintenanceModal(${m.id})`)}).join(''))}
 
-      ${panel('Parts & Materials','Filtered parts',`openPartsView({system:${JSON.stringify(name)}})`,parts.slice(0,12).map(p=>{const on=typeof partAvailable==='function'?partAvailable(p):p.stockQty;const incoming=typeof partOnOrderQty==='function'?partOnOrderQty(p.id):0;return rowButton(esc(p.name),esc(p.partNo||p.vendor||''),`${on===null?'—':esc(on)} on hand${incoming?` • ${esc(incoming)} incoming`:''}`,`openPartDetail(${p.id})`)}).join('')+(parts.length>12?`<button class="system-more" onclick="openPartsView({system:${JSON.stringify(name)}})">+ ${parts.length-12} more parts</button>`:''))}
+      ${panel('Parts & Materials','Filtered parts',`openPartsView({system:${J(name)}})`,parts.slice(0,12).map(p=>{const on=typeof partAvailable==='function'?partAvailable(p):p.stockQty;const incoming=typeof partOnOrderQty==='function'?partOnOrderQty(p.id):0;return rowButton(esc(p.name),esc(p.partNo||p.vendor||''),`${on===null?'—':esc(on)} on hand${incoming?` • ${esc(incoming)} incoming`:''}`,`openPartDetail(${p.id})`)}).join('')+(parts.length>12?`<button class="system-more" onclick="openPartsView({system:${J(name)}})">+ ${parts.length-12} more parts</button>`:''))}
       ${panel('Documents','Documents',`navTo('documents')`,docs.slice(0,10).map(x=>rowButton(esc(x.name),esc(x.type||x.publisher||''),esc(x.revision?`Rev ${x.revision}`:''),`openDocumentDetail(${x.id})`)).join('')+(docs.length>10?`<div class="tiny muted">+ ${docs.length-10} more documents</div>`:''))}
 
-      ${panel('Recent Work','Work Log',`openLogsView({system:${JSON.stringify(name)}})`,logs.slice(0,10).map(l=>rowButton(`${esc(l.date||'—')} • ${esc(l.work)}`,esc(l.observations||l.notes||''),l.laborHours?`${esc(l.laborHours)} hr`:'',`openLogDetail(${l.id})`)).join(''))}
-      ${panel('Purchases & Cost','Purchases',`navTo('purchases')`,purchases.slice(0,10).map(p=>rowButton(esc(p.pn||p.description||'Purchase'),`${esc(p.shipDate||'—')} • ${esc(p.vendor||'')}`,db.settings?.showCosts?money(purchaseTotal(p)):'Hidden',`openPurchaseDetail(${JSON.stringify(String(p.id))})`)).join('')+(purchases.length?`<div class="system-total"><span>Recorded merchandise spend for this system</span><b>${visibleCost(d.purchaseSpend)}</b></div>`:''))}
+      ${panel('Recent Work','Work Log',`openLogsView({system:${J(name)}})`,logs.slice(0,10).map(l=>rowButton(`${esc(l.date||'—')} • ${esc(l.work)}`,esc(l.observations||l.notes||''),l.laborHours?`${esc(l.laborHours)} hr`:'',`openLogDetail(${l.id})`)).join(''))}
+      ${panel('Purchases & Cost','Purchases',`navTo('purchases')`,purchases.slice(0,10).map(p=>rowButton(esc(p.pn||p.description||'Purchase'),`${esc(p.shipDate||'—')} • ${esc(p.vendor||'')}`,db.settings?.showCosts?money(purchaseTotal(p)):'Hidden',`openPurchaseDetail(${J(String(p.id))})`)).join('')+(purchases.length?`<div class="system-total"><span>Recorded merchandise spend for this system</span><b>${visibleCost(d.purchaseSpend)}</b></div>`:''))}
 
       ${panel('Checklists','Checklists',`navTo('checklists')`,checklists.map(c=>{const done=A(c.items).filter(x=>x.done).length;return rowButton(esc(c.name),esc(c.trigger||c.purpose||''),`${done}/${A(c.items).length}`,`openChecklistDetail(${c.id})`)}).join(''))}
-      ${panel('Reference Specs','Aircraft Ops',`navTo('ops')`,specs.map(s=>rowButton(esc(s.title),esc(s.source||s.notes||''),esc(`${s.value||'—'} ${s.units||''}`.trim()),`openSpecDetail(${JSON.stringify(String(s.id))})`)).join(''))}
+      ${panel('Reference Specs','Aircraft Ops',`navTo('ops')`,specs.map(s=>rowButton(esc(s.title),esc(s.source||s.notes||''),esc(`${s.value||'—'} ${s.units||''}`.trim()),`openSpecDetail(${J(String(s.id))})`)).join(''))}
 
       <div class="card span-12"><div class="section-head"><h2>System Record Summary</h2><span class="tiny muted">Derived live from existing tracker records</span></div><div class="system-ledger">
         <div><span>Total linked records</span><b>${totalRecords(d)}</b></div><div><span>All projects</span><b>${d.projects.length}</b></div><div><span>All squawks</span><b>${d.squawks.length}</b></div><div><span>Equipment records</span><b>${d.equipment.length}</b></div><div><span>Purchase lines</span><b>${d.purchases.length}</b></div><div><span>Project material-use view</span><b>${visibleCost(d.projectCostTotal)}</b></div>
@@ -168,6 +169,7 @@
     </div>`;
   }
 
+  window.renderSystemCards=renderSystemCards;
   window.openSystemDashboard=function(name){activeSystemName=T(name);navTo('systems');renderSystems()};
   window.showAllSystems=function(){activeSystemName='';renderSystems();window.scrollTo({top:0,behavior:'smooth'})};
 
