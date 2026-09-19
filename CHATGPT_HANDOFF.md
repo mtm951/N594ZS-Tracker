@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.9.3**
+- Current release: **v5.9.4**
 
 ## v5.9.0 Systems workspace
 
@@ -46,6 +46,12 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Every data column on Orders is sortable in both directions: Item, Project, Part, Vendor, Quantity, Received, Status, ETA, and Total.
 - Sorting preserves grouped purchase-order rows and works together with search, status, and system filters.
 - The active column shows an ascending or descending arrow; unsorted headers show the bidirectional sort indicator.
+
+### v5.9.4 collapsible Dashboard sections
+
+- Current Project Priorities, Blockers / Holds, Recent Work, Parts Inventory, Open Orders, and Quick Actions can each be collapsed independently.
+- Collapse choices are stored in `db.settings.dashboardCollapsedSections` and sync through the existing singleton settings record.
+- The aircraft summary, high-level metrics, readiness strip, and independently collapsible N594ZS Assistant remain visible.
 
 These identifiers are not credentials. Never expose secrets, service-role keys, access tokens, or private authentication material.
 
