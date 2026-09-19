@@ -49,6 +49,21 @@ function openReceiveOrderModal(id){const o=orderById(id);if(!o)return;const rema
 function savePartialOrderReceipt(id){const o=orderById(id);if(!o)return;const qty=num(val('orReceiveQty')),remaining=orderRemainingQty(o);if(!(qty>0)||qty>remaining)return alert(`Enter a quantity from 0 to ${remaining}.`);const applied=applyOrderReceipt(o,qty);if(val('orReceiveDate'))o.receivedDate=val('orReceiveDate');closeModal();saveDB(applied&&o.partId?'Receipt saved and inventory increased.':'Receipt saved.');setTimeout(()=>openOrderDetail(id),50)}
 function receiveOrder(id){const o=orderById(id);if(!o)return;const remaining=orderRemainingQty(o);if(!remaining){o.status='Received';o.inventoryApplied=true;o.receivedDate=o.receivedDate||today();saveDB('Order marked received. Inventory had already been applied.');openOrderDetail(id);return}openReceiveOrderModal(id)}
 function receiveOrderGroup(key){const items=orderGroupItems(key).filter(o=>orderRemainingQty(o)>0&&!isClosedOrder(o));if(!items.length)return alert('This order has no remaining quantity to receive.');const label=items[0].tracking||items[0].vendor||'this order';if(!confirm(`Receive all ${items.length} remaining line item${items.length===1?'':'s'} for ${label}? Linked inventory quantities will be increased.`))return;let applied=0;items.forEach(o=>{applied+=applyOrderReceipt(o,orderRemainingQty(o))});saveDB(`${label} received. ${applied} total units were processed.`);renderOrders()}
+function receiveOrderGroupFor(orderId){const o=orderById(orderId);if(o)receiveOrderGroup(orderGroupKey(o))}
+function openReceiveOrderGroupModal(orderId){
+  const first=orderById(orderId);if(!first)return;
+  const items=orderGroupItems(orderGroupKey(first)).filter(o=>orderRemainingQty(o)>0&&!isClosedOrder(o));if(!items.length)return alert('This order has no remaining quantity to receive.');
+  const label=first.tracking||first.vendor||'Order';
+  const rows=items.map(o=>`<div class="group-receipt-row"><div><b>${esc(o.item)}</b><div class="task-note">${esc(orderReceivedQty(o)+' received • '+orderRemainingQty(o)+' '+(o.unit||'ea')+' remaining')}${o.partId?'':' • No inventory part linked'}</div></div><div><label>Received now</label><input id="ogr-${o.id}" type="number" step="any" min="0" max="${orderRemainingQty(o)}" value="0" inputmode="decimal"><small>${esc(o.unit||'ea')}</small></div></div>`).join('');
+  openModal(`${modalHeader('Receive Part of Order',label)}<div class="notice">Enter only the quantities that arrived today. Anything left at zero remains on order.</div><div class="group-receipt-list">${rows}</div><div class="form-grid"><div>${field('Received date','ogrDate',today(),'date')}</div></div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button><button class="btn success" onclick="saveOrderGroupReceipt(${orderId})">Receive Selected Items</button></div>`,true);
+}
+function saveOrderGroupReceipt(orderId){
+  const first=orderById(orderId);if(!first)return;
+  const items=orderGroupItems(orderGroupKey(first)).filter(o=>orderRemainingQty(o)>0&&!isClosedOrder(o));let total=0,lines=0;
+  for(const o of items){const input=document.getElementById(`ogr-${o.id}`),qty=num(input?.value),remaining=orderRemainingQty(o);if(qty<0||qty>remaining)return alert(`Enter a quantity from 0 to ${remaining} for ${o.item}.`);if(qty>0){total+=applyOrderReceipt(o,qty);lines++;if(val('ogrDate'))o.receivedDate=val('ogrDate')}}
+  if(!lines)return alert('Enter a received quantity for at least one item.');
+  closeModal();saveDB(`Partial receipt saved for ${first.tracking||first.vendor||'order'}: ${total} total units across ${lines} line${lines===1?'':'s'}.`);renderOrders();
+}
 function openOrderDetail(id){
   const o=orderById(id);if(!o)return;currentDetail={type:'order',id};
   const p=o.partId?partById(o.partId):null,pr=o.projectId?projectById(o.projectId):null;

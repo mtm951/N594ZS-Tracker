@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.7.1**
+- Current release: **v5.7.2**
 
 These identifiers are not credentials. Never expose secrets, service-role keys, access tokens, or private authentication material.
 

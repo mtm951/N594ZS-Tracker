@@ -48,3 +48,7 @@ input,select,textarea{width:100%;border:1px solid #c8d5df;border-radius:7px;back
 .entity-link-card:hover{border-color:#91b9d7;background:#f7fbfe;transform:translateY(-1px)}
 .entity-link-card:focus-within{border-color:#6ea8d3;box-shadow:0 0 0 3px rgba(47,127,211,.12)}
 .entity-link-empty{border-style:dashed;background:#fbfdff}
+.group-receipt-list{display:grid;gap:8px;margin:12px 0}
+.group-receipt-row{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px;align-items:center;border:1px solid #dfe7ed;border-radius:8px;padding:10px;background:#fbfdff}
+.group-receipt-row label{display:block;margin-bottom:4px}.group-receipt-row input{display:inline-block;width:110px}.group-receipt-row small{margin-left:5px;color:var(--muted)}
+@media(max-width:600px){.group-receipt-row{grid-template-columns:1fr}.group-receipt-row input{width:calc(100% - 40px)}}
