@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.9.0**
+- Current release: **v5.9.1**
 
 ## v5.9.0 Systems workspace
 
@@ -26,6 +26,13 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Filtered drilldowns preserve the selected system across Orders, Maintenance, Checklists, Documents, Equipment, Purchases, Squawks, Projects, Parts, and Work Log.
 - The Unassigned workflow can classify records in bulk. The merge workflow rewrites system names while preserving the former name as an alias; it never deletes underlying records.
 - Readiness is a tracker-derived workflow signal, not an airworthiness determination or return-to-service authorization.
+
+### v5.9.1 system-card actions
+
+- Every Systems overview card has a three-dot menu with Open, Edit/Rename, Merge, and Delete.
+- Renaming a derived system automatically keeps its former name as an alias so existing records remain linked.
+- Deleting a system never deletes underlying records; it moves linked records to Unassigned and removes only the system metadata.
+- Prefer stable aircraft subsystems as top-level systems (for example Electrical, Engine, Fuel System, Propeller, Landing Gear, Brakes, Flight Controls, Panel / Avionics, Airframe / Fabric, and Cooling). Use projects for discrete jobs.
 
 These identifiers are not credentials. Never expose secrets, service-role keys, access tokens, or private authentication material.
 
