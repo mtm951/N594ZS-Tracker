@@ -39,20 +39,20 @@
     openModal(
       modalHeader(c.name,c.trigger||c.purpose)+
       '<div class="summary-strip">'+
-        '<div class="summary-cell"><div class="lab">Progress</div><div class="val">'+pct+'%</div></div>'+
-        '<div class="summary-cell"><div class="lab">Complete / N/A</div><div class="val">'+done+'/'+all.length+'</div></div>'+
-        '<div class="summary-cell"><div class="lab">Findings</div><div class="val">'+finding+'</div></div>'+
+        '<div class="summary-cell"><div class="lab">Progress</div><div class="val" data-annual-progress>'+pct+'%</div></div>'+
+        '<div class="summary-cell"><div class="lab">Complete / N/A</div><div class="val" data-annual-complete>'+done+'/'+all.length+'</div></div>'+
+        '<div class="summary-cell"><div class="lab">Findings</div><div class="val" data-annual-findings>'+finding+'</div></div>'+
         '<div class="summary-cell"><div class="lab">Source</div><div class="val">'+E(c.sourcePages||'POH')+'</div></div>'+
       '</div>'+
       '<div class="notice annual-source-note"><b>Source-backed checklist.</b> The inspection line text below is retained verbatim from the POH. Configuration/applicability notes are separate and do not alter the source wording.</div>'+
       '<div class="annual-groups">'+groups.map(g=>{
         const p=groupProgress(c,g);
-        return '<section class="detail-card annual-group"><div class="section-tools"><h3>'+E(g)+'</h3><span class="mini-badge">'+p.done+'/'+p.items.length+'</span></div>'+
+        return '<section class="detail-card annual-group"><div class="section-tools"><h3>'+E(g)+'</h3><span class="mini-badge" data-annual-group-progress>'+p.done+'/'+p.items.length+'</span></div>'+
           p.items.map(i=>{
             const s=itemStatus(i),hasDetail=!!(i.note||i.moreInfo||i.completedDate||i.airframeHours||i.engineHours||i.applicabilityNote||A(i.relatedTerms).length);
             return '<div class="annual-item '+(i.done?'annual-item-done':'')+'" data-annual-item="'+i.id+'">'+
               '<input type="checkbox" '+(i.done?'checked':'')+' aria-label="Complete checklist item" onclick="event.stopPropagation()" onchange="toggleAnnualInspectionItem('+c.id+','+i.id+',this.checked)">'+
-              '<div class="annual-item-main"><div class="annual-item-text">'+E(i.text)+'</div><div class="annual-item-meta">'+statusPill(s)+' <span class="mini-badge">POH '+E(i.sourcePage||c.sourcePages||'')+'</span>'+(hasDetail?'<span class="mini-badge">details</span>':'')+'</div></div>'+
+              '<div class="annual-item-main"><div class="annual-item-text">'+E(i.text)+'</div><div class="annual-item-meta"><span data-annual-item-status>'+statusPill(s)+'</span> <span class="mini-badge">POH '+E(i.sourcePage||c.sourcePages||'')+'</span>'+(hasDetail?'<span class="mini-badge">details</span>':'')+'</div></div>'+
               '<span class="annual-item-arrow">›</span>'+
             '</div>';
           }).join('')+
@@ -69,13 +69,37 @@
   };
 
   window.toggleAnnualInspectionItem=function(cid,iid,done){
-    const i=checklistItem(cid,iid);if(!i)return;
+    const c=checklistById(Number(cid)),i=checklistItem(cid,iid);if(!c||!i)return;
     i.done=!!done;
     if(done&&(!i.inspectionStatus||i.inspectionStatus==='Pending'))i.inspectionStatus='Satisfactory';
     if(done&&!i.completedDate)i.completedDate=typeof today==='function'?today():new Date().toISOString().slice(0,10);
     if(!done&&i.inspectionStatus==='Satisfactory')i.inspectionStatus='Pending';
     saveDB();
-    openChecklistDetail(Number(cid));
+
+    // Update the open annual-inspection modal in place so checking an item never
+    // destroys/reopens the modal (which previously snapped the scroll position to the top).
+    const row=document.querySelector('[data-annual-item="'+Number(iid)+'"]');
+    if(row){
+      row.classList.toggle('annual-item-done',!!i.done);
+      const checkbox=row.querySelector('input[type="checkbox"]');if(checkbox)checkbox.checked=!!i.done;
+      const status=row.querySelector('[data-annual-item-status]');if(status)status.innerHTML=statusPill(itemStatus(i));
+      const group=row.closest('.annual-group'),badge=group?.querySelector('[data-annual-group-progress]');
+      if(group&&badge){
+        const rows=[...group.querySelectorAll('[data-annual-item]')];
+        const groupDone=rows.filter(el=>checklistItem(cid,Number(el.dataset.annualItem))?.done||itemStatus(checklistItem(cid,Number(el.dataset.annualItem)))==='N/A').length;
+        badge.textContent=groupDone+'/'+rows.length;
+      }
+    }
+
+    const all=A(c.items),complete=all.filter(x=>x.done||itemStatus(x)==='N/A').length;
+    const pct=all.length?Math.round(complete/all.length*100):0;
+    const findings=all.filter(x=>itemStatus(x)==='Finding').length;
+    const progressEl=document.querySelector('[data-annual-progress]');
+    const completeEl=document.querySelector('[data-annual-complete]');
+    const findingsEl=document.querySelector('[data-annual-findings]');
+    if(progressEl)progressEl.textContent=pct+'%';
+    if(completeEl)completeEl.textContent=complete+'/'+all.length;
+    if(findingsEl)findingsEl.textContent=String(findings);
   };
 
   function matchTerms(text,terms){
