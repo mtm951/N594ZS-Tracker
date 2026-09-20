@@ -118,6 +118,51 @@
     saveDB('Reserved part used and inventory consumption recorded.');openLogDetail(logId);
   };
 
+
+  // ----- Project detail: show inventory parts linked from the inventory side -----
+  function projectLinkedInventoryParts(projectId){
+    return arr(db.parts)
+      .filter(function(part){return arr(part.linkedProjectIds).some(function(pid){return Number(pid)===Number(projectId)})})
+      .sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''),undefined,{numeric:true,sensitivity:'base'})});
+  }
+
+  function projectAssignedPartsHTML(projectId){
+    var project=projectById(Number(projectId));if(!project)return '';
+    var parts=projectLinkedInventoryParts(projectId);
+    return `<div class="detail-card" id="projectAssignedInventoryCard">
+      <div class="section-tools"><div><h3>Assigned Inventory Parts</h3><div class="tiny muted">Parts linked to this project from inventory. Assignment is a relationship only; reservation and actual use remain separate.</div></div><span class="mini-badge">${parts.length}</span></div>
+      ${parts.length?parts.map(function(part){
+        var reserved=arr(project.plannedParts).some(function(x){return Number(x.partId)===Number(part.id)});
+        var used=arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)});
+        var on=typeof partAvailable==='function'?partAvailable(part):part.stockQty;
+        var free=typeof partFreeQty==='function'?partFreeQty(part):on;
+        var relation=used?'Used':reserved?'Reserved':'Assigned';
+        return `<div class="assigned-part-row click-row" onclick="openPartDetail(${part.id})">
+          <div><b>${esc(part.name||'Part')}</b><div class="task-note">${part.partNo?'PN '+esc(part.partNo)+' • ':''}${esc(part.system||'General')}${part.location?' • '+esc(part.location):''}</div></div>
+          <div class="assigned-part-stock"><span class="mini-badge">${esc(relation)}</span><small>On hand ${on===null||on===undefined?'—':esc(on+' '+(part.unit||'ea'))}${free!==null&&free!==undefined?' • Free '+esc(free+' '+(part.unit||'ea')):''}</small></div>
+        </div>`;
+      }).join(''):'<div class="empty">No inventory parts are assigned to this project yet.</div>'}
+    </div>`;
+  }
+
+  function injectProjectAssignedInventory(projectId){
+    var box=document.getElementById('modalBox');if(!box||box.querySelector('#projectAssignedInventoryCard'))return;
+    var left=box.querySelector('.detail-grid > div:first-child');if(!left)return;
+    var reserved=box.querySelector('#projectPlannedPartsCard');
+    if(reserved)reserved.insertAdjacentHTML('afterend',projectAssignedPartsHTML(projectId));
+    else{
+      var first=left.querySelector('.detail-card');
+      if(first)first.insertAdjacentHTML('afterend',projectAssignedPartsHTML(projectId));
+      else left.insertAdjacentHTML('afterbegin',projectAssignedPartsHTML(projectId));
+    }
+  }
+
+  var openProjectDetailInventoryLinkBase=window.openProjectDetail;
+  window.openProjectDetail=function(id){
+    openProjectDetailInventoryLinkBase(id);
+    injectProjectAssignedInventory(Number(id));
+  };
+
   // ----- Quick Add 2.0 -----
   function openProjectsSelect(id,label,selected){
     var projects=arr(db.projects).filter(function(p){return p.status!=='Done'});
@@ -170,4 +215,11 @@
   window.openQuickAdd=function(){
     openModal(`${modalHeader('Quick Add','Fast capture while you are standing next to N594ZS')}<div class="quick-add-grid"><button onclick="openQuickReservedUse()">Use reserved part<small>Reservation → actual use → inventory deduction</small></button><button onclick="openQuickPartUse()">Part / material used<small>Search inventory and record physical consumption</small></button><button onclick="openQuickNote(false)">Work note<small>Fast project or general work entry</small></button><button onclick="openQuickNote(true)">Measurement<small>Capture a reading, setting or observation</small></button><button onclick="openQuickAttach()">Photo / file<small>Attach to the current record or an active project</small></button><button onclick="openSquawkModal()">Squawk<small>Discrepancy, severity, troubleshooting</small></button><button onclick="openRunModal()">Run / test<small>Engine, ground, taxi or flight-test data</small></button><button onclick="openPurchaseModal()">Purchase<small>Add a purchase-history line</small></button><button onclick="openProjectModal()">Project<small>New job or corrective-work item</small></button><button onclick="navTo('ops');closeModal()">Aircraft Ops<small>Status, configuration, inspections and reports</small></button></div>`);
   };
+
+  if(!document.getElementById('assignedProjectPartsStyle')){
+    var aps=document.createElement('style');aps.id='assignedProjectPartsStyle';
+    aps.textContent='.assigned-part-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid #edf1f4}.assigned-part-row:last-child{border-bottom:0}.assigned-part-stock{text-align:right}.assigned-part-stock small{display:block;color:var(--muted);margin-top:4px;white-space:nowrap}@media(max-width:700px){.assigned-part-row{grid-template-columns:1fr}.assigned-part-stock{text-align:left}.assigned-part-stock small{white-space:normal}}';
+    document.head.appendChild(aps);
+  }
+
 })();
