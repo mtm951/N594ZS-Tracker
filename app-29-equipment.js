@@ -43,6 +43,7 @@ normalizeDB=function(){
 normalizeDB();
 
 let equipmentSort={key:'system',dir:'asc'};
+let equipmentMetricFilter='all';
 function equipmentById(id){return db.equipment.find(x=>Number(x.id)===Number(id))}
 function equipmentPurchase(e){return e?.purchaseId?db.purchases.find(p=>String(p.id)===String(e.purchaseId)):null}
 function equipmentDisplayModel(e){return [e.manufacturer,e.model].filter(Boolean).join(' ')||'—'}
@@ -54,6 +55,17 @@ function equipmentSortVal(e,key){
 }
 function setEquipmentSort(key){if(equipmentSort.key===key)equipmentSort.dir=equipmentSort.dir==='asc'?'desc':'asc';else equipmentSort={key,dir:'asc'};renderEquipmentRows()}
 function equipmentSortHead(label,key){const active=equipmentSort.key===key;return `<th class="purchase-sortable" onclick="setEquipmentSort('${key}')" title="Click to sort">${esc(label)} <span class="purchase-sort-arrow">${active?(equipmentSort.dir==='asc'?'▲':'▼'):'↕'}</span></th>`}
+function setEquipmentMetricFilter(key){
+  equipmentMetricFilter=(equipmentMetricFilter===key&&key!=='all')?'all':key;
+  renderEquipmentRows();
+}
+function refreshEquipmentMetricButtons(){
+  document.querySelectorAll('#page-equipment .equipment-metric').forEach(btn=>{
+    const active=btn.dataset.metric===equipmentMetricFilter;
+    btn.classList.toggle('active',active);
+    btn.setAttribute('aria-pressed',active?'true':'false');
+  });
+}
 
 function renderEquipment(){
   const page=document.getElementById('page-equipment');if(!page)return;
@@ -63,7 +75,7 @@ function renderEquipment(){
   const systems=unique(db.equipment.map(e=>e.system).filter(Boolean)).sort();
   page.innerHTML=`<div class="grid">
     <div class="card span-12 equipment-page-card"><div class="toolbar equipment-toolbar"><div><h1>Major Components / Installed Equipment</h1><div class="muted">Equipment provenance for N594ZS: what is installed, where it came from, what it cost, serial/part numbers, installation history, linked purchases and supporting files.</div></div><div class="action-row equipment-actions"><button class="equipment-action secondary" onclick="openEquipmentFromPurchase()">+ From Purchase</button><button class="equipment-action primary" onclick="openEquipmentModal()">+ Add Equipment</button></div></div>
-      <div class="summary-strip equipment-summary"><div class="equipment-metric"><span>Tracked components</span><b>${db.equipment.length}</b></div><div class="equipment-metric"><span>Installed</span><b>${installed}</b></div><div class="equipment-metric equipment-metric-cost"><span>Documented acquisition cost</span><b>${db.settings.showCosts?fmtMoney(cost):'Hidden'}</b></div><div class="equipment-metric"><span>Records needing details</span><b>${missing}</b></div></div>
+      <div class="summary-strip equipment-summary"><button class="equipment-metric" data-metric="all" aria-pressed="${equipmentMetricFilter==='all'}" onclick="setEquipmentMetricFilter('all')" title="Show all equipment"><span>Tracked components</span><b>${db.equipment.length}</b></button><button class="equipment-metric" data-metric="installed" aria-pressed="${equipmentMetricFilter==='installed'}" onclick="setEquipmentMetricFilter('installed')" title="Show installed equipment"><span>Installed</span><b>${installed}</b></button><button class="equipment-metric equipment-metric-cost" data-metric="cost" aria-pressed="${equipmentMetricFilter==='cost'}" onclick="setEquipmentMetricFilter('cost')" title="Show records with acquisition cost documented"><span>Documented acquisition cost</span><b>${db.settings.showCosts?fmtMoney(cost):'Hidden'}</b></button><button class="equipment-metric" data-metric="missing" aria-pressed="${equipmentMetricFilter==='missing'}" onclick="setEquipmentMetricFilter('missing')" title="Show records that need details"><span>Records needing details</span><b>${missing}</b></button></div>
       <div class="controls" style="margin-top:12px"><input id="equipmentSearch" placeholder="Search equipment, model, PN, SN, vendor…" oninput="renderEquipmentRows()"><select id="equipmentSystem" onchange="renderEquipmentRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select><select id="equipmentStatus" onchange="renderEquipmentRows()"><option value="">All statuses</option>${unique(db.equipment.map(e=>e.status).filter(Boolean)).sort().map(s=>`<option>${esc(s)}</option>`).join('')}</select></div>
       <div class="table-wrap" style="margin-top:11px"><table><thead><tr>${equipmentSortHead('Equipment','name')}${equipmentSortHead('System','system')}${equipmentSortHead('Manufacturer / model','manufacturer')}<th>PN / SN</th>${equipmentSortHead('Status','status')}${equipmentSortHead('Purchased','purchaseDate')}${equipmentSortHead('Installed','installDate')}${equipmentSortHead('Cost','cost')}<th></th></tr></thead><tbody id="equipmentRows"></tbody></table></div>
     </div>
@@ -74,10 +86,11 @@ function renderEquipment(){
 function renderEquipmentRows(){
   const box=document.getElementById('equipmentRows');if(!box)return;
   const q=(val('equipmentSearch')||'').toLowerCase(),sys=val('equipmentSystem'),status=val('equipmentStatus');
-  let rows=db.equipment.filter(e=>(!q||[e.name,e.system,e.category,e.manufacturer,e.model,e.partNo,e.serialNo,e.vendor,e.invoice,e.notes].join(' ').toLowerCase().includes(q))&&(!sys||(typeof systemRecordMatches==='function'?systemRecordMatches(e,sys,'equipment'):(sys==='__unassigned__'?!String(e.system||'').trim():e.system===sys)))&&(!status||e.status===status));
+  let rows=db.equipment.filter(e=>(!q||[e.name,e.system,e.category,e.manufacturer,e.model,e.partNo,e.serialNo,e.vendor,e.invoice,e.notes].join(' ').toLowerCase().includes(q))&&(!sys||(typeof systemRecordMatches==='function'?systemRecordMatches(e,sys,'equipment'):(sys==='__unassigned__'?!String(e.system||'').trim():e.system===sys)))&&(!status||e.status===status)&&(equipmentMetricFilter==='all'||(equipmentMetricFilter==='installed'&&e.status==='Installed')||(equipmentMetricFilter==='cost'&&e.purchasePrice!==''&&e.purchasePrice!==null&&e.purchasePrice!==undefined)||(equipmentMetricFilter==='missing'&&equipmentMissingDocs(e))));
   const {key,dir}=equipmentSort;
   rows.sort((a,b)=>{const av=equipmentSortVal(a,key),bv=equipmentSortVal(b,key);if(av===null&&bv===null)return 0;if(av===null)return 1;if(bv===null)return -1;const m=dir==='asc'?1:-1;if(typeof av==='number'&&typeof bv==='number')return (av-bv)*m;return String(av).localeCompare(String(bv),undefined,{numeric:true,sensitivity:'base'})*m});
   box.innerHTML=rows.map(e=>`<tr class="click-row" onclick="openEquipmentDetail(${e.id})"><td><b>${esc(e.name)}</b><div class="task-note">${esc(e.category||'')}</div></td><td>${esc(e.system)}</td><td>${esc(equipmentDisplayModel(e))}</td><td><div>${esc(e.partNo||'—')}</div><div class="tiny muted">SN: ${esc(e.serialNo||'not recorded')}</div></td><td>${pill(e.status)}</td><td>${esc(e.purchaseDate||'—')}</td><td>${esc(e.installDate||'—')}</td><td>${db.settings.showCosts?fmtMoney(e.purchasePrice):'Hidden'}</td><td><button class="icon-btn" onclick="event.stopPropagation();openEquipmentModal(${e.id})">Edit</button></td></tr>`).join('')||'<tr><td colspan="9" class="empty">No matching equipment records.</td></tr>';
+  refreshEquipmentMetricButtons();
 }
 
 function openEquipmentModal(id=null,prefill=null){
@@ -155,21 +168,25 @@ if(!document.getElementById('equipmentPolishStyle')){
     #page-equipment .equipment-action.primary{background:var(--blue);color:#fff;border:1px solid var(--blue)}
     #page-equipment .equipment-action:hover{transform:translateY(-1px)}
     #page-equipment .equipment-action.secondary:hover{background:#e4eef6;border-color:#adc5d8}
-    #page-equipment .equipment-summary{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:2px}
-    #page-equipment .equipment-metric{background:#f6f9fb;border:1px solid #dfe7ed;border-radius:10px;padding:12px 13px;min-height:70px;display:flex;flex-direction:column;justify-content:center;gap:4px}
-    #page-equipment .equipment-metric span{display:block;font-size:10px;line-height:1.25;text-transform:uppercase;letter-spacing:.035em;font-weight:850;color:#6c7f8f}
-    #page-equipment .equipment-metric b{display:block;font-size:21px;line-height:1.1;color:var(--text);overflow-wrap:anywhere}
+    #page-equipment .equipment-summary{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:2px}
+    #page-equipment .equipment-metric{appearance:none;width:100%;background:#f6f9fb;border:1px solid #dfe7ed;border-radius:9px;padding:8px 10px;min-height:54px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;text-align:left;color:inherit;cursor:pointer;transition:background .12s,border-color .12s,transform .12s,box-shadow .12s}
+    #page-equipment .equipment-metric span{display:block;font-size:9px;line-height:1.2;text-transform:uppercase;letter-spacing:.03em;font-weight:850;color:#6c7f8f}
+    #page-equipment .equipment-metric b{display:block;font-size:17px;line-height:1.08;color:var(--text);overflow-wrap:anywhere}
     #page-equipment .equipment-metric-cost b{font-variant-numeric:tabular-nums}
+    #page-equipment .equipment-metric:hover{background:#eef6fc;border-color:#a9c8e5;transform:translateY(-1px)}
+    #page-equipment .equipment-metric.active{background:#eaf4fc;border-color:#78abd5;box-shadow:inset 0 0 0 1px rgba(45,127,209,.08)}
+    #page-equipment .equipment-metric.active b{color:var(--blue)}
+    #page-equipment .equipment-metric:focus-visible{outline:3px solid rgba(45,127,209,.16);outline-offset:2px}
     @media(max-width:900px){
       #page-equipment .equipment-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media(max-width:700px){
       #page-equipment .equipment-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}
       #page-equipment .equipment-action{width:100%;min-height:44px}
-      #page-equipment .equipment-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-      #page-equipment .equipment-metric{min-height:76px;padding:11px}
-      #page-equipment .equipment-metric b{font-size:20px}
-      #page-equipment .equipment-metric span{font-size:9px}
+      #page-equipment .equipment-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+      #page-equipment .equipment-metric{min-height:58px;padding:8px 9px}
+      #page-equipment .equipment-metric b{font-size:17px}
+      #page-equipment .equipment-metric span{font-size:8.5px}
     }
   `;
   document.head.appendChild(equipmentStyle);
