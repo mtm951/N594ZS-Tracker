@@ -11,31 +11,69 @@ function renderAircraft(){
   if(db.aircraft.photo){const img=document.getElementById('airPhoto');if(img){img.src=db.aircraft.photo;img.style.display='block';document.getElementById('airPlaceholder').style.display='none'}}
 }
 
+let projectSort={key:'priority',dir:'asc'};
+const PROJECT_PRIORITY_RANK={High:0,Medium:1,Low:2};
+const PROJECT_STATUS_RANK={'In Progress':0,Open:1,Blocked:2,Done:3};
+
+function projectSortHead(label,key){
+  const active=projectSort.key===key,aria=active?(projectSort.dir==='asc'?'ascending':'descending'):'none';
+  return `<th class="project-sortable" aria-sort="${aria}"><button class="project-sort-button" data-project-sort="${key}" onclick="setProjectSort('${key}')" title="Sort by ${esc(label)}">${esc(label)} <span>${active?(projectSort.dir==='asc'?'▲':'▼'):'↕'}</span></button></th>`;
+}
+function refreshProjectSortHeaders(){
+  document.querySelectorAll('#page-projects .project-sort-button').forEach(b=>{
+    const active=b.dataset.projectSort===projectSort.key;
+    b.closest('th')?.setAttribute('aria-sort',active?(projectSort.dir==='asc'?'ascending':'descending'):'none');
+    const arrow=b.querySelector('span');if(arrow)arrow.textContent=active?(projectSort.dir==='asc'?'▲':'▼'):'↕';
+  });
+}
+function setProjectSort(key){
+  if(projectSort.key===key)projectSort.dir=projectSort.dir==='asc'?'desc':'asc';
+  else{
+    const numericDesc=new Set(['progress','cost']);
+    projectSort={key,dir:numericDesc.has(key)?'desc':'asc'};
+  }
+  refreshProjectSortHeaders();
+  renderProjectRows();
+}
+function projectSortValue(p,key){
+  if(key==='title')return p.title||'';
+  if(key==='system')return p.system||'';
+  if(key==='priority')return PROJECT_PRIORITY_RANK[p.priority]??99;
+  if(key==='status')return PROJECT_STATUS_RANK[p.status]??99;
+  if(key==='progress')return num(p.percent);
+  if(key==='next')return p.nextStep||'';
+  if(key==='cost')return num(projectCost(p));
+  return '';
+}
+function sortProjectRows(rows){
+  const key=projectSort.key,dir=projectSort.dir==='desc'?-1:1;
+  const collator=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
+  return rows.sort((a,b)=>{
+    const av=projectSortValue(a,key),bv=projectSortValue(b,key);
+    const aBlank=av===''||av===null||av===undefined,bBlank=bv===''||bv===null||bv===undefined;
+    if(aBlank!==bBlank)return aBlank?1:-1;
+    const primary=typeof av==='number'&&typeof bv==='number'?av-bv:collator.compare(String(av),String(bv));
+    return primary*dir||collator.compare(String(a.title||''),String(b.title||''))||num(a.id)-num(b.id);
+  });
+}
+
 function renderProjects(){
   const systems=unique(db.projects.map(x=>x.system).filter(Boolean)).sort();
   document.getElementById('page-projects').innerHTML=`<div class="card"><div class="toolbar"><div><h1>Projects</h1><div class="muted">Every row opens a project workspace with notes, blockers, parts used, orders, work history, documents, files and next steps.</div></div><button class="btn primary" onclick="openProjectModal()">+ New Project</button></div>
-  <div class="controls"><input id="projectSearch" placeholder="Search projects…" oninput="renderProjectRows()"><select id="projectStatus" onchange="renderProjectRows()"><option value="">All statuses</option><option value="Active">Active (not done)</option><option value="Held Up">Held Up / Blocked</option><option>Open</option><option>In Progress</option><option>Blocked</option><option>Done</option></select><select id="projectSystem" onchange="renderProjectRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select><select id="projectPriority" onchange="renderProjectRows()"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select><select id="projectSort" onchange="renderProjectRows()"><option value="priority">Sort: Priority</option><option value="progress-desc">Progress: most → least</option><option value="progress-asc">Progress: least → most</option><option value="status">Sort: Status</option><option value="system">Sort: System</option><option value="title">Sort: Project name</option><option value="cost-desc">Cost: highest → lowest</option><option value="cost-asc">Cost: lowest → highest</option></select></div>
-  <div class="table-wrap" style="margin-top:11px"><table><thead><tr><th>Project item</th><th>System</th><th>Priority</th><th>Status</th><th>Progress</th><th>Next step</th><th>Cost</th><th></th></tr></thead><tbody id="projectRows"></tbody></table></div></div>`;
+  <div class="controls"><input id="projectSearch" placeholder="Search projects…" oninput="renderProjectRows()"><select id="projectStatus" onchange="renderProjectRows()"><option value="">All statuses</option><option value="Active">Active (not done)</option><option value="Held Up">Held Up / Blocked</option><option>Open</option><option>In Progress</option><option>Blocked</option><option>Done</option></select><select id="projectSystem" onchange="renderProjectRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select><select id="projectPriority" onchange="renderProjectRows()"><option value="">All priorities</option><option>High</option><option>Medium</option><option>Low</option></select></div>
+  <div class="table-wrap" style="margin-top:11px"><table><thead><tr>${projectSortHead('Project item','title')}${projectSortHead('System','system')}${projectSortHead('Priority','priority')}${projectSortHead('Status','status')}${projectSortHead('Progress','progress')}${projectSortHead('Next step','next')}${projectSortHead('Cost','cost')}<th></th></tr></thead><tbody id="projectRows"></tbody></table></div></div>`;
   renderProjectRows();
 }
 function renderProjectRows(){
   const el=document.getElementById('projectRows');if(!el)return;
-  const q=(val('projectSearch')||'').toLowerCase(),st=val('projectStatus'),sys=val('projectSystem'),pr=val('projectPriority'),sort=val('projectSort')||'priority';
+  const q=(val('projectSearch')||'').toLowerCase(),st=val('projectStatus'),sys=val('projectSystem'),pr=val('projectPriority');
   const statusMatch=x=>!st||(st==='Active'?x.status!=='Done':st==='Held Up'?(x.status==='Blocked'||Boolean(String(x.blockers||'').trim())):x.status===st);
-  const pri={High:0,Medium:1,Low:2},sts={'In Progress':0,'Open':1,'Blocked':2,'Done':3};
-  const compare=(a,b)=>{
-    if(sort==='progress-desc')return num(b.percent)-num(a.percent)||((pri[a.priority]??9)-(pri[b.priority]??9))||String(a.title||'').localeCompare(String(b.title||''));
-    if(sort==='progress-asc')return num(a.percent)-num(b.percent)||((pri[a.priority]??9)-(pri[b.priority]??9))||String(a.title||'').localeCompare(String(b.title||''));
-    if(sort==='status')return (sts[a.status]??9)-(sts[b.status]??9)||((pri[a.priority]??9)-(pri[b.priority]??9))||String(a.title||'').localeCompare(String(b.title||''));
-    if(sort==='system')return String(a.system||'').localeCompare(String(b.system||''))||String(a.title||'').localeCompare(String(b.title||''));
-    if(sort==='title')return String(a.title||'').localeCompare(String(b.title||''));
-    if(sort==='cost-desc')return num(projectCost(b))-num(projectCost(a))||String(a.title||'').localeCompare(String(b.title||''));
-    if(sort==='cost-asc')return num(projectCost(a))-num(projectCost(b))||String(a.title||'').localeCompare(String(b.title||''));
-    return (pri[a.priority]??9)-(pri[b.priority]??9)||String(a.title||'').localeCompare(String(b.title||''));
-  };
-  const rows=db.projects.filter(x=>(!q||[x.title,x.system,x.summary,x.plan,x.nextStep,x.blockers,x.trigger,...x.partsUsed.map(p=>p.name)].join(' ').toLowerCase().includes(q))&&statusMatch(x)&&(!sys||(typeof systemRecordMatches==='function'?systemRecordMatches(x,sys,'projects'):(sys==='__unassigned__'?!String(x.system||'').trim():x.system===sys)))&&(!pr||x.priority===pr)).sort(compare);
+  const rows=sortProjectRows(db.projects.filter(x=>(!q||[x.title,x.system,x.summary,x.plan,x.nextStep,x.blockers,x.trigger,...x.partsUsed.map(p=>p.name)].join(' ').toLowerCase().includes(q))&&statusMatch(x)&&(!sys||(typeof systemRecordMatches==='function'?systemRecordMatches(x,sys,'projects'):(sys==='__unassigned__'?!String(x.system||'').trim():x.system===sys)))&&(!pr||x.priority===pr)));
   el.innerHTML=rows.map(p=>{const linkedLogs=db.logs.filter(l=>l.projectIds.includes(p.id)).length,orders=db.orders.filter(o=>o.projectId===p.id&&!isClosedOrder(o)).length;return `<tr class="click-row" onclick="openProjectDetail(${p.id})"><td><div class="task-title">${esc(p.title)}</div><div class="task-note">${esc(p.summary)}</div><div class="task-meta"><span class="mini-badge">${p.partsUsed.length} parts used</span><span class="mini-badge">${orders} open orders</span><span class="mini-badge">${linkedLogs} work entries</span></div></td><td>${esc(p.system)}</td><td>${pill(p.priority)}</td><td>${pill(p.status)}</td><td><div class="small strong">${p.percent}%</div><div class="progress" style="width:95px;margin-top:4px"><div style="width:${p.percent}%"></div></div></td><td>${esc(p.nextStep||'—')}</td><td>${db.settings.showCosts?fmtMoney(projectCost(p)):'Hidden'}</td><td><button class="icon-btn" onclick="event.stopPropagation();openProjectModal(${p.id})">Edit</button></td></tr>`}).join('')||'<tr><td colspan="8" class="empty">No matching projects.</td></tr>';
+  refreshProjectSortHeaders();
 }
+
+(()=>{if(document.getElementById('projectSortStyle'))return;const s=document.createElement('style');s.id='projectSortStyle';s.textContent=`#page-projects th.project-sortable{padding:0}#page-projects th.project-sortable:hover{background:#eef5fb}#page-projects .project-sort-button{appearance:none;width:100%;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;padding:10px 12px;text-align:left;cursor:pointer;white-space:nowrap}#page-projects .project-sort-button span{font-size:.72em;margin-left:5px;opacity:.55}`;document.head.appendChild(s)})();
 
 function renderParts(){
   const systems=unique(db.parts.map(x=>x.system).filter(Boolean)).sort();
