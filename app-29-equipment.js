@@ -62,8 +62,8 @@ function renderEquipment(){
   const missing=db.equipment.filter(e=>equipmentMissingDocs(e)).length;
   const systems=unique(db.equipment.map(e=>e.system).filter(Boolean)).sort();
   page.innerHTML=`<div class="grid">
-    <div class="card span-12"><div class="toolbar"><div><h1>Major Components / Installed Equipment</h1><div class="muted">Equipment provenance for N594ZS: what is installed, where it came from, what it cost, serial/part numbers, installation history, linked purchases and supporting files.</div></div><div class="action-row"><button class="secondary" onclick="openEquipmentFromPurchase()">+ From Purchase</button><button class="primary" onclick="openEquipmentModal()">+ Add Equipment</button></div></div>
-      <div class="summary-strip"><div><span>Tracked components</span><b>${db.equipment.length}</b></div><div><span>Installed</span><b>${installed}</b></div><div><span>Documented acquisition cost</span><b>${db.settings.showCosts?fmtMoney(cost):'Hidden'}</b></div><div><span>Records needing details</span><b>${missing}</b></div></div>
+    <div class="card span-12 equipment-page-card"><div class="toolbar equipment-toolbar"><div><h1>Major Components / Installed Equipment</h1><div class="muted">Equipment provenance for N594ZS: what is installed, where it came from, what it cost, serial/part numbers, installation history, linked purchases and supporting files.</div></div><div class="action-row equipment-actions"><button class="equipment-action secondary" onclick="openEquipmentFromPurchase()">+ From Purchase</button><button class="equipment-action primary" onclick="openEquipmentModal()">+ Add Equipment</button></div></div>
+      <div class="summary-strip equipment-summary"><div class="equipment-metric"><span>Tracked components</span><b>${db.equipment.length}</b></div><div class="equipment-metric"><span>Installed</span><b>${installed}</b></div><div class="equipment-metric equipment-metric-cost"><span>Documented acquisition cost</span><b>${db.settings.showCosts?fmtMoney(cost):'Hidden'}</b></div><div class="equipment-metric"><span>Records needing details</span><b>${missing}</b></div></div>
       <div class="controls" style="margin-top:12px"><input id="equipmentSearch" placeholder="Search equipment, model, PN, SN, vendor…" oninput="renderEquipmentRows()"><select id="equipmentSystem" onchange="renderEquipmentRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select><select id="equipmentStatus" onchange="renderEquipmentRows()"><option value="">All statuses</option>${unique(db.equipment.map(e=>e.status).filter(Boolean)).sort().map(s=>`<option>${esc(s)}</option>`).join('')}</select></div>
       <div class="table-wrap" style="margin-top:11px"><table><thead><tr>${equipmentSortHead('Equipment','name')}${equipmentSortHead('System','system')}${equipmentSortHead('Manufacturer / model','manufacturer')}<th>PN / SN</th>${equipmentSortHead('Status','status')}${equipmentSortHead('Purchased','purchaseDate')}${equipmentSortHead('Installed','installDate')}${equipmentSortHead('Cost','cost')}<th></th></tr></thead><tbody id="equipmentRows"></tbody></table></div>
     </div>
@@ -142,6 +142,38 @@ function openEquipmentHistoryModal(id){
   openModal(`${modalHeader('Add Equipment History',e.name)}<div class="form-grid">${field('Date','eqHistDate',today(),'date')}<div><label>Action</label><select id="eqHistAction">${['Installed','Serviced','Inspected','Removed','Reinstalled','Replaced','Repaired','Note'].map(s=>`<option>${s}</option>`).join('')}</select></div>${field('Hours','eqHistHours','','number','min="0" step="0.1"')}${textareaField('Notes','eqHistNotes','')}</div><div class="modal-actions"><button class="secondary" onclick="openEquipmentDetail(${e.id})">Cancel</button><button class="primary" onclick="saveEquipmentHistory(${e.id})">Add Entry</button></div>`,true);
 }
 function saveEquipmentHistory(id){const e=equipmentById(id);if(!e)return;e.history.push({id:uid(),date:val('eqHistDate'),action:val('eqHistAction')||'Note',hours:val('eqHistHours'),notes:val('eqHistNotes')});closeModal();saveDB('Equipment history updated.');setTimeout(()=>openEquipmentDetail(id),50)}
+
+
+if(!document.getElementById('equipmentPolishStyle')){
+  const equipmentStyle=document.createElement('style');
+  equipmentStyle.id='equipmentPolishStyle';
+  equipmentStyle.textContent=`
+    #page-equipment .equipment-toolbar{align-items:flex-start}
+    #page-equipment .equipment-actions{gap:8px}
+    #page-equipment .equipment-action{appearance:none;border-radius:8px;padding:9px 12px;font-weight:800;cursor:pointer;transition:background .12s,border-color .12s,transform .12s}
+    #page-equipment .equipment-action.secondary{background:#edf3f8;color:#264864;border:1px solid #ccd9e4}
+    #page-equipment .equipment-action.primary{background:var(--blue);color:#fff;border:1px solid var(--blue)}
+    #page-equipment .equipment-action:hover{transform:translateY(-1px)}
+    #page-equipment .equipment-action.secondary:hover{background:#e4eef6;border-color:#adc5d8}
+    #page-equipment .equipment-summary{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:2px}
+    #page-equipment .equipment-metric{background:#f6f9fb;border:1px solid #dfe7ed;border-radius:10px;padding:12px 13px;min-height:70px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+    #page-equipment .equipment-metric span{display:block;font-size:10px;line-height:1.25;text-transform:uppercase;letter-spacing:.035em;font-weight:850;color:#6c7f8f}
+    #page-equipment .equipment-metric b{display:block;font-size:21px;line-height:1.1;color:var(--text);overflow-wrap:anywhere}
+    #page-equipment .equipment-metric-cost b{font-variant-numeric:tabular-nums}
+    @media(max-width:900px){
+      #page-equipment .equipment-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media(max-width:700px){
+      #page-equipment .equipment-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}
+      #page-equipment .equipment-action{width:100%;min-height:44px}
+      #page-equipment .equipment-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+      #page-equipment .equipment-metric{min-height:76px;padding:11px}
+      #page-equipment .equipment-metric b{font-size:20px}
+      #page-equipment .equipment-metric span{font-size:9px}
+    }
+  `;
+  document.head.appendChild(equipmentStyle);
+}
 
 const renderAllEquipmentBase=renderAll;
 renderAll=function(){renderAllEquipmentBase();renderEquipment()};
