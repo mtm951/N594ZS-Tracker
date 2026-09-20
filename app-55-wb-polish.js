@@ -17,6 +17,37 @@
   }
   window.wbSetFuel=setFuel;
 
+  function currentLoadSnapshot(){
+    return {
+      pilot:val('wbPilot'),
+      passenger:val('wbPassenger'),
+      cargo:val('wbCargo'),
+      fuel:val('wbFuelGal'),
+      burn:val('wbBurnGal')
+    };
+  }
+  function restoreLoadSnapshot(s){
+    if(!s)return;
+    setControl('wbPilot',s.pilot||0);
+    setControl('wbPassenger',s.passenger||0);
+    setControl('wbCargo',s.cargo||0);
+    setControl('wbFuelGal',s.fuel||0);
+    setControl('wbBurnGal',s.burn||0);
+    updateWBCalculation();
+  }
+  window.wbChangeConfiguration=function(id){
+    const snap=currentLoadSnapshot();
+    wbSelectedConfigId=id;
+    renderWeightBalance();
+    restoreLoadSnapshot(snap);
+  };
+  window.wbUseHistoricalEstimate=function(){
+    const wb=wbData();
+    const historical=wb.configurations.find(x=>x.id==='2018-582'&&wbConfigReady(x))||wb.configurations.find(x=>x.status==='historical'&&wbConfigReady(x));
+    if(!historical)return alert('No historical W&B configuration is available.');
+    wbChangeConfiguration(historical.id);
+  };
+
   function metric(label,value,sub,onclick){
     return `<button class="wb-top-metric" onclick="${onclick}"><span>${esc(label)}</span><b>${esc(value)}</b><small>${esc(sub)}</small></button>`;
   }
@@ -68,7 +99,7 @@
 
       <div class="card span-8 wb-load-card">
         <div class="section-head"><div><h2>Loading</h2><div class="muted small">Results update as you type.</div></div><span class="mini-badge">${esc(c?.label||'Configuration')}</span></div>
-        <div class="wb-config-row"><div><label>Empty-aircraft configuration</label><select id="wbCfgSelect" onchange="wbSelectedConfigId=this.value;renderWeightBalance()">${wb.configurations.map(x=>`<option value="${esc(x.id)}" ${c?.id===x.id?'selected':''}>${esc(x.label)}${wbConfigReady(x)?` • ${Number(x.emptyWeight).toFixed(1)} lb / ${wbCgForConfig(x).toFixed(2)} in`:' • pending'}</option>`).join('')}</select></div><button class="icon-btn" onclick="openWBConfig('${esc(c?.id||'')}')">Edit</button></div>
+        <div class="wb-config-row"><div><label>Empty-aircraft configuration</label><select id="wbCfgSelect" onchange="wbChangeConfiguration(this.value)">${wb.configurations.map(x=>`<option value="${esc(x.id)}" ${c?.id===x.id?'selected':''}>${esc(x.label)}${wbConfigReady(x)?` • ${Number(x.emptyWeight).toFixed(1)} lb / ${wbCgForConfig(x).toFixed(2)} in`:' • pending'}</option>`).join('')}</select></div><button class="icon-btn" onclick="openWBConfig('${esc(c?.id||'')}')">Edit</button></div>
         <div class="wb-load-grid">
           ${field('Pilot (lb)','wbPilot','0','number','min="0" step="0.1" inputmode="decimal" oninput="updateWBCalculation()"')}
           ${field('Passenger (lb)','wbPassenger','0','number','min="0" step="0.1" inputmode="decimal" oninput="updateWBCalculation()"')}
@@ -94,7 +125,7 @@
     const box=document.getElementById('wbResults');if(!box)return;
     const c=wbConfig(),takeoff=wbCalculate(),wb=wbData();
     if(!takeoff.ready){
-      box.innerHTML=`<div class="wb-no-config wb-no-config-polished"><div class="wb-pending-icon">!</div><div><b>${esc(c?.label||'Current configuration')} needs an empty W&B.</b><span>Enter the post-912 empty weight and moment/CG after weighing the aircraft, or select the historical 582 configuration to explore the calculator.</span></div><button class="btn primary" onclick="openWBConfig('${esc(c?.id||'current-912')}')">Enter Current Empty W&B</button></div>`;
+      box.innerHTML=`<div class="wb-no-config wb-no-config-polished"><div class="wb-pending-icon">!</div><div><b>Loaded CG cannot be calculated yet.</b><span>${esc(c?.label||'Current configuration')} does not have an empty weight plus empty moment/CG. Those values are required before a real loaded CG can be computed.</span></div><div class="wb-pending-actions"><button class="btn primary" onclick="openWBConfig('${esc(c?.id||'current-912')}')">Enter 912 Empty W&B</button><button class="btn secondary" onclick="wbUseHistoricalEstimate()">Use 2018 582 Data for Estimate</button></div></div><div class="wb-estimate-note">Historical estimate mode is for comparison only. It does not represent the current 912 configuration and should not be used as current flight-loading data.</div>`;
       return;
     }
     const burn=clampBurn(),fuel=num(val('wbFuelGal'));
@@ -159,9 +190,9 @@
     .wb-result-head>div{display:flex;gap:6px;flex-wrap:wrap}.wb-metrics-polished>div{background:#f8fafc}.wb-metrics-polished>div.bad{background:#fff4f3;border-color:#efc8c4}.wb-metrics-polished>div.bad b{color:#9b3834}
     .wb-envelope-panel{margin-top:13px;border:1px solid #dce6ee;border-radius:11px;padding:12px;background:#fff}.wb-envelope-chart{display:block;width:100%;height:auto;max-height:290px}.wb-chart-safe{fill:#e8f6ee;stroke:#9fd0b5;stroke-width:1}.wb-chart-grid{stroke:#e8eef3;stroke-width:1}.wb-chart-limit{stroke:#62a07c;stroke-width:1.2;stroke-dasharray:4 4}.wb-chart-gross{stroke:#c29a43;stroke-width:1.4;stroke-dasharray:5 4}.wb-chart-label,.wb-chart-axis-title,.wb-chart-point-label{font-family:inherit;fill:#698094;font-size:10px}.wb-chart-axis-title{font-weight:800}.wb-chart-point-label{font-weight:800;fill:#294a64}.wb-chart-burn-line{stroke:#7c91a3;stroke-width:2;stroke-dasharray:4 4}.wb-chart-point{stroke:#fff;stroke-width:3}.wb-chart-point.good{fill:#267e50}.wb-chart-point.bad{fill:#b74a45}.wb-chart-point.landing.good{fill:#2d7fd1}.wb-chart-legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:10px;color:#6d8090;margin-top:3px}.wb-chart-legend span{display:flex;align-items:center;gap:5px}.wb-chart-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}.wb-chart-legend i.takeoff{background:#267e50}.wb-chart-legend i.landing{background:#2d7fd1}.wb-chart-legend i.safe{border-radius:3px;background:#e8f6ee;border:1px solid #9fd0b5}
     .wb-source-details{margin-top:14px;border-top:1px solid #e5edf2;padding-top:11px}.wb-source-details summary{cursor:pointer;font-weight:800;color:#49657b}.wb-source-details .wb-source-note{margin-bottom:0}
-    .wb-no-config-polished{display:grid;grid-template-columns:auto 1fr auto;align-items:center}.wb-no-config-polished span{display:block;margin-top:3px;color:#6e7f8e}.wb-pending-icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#fff0c7;color:#82590f;font-weight:900;font-size:18px}
+    .wb-no-config-polished{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center}.wb-no-config-polished span{display:block;margin-top:3px;color:#6e7f8e}.wb-pending-icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#fff0c7;color:#82590f;font-weight:900;font-size:18px}.wb-pending-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px}.wb-estimate-note{margin-top:8px;padding:9px 11px;border-radius:8px;background:#fff9e9;color:#6f5a1a;font-size:10px;line-height:1.4;border:1px solid #ead9a4}
     @media(max-width:1000px){.wb-top-metrics{grid-template-columns:repeat(2,1fr)}}
-    @media(max-width:700px){.wb-toolbar .action-row{width:100%}.wb-toolbar .action-row .btn{flex:1}.wb-top-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.wb-top-metric{min-height:67px;padding:9px}.wb-top-metric b{font-size:16px}.wb-load-grid{grid-template-columns:1fr 1fr;gap:9px}.wb-load-grid label{font-size:9px}.wb-load-grid input{font-size:16px}.wb-no-config-polished{grid-template-columns:auto 1fr}.wb-no-config-polished .btn{grid-column:1/-1;width:100%}.wb-envelope-panel{padding:9px}}
+    @media(max-width:700px){.wb-toolbar .action-row{width:100%}.wb-toolbar .action-row .btn{flex:1}.wb-top-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.wb-top-metric{min-height:67px;padding:9px}.wb-top-metric b{font-size:16px}.wb-load-grid{grid-template-columns:1fr 1fr;gap:9px}.wb-load-grid label{font-size:9px}.wb-load-grid input{font-size:16px}.wb-no-config-polished{grid-template-columns:auto 1fr}.wb-pending-actions{grid-template-columns:1fr}.wb-pending-actions .btn{width:100%}.wb-envelope-panel{padding:9px}}
     @media(max-width:420px){.wb-load-grid{grid-template-columns:1fr}.wb-top-metric span{font-size:8px}.wb-top-metric small{font-size:9px}}
   `;
   document.head.appendChild(style);
