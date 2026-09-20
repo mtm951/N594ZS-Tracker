@@ -5,14 +5,14 @@
 (function(){
   const style=document.createElement('style');
   style.textContent=`
-    .ops-tabs-stable{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:11px}
+    .ops-tabs-stable{flex-wrap:wrap;overflow-x:visible;scrollbar-width:none;padding-bottom:11px}
     .ops-tabs-stable::-webkit-scrollbar{display:none}
     .ops-tabs-stable button{flex:0 0 auto}
     .ops-module-error{margin-bottom:12px}
     .ops-fallback-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
     .ops-fallback-card{border:1px solid #dfe7ef;border-radius:10px;padding:12px;background:#fbfcfe}
     .ops-fallback-card span,.ops-fallback-card b,.ops-fallback-card small{display:block}.ops-fallback-card span,.ops-fallback-card small{color:#718599}.ops-fallback-card b{margin:4px 0}
-    @media(max-width:760px){.ops-fallback-grid{grid-template-columns:1fr}.ops-tabs-stable{margin-left:-4px;margin-right:-4px;padding-left:4px;padding-right:4px}}
+    @media(max-width:760px){.ops-fallback-grid{grid-template-columns:1fr}.ops-tabs-stable{flex-wrap:nowrap;overflow-x:auto;margin-left:-4px;margin-right:-4px;padding-left:4px;padding-right:4px}}
   `;
   document.head.appendChild(style);
 })();
@@ -102,7 +102,7 @@ setOpsTab=function(tab){
 renderOps=function(){
   const page=document.getElementById('page-ops');if(!page)return;
   const tab=window.__n594zsStableOpsTab||'status';
-  page.innerHTML=`<div class="card ops-shell"><div class="toolbar"><div><h1>Aircraft Ops</h1><div class="muted">Configuration, inspections, references, consumables, costs, test data, flight cards and aircraft history for N594ZS.</div></div><div class="action-row"><span class="mini-badge">10 workspaces</span><span class="mini-badge">v5.2 stable</span></div></div><div class="ops-tabs ops-tabs-stable">${STABLE_OPS_TABS.map(([k,l])=>`<button class="${tab===k?'active':''}" onclick="setOpsTab('${k}')">${esc(l)}</button>`).join('')}</div><div id="opsContent"></div></div>`;
+  page.innerHTML=`<div class="card ops-shell"><div class="toolbar"><div><h1>Aircraft Ops</h1><div class="muted">Configuration, inspections, references, consumables, costs, test data, flight cards and aircraft history for N594ZS.</div></div><div class="action-row"><button class="secondary" onclick="setOpsTab('flightcards')">Flight Cards</button><span class="mini-badge">10 workspaces</span><span class="mini-badge">v5.2 stable</span></div></div><div class="ops-tabs ops-tabs-stable">${STABLE_OPS_TABS.map(([k,l])=>`<button class="${tab===k?'active':''}" onclick="setOpsTab('${k}')">${esc(l)}</button>`).join('')}</div><div id="opsContent"></div></div>`;
   stableRunRichTab(tab);
 };
 
