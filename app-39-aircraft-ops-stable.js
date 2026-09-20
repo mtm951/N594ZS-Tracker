@@ -88,6 +88,10 @@ function stableRunRichTab(tab){
   const legacy={configuration:'renderOpsConfiguration',inspections:'renderOpsInspections',specs:'renderOpsSpecs',consumables:'renderOpsConsumables',costs:'renderOpsCosts',trends:'renderOpsTrends',flightcards:'renderOpsFlightCards',timeline:'renderOpsTimeline',reports:'renderOpsReports'}[tab];
   if(tab==='status'){stableRenderStatus();return}
   try{
+    if(tab==='flightcards'&&typeof window.renderFlightCardsStarter==='function'){
+      window.renderFlightCardsStarter();
+      return;
+    }
     const fn=legacy&&window[legacy];
     if(typeof fn!=='function')throw new Error(`${legacy||tab} is unavailable`);
     fn();
