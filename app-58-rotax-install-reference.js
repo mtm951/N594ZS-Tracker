@@ -69,8 +69,16 @@
     return A(db.docs).find(d=>Number(d.id)===301)||A(db.docs).find(d=>/912.*installation manual/i.test(d.name||''));
   }
 
+  let lastInstallPackDb=null;
+  function persistRotaxInstallPack(){
+    try{localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(_e){}
+    try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
+    [700,1800,4000].forEach(ms=>setTimeout(()=>{try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}},ms));
+  }
   function ensureRotaxInstallPack(){
     db.settings=db.settings||{};
+    if(lastInstallPackDb===db&&db.settings.rotaxInstallManualEd3R0Seeded)return false;
+    lastInstallPackDb=db;
     let changed=false;
     const doc=installDoc();
     if(doc){
@@ -120,15 +128,7 @@
       db.settings.rotaxInstallManualEd3R0Seeded=true;
       changed=true;
     }
-    if(changed){
-      saveDB('ROTAX Installation Manual references loaded.');
-      // Cloud state is loaded with cloudLoading=true, which intentionally suppresses
-      // immediate writes. Retry after that protected load window so the source pack
-      // persists to the shared workspace rather than only the local cache.
-      [700,1800,4000].forEach(ms=>setTimeout(()=>{
-        try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
-      },ms));
-    }
+    if(changed)persistRotaxInstallPack();
     return changed;
   }
 
