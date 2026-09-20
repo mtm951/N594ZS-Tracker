@@ -118,8 +118,16 @@
     CURRENT_CAUTION
   ].filter(Boolean).join(' • ');
 
+  let lastOperatorPackDb=null;
+  function persistOperatorPack(){
+    try{localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(_e){}
+    try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
+    [700,1800,4000].forEach(ms=>setTimeout(()=>{try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}},ms));
+  }
   function ensureReferences(){
     db.settings=db.settings||{};
+    if(lastOperatorPackDb===db&&db.settings.rotaxOperatorManualEd3Seeded)return false;
+    lastOperatorPackDb=db;
     let changed=false;
     db.specs=A(db.specs);
     db.docs=A(db.docs);
@@ -195,12 +203,7 @@
 
     changed=annotateStarterCards()||changed;
 
-    if(changed){
-      saveDB('ROTAX Operator Manual references loaded.');
-      [700,1800,4000].forEach(ms=>setTimeout(()=>{
-        try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
-      },ms));
-    }
+    if(changed)persistOperatorPack();
     return changed;
   }
 
