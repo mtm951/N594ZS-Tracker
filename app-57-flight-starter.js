@@ -171,8 +171,13 @@
 
   function ensureStarterCards(){
     db.settings=db.settings||{};
-    if(db.settings.flightTestStarter912V1)return false;
-    if(A(db.flightCards).length){db.settings.flightTestStarter912V1=true;return false}
+    // If the cloud workspace is genuinely empty, always seed it. Do not let a
+    // stale "already seeded" flag suppress the cards after cloud state replaces
+    // an earlier local render.
+    if(A(db.flightCards).length){
+      db.settings.flightTestStarter912V1=true;
+      return false;
+    }
     db.flightCards=starterDefs.map(makeStarter);
     db.settings.flightTestStarter912V1=true;
     saveDB('912 conversion starter flight-test cards added.');
@@ -192,7 +197,7 @@
     setOpsTab('flightcards');
   };
 
-  window.renderOpsFlightCards=function(){
+  window.renderFlightCardsStarter=function(){
     const box=document.getElementById('opsContent');if(!box)return;
     ensureStarterCards();
     const rows=[...A(db.flightCards)].sort((a,b)=>{
@@ -212,6 +217,11 @@
       </tbody></table></div>
     </div>`;
   };
+
+  // Keep compatibility with the legacy Ops renderer, but Aircraft Ops stable
+  // also calls renderFlightCardsStarter explicitly so this cannot be shadowed
+  // by an older function declaration.
+  window.renderOpsFlightCards=window.renderFlightCardsStarter;
 
   const style=document.createElement('style');
   style.id='flightStarterProgramStyle';
