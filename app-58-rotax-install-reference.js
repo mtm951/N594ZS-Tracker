@@ -28,8 +28,8 @@
     {id:'rotax-im-e3r0-aux-pump-pressure',title:'Auxiliary fuel-pump maximum pressure',system:'Fuel',value:'0.31',units:'bar (4.5 psi)',section:'73-00-00',page:'8',notes:'ROTAX recommends an electrical auxiliary fuel pump; the entire fuel system must remain within specified pressure limits.'},
     {id:'rotax-im-e3r0-pump-flow',title:'Fuel-pump delivery rate',system:'Fuel',value:'Min. 35',units:'L/h (9.25 US gal/h)',section:'73-00-00',page:'9',notes:'Stated for electrical or mechanical fuel pump.'},
     {id:'rotax-im-e3r0-return-orifice',title:'ROTAX fuel-manifold return orifice',system:'Fuel',value:'0.5',units:'mm (0.0197 in)',section:'73-00-00',page:'12',notes:'The manual states this orifice is essential for correct fuel-system operation in the illustrated ROTAX manifold arrangements.'},
-    {id:'rotax-im-e3r0-throttle-travel',title:'Throttle actuation travel',system:'Engine Controls',value:'65',units:'mm (2.56 in)',section:'73-00-00',page:'20',notes:'Throttle opens by spring. Two throttles are controlled by separate Bowden cables working synchronously.'},
-    {id:'rotax-im-e3r0-throttle-free',title:'Throttle Bowden-cable free travel',system:'Engine Controls',value:'Approx. 1',units:'mm (0.04 in)',section:'73-00-00',page:'22',notes:'Manual also requires positive adjustable idle/full-throttle stops and secure cable sleeves.'},
+    {id:'rotax-im-e3r0-throttle-travel',title:'Throttle actuation travel',system:'Engine',value:'65',units:'mm (2.56 in)',section:'73-00-00',page:'20',notes:'Throttle opens by spring. Two throttles are controlled by separate Bowden cables working synchronously.'},
+    {id:'rotax-im-e3r0-throttle-free',title:'Throttle Bowden-cable free travel',system:'Engine',value:'Approx. 1',units:'mm (0.04 in)',section:'73-00-00',page:'22',notes:'Manual also requires positive adjustable idle/full-throttle stops and secure cable sleeves.'},
     {id:'rotax-im-e3r0-radiator-heat',title:'912 S / ULS radiator heat rejection reference',system:'Cooling',value:'Approx. 28',units:'kW',section:'75-00-00',page:'20',notes:'Radiator size/type must be adequate; the manual notes experience with about 500 cm² radiator area when airflow is good.'},
     {id:'rotax-im-e3r0-coolant-flow',title:'Coolant-circuit flow reference',system:'Cooling',value:'Approx. 60',units:'L/min @ 5800 rpm',section:'75-00-00',page:'21',notes:'Manual also lists total engine coolant quantity about 1.5 L (0.4 US gal), depending on the installation.'},
     {id:'rotax-im-e3r0-oil-hose-id',title:'Main oil-system hose minimum ID',system:'Engine',value:'Min. 10',units:'mm (0.39 in)',section:'79-00-00',page:'11',notes:'At -500 mbar and 150 °C oil temperature, oil lines must not collapse.'},
@@ -113,7 +113,15 @@
       db.settings.rotaxInstallManualEd3R0Seeded=true;
       changed=true;
     }
-    if(changed)saveDB('ROTAX Installation Manual references loaded.');
+    if(changed){
+      saveDB('ROTAX Installation Manual references loaded.');
+      // Cloud state is loaded with cloudLoading=true, which intentionally suppresses
+      // immediate writes. Retry after that protected load window so the source pack
+      // persists to the shared workspace rather than only the local cache.
+      [700,1800,4000].forEach(ms=>setTimeout(()=>{
+        try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
+      },ms));
+    }
     return changed;
   }
 
