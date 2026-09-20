@@ -2,8 +2,8 @@
 // ---------- V5.13 ROTAX 912 INSTALLATION MANUAL REFERENCE PACK ----------
 // Source: ROTAX 912 Series Installation Manual, IM-912 / P/N 898644,
 // Edition 3 / Revision 0, January 01 2021.
-// Values are source-backed reference entries, not a claim that this 2021 revision
-// is the latest or that every item applies unchanged to N594ZS.
+// User has confirmed the supplied ROTAX material is current for this tracker.
+// Aircraft-specific installation instructions remain distinct from manufacturer references.
 
 (function(){
   if(window.__n594zsRotaxInstallPackInstalled)return;
@@ -15,7 +15,7 @@
   const manualNote=(section,page,extra='')=>[
     `IM-912 / P/N 898644 • ${section} p.${page}`,
     extra,
-    'Verified to the uploaded 2021 manual. Confirm applicability against the latest ROTAX documentation and the N594ZS/Kitfox installation before maintenance or operation.'
+    'Current ROTAX manufacturer reference supplied for N594ZS. Use together with the applicable N594ZS/Kitfox installation instructions where aircraft-specific requirements apply.'
   ].filter(Boolean).join(' • ');
 
   const refs=[
@@ -83,13 +83,20 @@
     }
 
     db.specs=A(db.specs);
+    for(const r of refs){
+      const s=db.specs.find(x=>String(x.id)===r.id);
+      if(!s)continue;
+      if(s.status!=='Current Manufacturer Reference'){s.status='Current Manufacturer Reference';changed=true}
+      const refreshed=manualNote(r.section,r.page,r.notes);
+      if(s.notes!==refreshed){s.notes=refreshed;changed=true}
+    }
     if(!db.settings.rotaxInstallManualEd3R0Seeded){
       const eqId=engineEquipmentId(),docId=doc?.id||null;
       for(const r of refs){
         if(db.specs.some(x=>String(x.id)===r.id))continue;
         db.specs.push({
           id:r.id,title:r.title,system:r.system,value:r.value,units:r.units,
-          status:'Needs Verification',source:SOURCE,sourceRevision:`${REV} • ${r.section} p.${r.page}`,
+          status:'Current Manufacturer Reference',source:SOURCE,sourceRevision:`${REV} • ${r.section} p.${r.page}`,
           sourceUrl:'',documentId:docId,equipmentId:eqId,
           notes:manualNote(r.section,r.page,r.notes)
         });
