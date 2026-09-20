@@ -241,23 +241,35 @@
     const d=ensureDoc();if(d&&typeof openDocumentDetail==='function'){openDocumentDetail(d.id);return}navTo('documents');
   };
 
-  function ensureAll(){
+  let lastMmlDb=null;
+  function persistMmlNoRender(){
+    try{localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(_e){}
+    try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
+    [700,1800,4000].forEach(ms=>setTimeout(()=>{try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}},ms));
+  }
+  function ensureAll(force=false){
     db.settings=db.settings||{};
+    if(!force&&lastMmlDb===db&&db.settings.rotaxMmlEd4Rev2Seeded)return false;
+    lastMmlDb=db;
     const doc=ensureDoc();
     applyIntervals();
     ensureChecklist(doc);
     const changed=!db.settings.rotaxMmlEd4Rev2Seeded;
     db.settings.rotaxMmlEd4Rev2Seeded=true;
-    if(changed){
-      saveDB('Current ROTAX line-maintenance program loaded.');
-      [700,1800,4000].forEach(ms=>setTimeout(()=>{try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}},ms));
-    }
+    if(changed)persistMmlNoRender();
+    return changed;
   }
 
   const oldOpenSystem=window.openSystemDashboard;
-  window.openSystemDashboard=function(n){ensureAll();oldOpenSystem(n);injectCard()};
+  window.openSystemDashboard=function(n){
+    // Recalculate conditional intervals only when the Engine workspace is opened,
+    // not during every full-app render.
+    ensureAll(n==='Engine');
+    oldOpenSystem(n);
+    injectCard();
+  };
   const oldRenderAll=renderAll;
-  renderAll=function(){ensureAll();oldRenderAll();injectCard()};
+  renderAll=function(){ensureAll(false);oldRenderAll();injectCard()};
 
   const style=document.createElement('style');
   style.id='rotaxLineProgramStyle';
