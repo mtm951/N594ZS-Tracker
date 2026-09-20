@@ -2,8 +2,8 @@
 // ---------- V5.14 ROTAX 912 ULS OPERATOR MANUAL REFERENCE PACK ----------
 // Source reviewed from user-supplied ROTAX 912 Series Operators Manual:
 // OM-912 / P/N 899649, Edition 3, mixed effective pages through Rev. 1 (Apr 01 2013).
-// This pack deliberately labels the values as reference / needs verification because
-// ROTAX says references are to the latest edition unless stated otherwise.
+// User has confirmed this is the current applicable ROTAX information for N594ZS.
+// Keep aircraft-specific operating instructions distinct from the manufacturer references.
 
 (function(){
   if(window.__n594zsRotaxOperatorPackInstalled)return;
@@ -13,7 +13,7 @@
   const SOURCE='ROTAX 912 Series Operators Manual';
   const DOCREF='OM-912 / P/N 899649';
   const REV='Edition 3 • LEP Rev. 1 • Apr 01 2013';
-  const CURRENT_CAUTION='Uploaded manual is an older edition. Verify against the latest ROTAX documentation and the N594ZS/Kitfox operating limitations before using a value operationally.';
+  const CURRENT_CAUTION='Current ROTAX manufacturer reference supplied for N594ZS. Aircraft-specific operating instructions and limitations remain governed by the applicable N594ZS/Kitfox documentation.';
 
   const refs=[
     {id:'rotax-om-e3-uls-takeoff-power',title:'912 ULS takeoff power',system:'Engine',value:'100 hp @ 5800 rpm',units:'max. 5 min',page:'2-5',notes:'73.5 kW at 5800 rpm.'},
@@ -102,7 +102,7 @@
       system:'Engine',
       publisher:'BRP-Powertrain / ROTAX',
       location:'User-supplied reference reviewed for tracker data; attach a current PDF in Documents for in-app file access.',
-      notes:'OM-912 / P/N 899649. This uploaded manual contains mixed effective pages through Rev. 1 dated April 01 2013. ROTAX states that references are to the latest edition unless otherwise stated. Treat this record as historical/reference until current applicability is confirmed.',
+      notes:'OM-912 / P/N 899649. User-confirmed current ROTAX manufacturer reference for N594ZS. Effective pages include Rev. 1 dated April 01 2013. Aircraft-specific operating instructions remain governed by the applicable N594ZS/Kitfox documentation.',
       linkedProjectIds:A(db.projects).filter(p=>p.system==='Engine'||p.system==='Fuel'||p.system==='Cooling').map(p=>p.id),
       linkedPartIds:A(db.parts).filter(p=>p.system==='Engine').map(p=>p.id),
       linkedLogIds:[],
@@ -129,12 +129,34 @@
     if(db.docs.length!==beforeDocs)changed=true;
     const eqId=engineEquipmentId();
 
+    // Migrate already-seeded records after the user confirmed this is the current ROTAX reference.
+    for(const r of refs){
+      const s=db.specs.find(x=>String(x.id)===r.id);
+      if(!s)continue;
+      if(s.status!=='Current Manufacturer Reference'){s.status='Current Manufacturer Reference';changed=true}
+      const refreshed=noteFor(r);
+      if(s.notes!==refreshed){s.notes=refreshed;changed=true}
+    }
+    if(doc){
+      const currentDocNote='OM-912 / P/N 899649. User-confirmed current ROTAX manufacturer reference for N594ZS. Effective pages include Rev. 1 dated April 01 2013. Aircraft-specific operating instructions remain governed by the applicable N594ZS/Kitfox documentation.';
+      if(doc.notes!==currentDocNote){doc.notes=currentDocNote;changed=true}
+    }
+    for(const f of A(db.flightCards).filter(x=>x.starter912)){
+      for(const x of A(f.items)){
+        const old=String(x.target||'');
+        const updated=old
+          .replace(/Uploaded OM-912 reference:/g,'Current OM-912 manufacturer reference:')
+          .replace(/\s*— VERIFY CURRENT APPLICABILITY/g,'');
+        if(updated!==old){x.target=updated;changed=true}
+      }
+    }
+
     if(!db.settings.rotaxOperatorManualEd3Seeded){
       for(const r of refs){
         if(db.specs.some(x=>String(x.id)===r.id))continue;
         db.specs.push({
           id:r.id,title:r.title,system:r.system,value:r.value,units:r.units,
-          status:'Needs Verification',source:SOURCE,
+          status:'Current Manufacturer Reference',source:SOURCE,
           sourceRevision:`${DOCREF} • ${REV} • p.${r.page}`,
           sourceUrl:'',documentId:doc.id,equipmentId:eqId,notes:noteFor(r)
         });
@@ -149,7 +171,7 @@
           system:'Engine',
           trigger:'Daily / before flight',
           projectId:null,
-          notes:'Source: OM-912 / P/N 899649, Edition 3, Chapters 3.1–3.3 (pages 3-2 through 3-6). Historical/reference copy only; verify against the latest applicable ROTAX documentation and N594ZS operating limitations.',
+          notes:'Source: OM-912 / P/N 899649, Edition 3, Chapters 3.1–3.3 (pages 3-2 through 3-6). Current ROTAX manufacturer reference supplied for N594ZS; aircraft-specific operating instructions remain governed by the applicable N594ZS/Kitfox documentation.',
           items:dailyItems.map((text,i)=>({id:i+1,text,done:false,note:''}))
         });
         changed=true;
@@ -162,7 +184,7 @@
           system:'Engine',
           trigger:'Engine start / ground run',
           projectId:A(db.projects).find(p=>p.title==='Oil system prime / purge')?.id||null,
-          notes:'Source: OM-912 / P/N 899649, Edition 3, pages 3-7 through 3-9. Historical/reference copy only. Confirm current procedures, limits and aircraft-specific requirements before use.',
+          notes:'Source: OM-912 / P/N 899649, Edition 3, pages 3-7 through 3-9. Current ROTAX manufacturer reference supplied for N594ZS; use with the applicable aircraft-specific procedures and limitations.',
           items:startItems.map((text,i)=>({id:i+1,text,done:false,note:''}))
         });
         changed=true;
@@ -187,7 +209,7 @@
     const t=String(x.target||'');
     if(!t.includes('Current applicable Rotax 912 ULS documentation'))return false;
     if(t.includes('Uploaded OM-912 reference:'))return false;
-    x.target=t+` • Uploaded OM-912 reference: ${ref} — VERIFY CURRENT APPLICABILITY`;
+    x.target=t+` • Current OM-912 manufacturer reference: ${ref}`;
     return true;
   }
   function annotateStarterCards(){
@@ -218,7 +240,7 @@
         <div><div class="engine-kicker">ROTAX OPERATOR REFERENCE</div><h2>912 ULS Operating Reference</h2>
           <div class="muted small">Source-backed values from the uploaded ${esc(DOCREF)}. Each tile opens its stored source/reference record.</div>
         </div>
-        <div class="action-row"><span class="mini-badge">Ed. 3 / 2013 reference</span><button class="btn secondary" onclick="openRotaxOperatorDocument()">Manual Record</button></div>
+        <div class="action-row"><span class="mini-badge">Current ROTAX reference</span><button class="btn secondary" onclick="openRotaxOperatorDocument()">Manual Record</button></div>
       </div>
       ${!p.serialNumber?`<button class="rotax-serial-callout" onclick="openEngineProfileModal()"><b>Add engine serial number</b><span>Serial identity helps determine which revisions, fuel-pump notes and bulletins apply to this engine.</span></button>`:''}
       <div class="rotax-limit-grid">
@@ -241,7 +263,7 @@
           <div><span>Gear ratio</span><b>2.43 : 1</b></div>
         </div>
       </details>
-      <div class="engine-record-note"><b>Reference status:</b> Needs verification. This uploaded Operator Manual contains effective pages through April 2013. It is useful for building the tracker, but it is not being treated as proof that these are the latest limits for your serial number / installation.</div>
+      <div class="engine-record-note"><b>Reference status:</b> Current ROTAX manufacturer reference supplied for N594ZS. Source: OM-912 / P/N 899649. Aircraft-specific procedures and limitations are still kept separate where the manual directs them to the aircraft manufacturer.</div>
     </div>`;
   }
   function injectOperatorCard(){
