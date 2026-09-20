@@ -49,7 +49,7 @@
   <section class="page" id="page-system"></section>
   <section class="page" id="page-settings"></section>
 </main>
-<div class="footer">N594ZS Tracker v5.11.1 • clearer W&B CG calculation guidance • historical estimate mode • redesigned W&B</div>
+<div class="footer">N594ZS Tracker v5.11.2 • W&B now calculates historical planning estimate when current 912 empty W&B is pending</div>
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="toast-wrap" id="toastWrap"></div>
 <input class="file-input" type="file" id="importFile" accept="application/json">
@@ -61,7 +61,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
-<script src="app-01-seed.js?v=5.11.1"></script>
+<script src="app-01-seed.js?v=5.11.2"></script>
 <script>if(!NAV.some(x=>x[0]==='ops')){const i=NAV.findIndex(x=>x[0]==='readiness');const j=i>=0?i+1:Math.max(0,NAV.findIndex(x=>x[0]==='projects'));NAV.splice(j<0?NAV.length:j,0,['ops','Aircraft Ops']);}</script>
 <script src="app-02-data.js?v=5.9.0"></script>
 <script src="app-02-cloud.js?v=5.6.0"></script>
@@ -117,7 +117,7 @@
 <script src="app-52-project-editor-polish.js?v=5.10.6"></script>
 <script src="app-53-parts-sort.js?v=5.10.7"></script>
 <script src="app-54-worklog-sort.js?v=5.10.11"></script>
-<script src="app-55-wb-polish.js?v=5.11.1"></script>
+<script src="app-55-wb-polish.js?v=5.11.2"></script>
 <script src="app-19-pwa.js?v=5.6.0"></script>
 <script src="app-15-init.js?v=5.6.0"></script>
 </body>
