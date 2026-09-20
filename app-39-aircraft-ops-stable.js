@@ -102,7 +102,7 @@ setOpsTab=function(tab){
 renderOps=function(){
   const page=document.getElementById('page-ops');if(!page)return;
   const tab=window.__n594zsStableOpsTab||'status';
-  page.innerHTML=`<div class="card ops-shell"><div class="toolbar"><div><h1>Aircraft Ops</h1><div class="muted">Configuration, inspections, references, consumables, costs, test data, flight cards and aircraft history for N594ZS.</div></div><div class="action-row"><button class="secondary" onclick="setOpsTab('flightcards')">Flight Cards</button><span class="mini-badge">10 workspaces</span><span class="mini-badge">v5.2 stable</span></div></div><div class="ops-tabs ops-tabs-stable">${STABLE_OPS_TABS.map(([k,l])=>`<button class="${tab===k?'active':''}" onclick="setOpsTab('${k}')">${esc(l)}</button>`).join('')}</div><div id="opsContent"></div></div>`;
+  page.innerHTML=`<div class="card ops-shell"><div class="toolbar"><div><h1>Aircraft Ops</h1><div class="muted">Configuration, inspections, references, consumables, costs, test data, flight cards and aircraft history for N594ZS.</div></div><div class="action-row"><span class="mini-badge">10 workspaces</span><span class="mini-badge">v5.2 stable</span></div></div><div class="ops-tabs ops-tabs-stable">${STABLE_OPS_TABS.map(([k,l])=>`<button class="${tab===k?'active':''}" onclick="setOpsTab('${k}')">${esc(l)}</button>`).join('')}</div><div id="opsContent"></div></div>`;
   stableRunRichTab(tab);
 };
 
