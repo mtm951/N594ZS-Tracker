@@ -30,6 +30,7 @@
       lastDate:src.lastDate||'',
       lastHours:src.lastHours??'',
       intervalDays:src.intervalDays??'',
+      intervalYears:src.intervalYears??'',
       intervalHours:src.intervalHours??'',
       nextDate:src.nextDate||'',
       nextHours:src.nextHours??'',
@@ -64,6 +65,7 @@
     p.profile.serialNumber=p.profile.serialNumber||'';
     p.profile.manufactureDate=p.profile.manufactureDate||'';
     p.profile.installDate=p.profile.installDate||'';
+    p.profile.firstOperationDate=p.profile.firstOperationDate||'';
     p.profile.hoursAtInstall=p.profile.hoursAtInstall??'';
     p.profile.timeSinceNewAtInstall=p.profile.timeSinceNewAtInstall??'';
     p.profile.notes=p.profile.notes||'';
@@ -84,11 +86,19 @@
     const d=new Date(iso+'T12:00:00');if(Number.isNaN(d.getTime()))return '';
     d.setDate(d.getDate()+Number(days));return d.toISOString().slice(0,10);
   }
+  function addYears(iso,years){
+    if(!iso||!Number(years))return '';
+    const d=new Date(iso+'T12:00:00');if(Number.isNaN(d.getTime()))return '';
+    const month=d.getMonth();
+    d.setFullYear(d.getFullYear()+Number(years));
+    if(d.getMonth()!==month)d.setDate(0);
+    return d.toISOString().slice(0,10);
+  }
   function serviceDue(item){
     const now=new Date(),today=now.toISOString().slice(0,10),hours=currentEngineHours();
     const baseDate=item.lastDate||item.installedDate||'';
     const baseHours=item.lastHours!==''?num(item.lastHours):(item.installedHours!==''?num(item.installedHours):null);
-    const dueDate=item.nextDate||addDays(baseDate,item.intervalDays);
+    const dueDate=item.nextDate||(num(item.intervalYears)>0?addYears(baseDate,item.intervalYears):addDays(baseDate,item.intervalDays));
     const dueHours=item.nextHours!==''?num(item.nextHours):((baseHours!==null&&num(item.intervalHours)>0)?baseHours+num(item.intervalHours):null);
     let due=false,soon=false,parts=[];
     if(dueDate){
@@ -156,10 +166,10 @@
         <button onclick="openEngineProfileModal()"><span>Service attention</span><b>${due} item${due===1?'':'s'}</b><small>${bulletins} bulletin${bulletins===1?'':'s'} to review</small></button>
       </div>
       <div class="engine-record-grid">
-        <div class="engine-subcard"><div class="section-head"><div><h3>Components & Recurring Service</h3><div class="muted tiny">Dates and hours are editable. Intervals stay blank until you enter the applicable requirement.</div></div><button class="linkbtn" onclick="openEngineServiceModal()">+ Add</button></div><div class="engine-service-list">${serviceRows}</div></div>
+        <div class="engine-subcard"><div class="section-head"><div><h3>Components & Recurring Service</h3><div class="muted tiny">Manufacturer intervals are populated from the current source documents where defined; dates and hours remain editable.</div></div><button class="linkbtn" onclick="openEngineServiceModal()">+ Add</button></div><div class="engine-service-list">${serviceRows}</div></div>
         <div class="engine-subcard"><div class="section-head"><div><h3>Bulletins / Instructions</h3><div class="muted tiny">Track applicability, revision and compliance evidence.</div></div><button class="linkbtn" onclick="openEngineBulletinModal()">+ Add</button></div>${bulletinRows}</div>
       </div>
-      <div class="engine-record-note">The tracker does not assume service intervals or bulletin applicability. Enter those from the current documentation applicable to this engine serial number and configuration.</div>
+      <div class="engine-record-note">Service intervals shown here come from the current source documents loaded into the tracker where a fixed interval is defined. Serial-number, installation, fuel-use and aircraft-manufacturer conditions still control where the source calls for them.</div>
     </div>`;
   }
   window.engineSystemPanelHTML=enginePanelHTML;
@@ -186,6 +196,7 @@
       ${field('Serial number','engSerial',p.serialNumber)}
       ${field('Date manufactured','engMfgDate',p.manufactureDate,'date')}
       ${field('Installed date','engInstallDate',p.installDate,'date')}
+      ${field('Initial start / first operation date','engFirstOperation',p.firstOperationDate,'date')}
       ${field('Engine hours at install','engInstallHours',p.hoursAtInstall,'number','step="0.1" min="0"')}
       ${field('Time since new at install (if known)','engTsnInstall',p.timeSinceNewAtInstall,'number','step="0.1" min="0"')}
       ${field('Current engine hours','engCurrentHours',db.aircraft.engineHours??'','number','step="0.1" min="0"')}
@@ -194,7 +205,7 @@
   };
   window.saveEngineProfile=function(){
     const p=engineProgram().profile;
-    Object.assign(p,{manufacturer:val('engManufacturer'),model:val('engModel'),serialNumber:val('engSerial'),manufactureDate:val('engMfgDate'),installDate:val('engInstallDate'),hoursAtInstall:val('engInstallHours'),timeSinceNewAtInstall:val('engTsnInstall'),notes:val('engNotes')});
+    Object.assign(p,{manufacturer:val('engManufacturer'),model:val('engModel'),serialNumber:val('engSerial'),manufactureDate:val('engMfgDate'),installDate:val('engInstallDate'),firstOperationDate:val('engFirstOperation'),hoursAtInstall:val('engInstallHours'),timeSinceNewAtInstall:val('engTsnInstall'),notes:val('engNotes')});
     db.aircraft.engineHours=val('engCurrentHours');
     if(p.model)db.aircraft.engine=[p.manufacturer,p.model].filter(Boolean).join(' ');
     closeModal();saveDB('Engine identity updated.');setTimeout(()=>openSystemDashboard('Engine'),0);
@@ -213,23 +224,26 @@
       ${field('Last serviced / replaced date','engSvcLastDate',i.lastDate,'date')}
       ${field('Last serviced / replaced hours','engSvcLastHours',i.lastHours,'number','step="0.1" min="0"')}
       ${field('Calendar interval (days)','engSvcDays',i.intervalDays,'number','min="0"')}
+      ${field('Calendar interval (years)','engSvcYears',i.intervalYears,'number','step="1" min="0"')}
       ${field('Hour interval','engSvcHours',i.intervalHours,'number','step="0.1" min="0"')}
       ${field('Next due date (override)','engSvcNextDate',i.nextDate,'date')}
       ${field('Next due hours (override)','engSvcNextHours',i.nextHours,'number','step="0.1" min="0"')}
       ${textareaField('Notes / source / specification','engSvcNotes',i.notes)}
-    </div><div class="notice" style="margin-top:12px">Intervals are intentionally not pre-filled. Use the current documentation applicable to your engine serial number, installation and component.</div>
+    </div><div class="notice" style="margin-top:12px">Where a fixed manufacturer interval is loaded from a current source document, it is pre-filled here. Keep aircraft-manufacturer and serial-number-specific requirements in mind where the source calls for them.</div>
     <div class="modal-actions">${existing?`<button class="btn danger" onclick="deleteEngineService('${esc(i.id)}')">Delete</button><button class="btn success" onclick="openEngineServiceComplete('${esc(i.id)}')">Record Service</button>`:''}<button class="btn secondary" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEngineService('${esc(i.id)}',${existing?'true':'false'})">Save</button></div>`,true);
   };
 
   function syncMaintenance(i){
     let m=A(db.maintenance).find(x=>String(x.engineServiceItemId||'')===String(i.id));
     if(!m)m=A(db.maintenance).find(x=>T(x.system)==='Engine'&&T(x.title).toLowerCase()===T(i.title).toLowerCase());
-    const hasDate=!!(i.intervalDays||i.nextDate),hasHours=!!(i.intervalHours||i.nextHours);
+    const baseDate=i.lastDate||i.installedDate||'';
+    const calculatedYearDue=!i.nextDate&&num(i.intervalYears)>0&&baseDate?addYears(baseDate,i.intervalYears):'';
+    const hasDate=!!(i.intervalDays||i.intervalYears||i.nextDate||calculatedYearDue),hasHours=!!(i.intervalHours||i.nextHours);
     const basis=hasDate&&hasHours?'both':hasHours?'hours':'date';
     const obj={
       ...(m||{}),id:m?.id||nextNumericId(db.maintenance,700),title:i.title,system:'Engine',basis,meter:'engine',
       intervalDays:i.intervalDays,intervalHours:i.intervalHours,lastDate:i.lastDate||i.installedDate,lastHours:i.lastHours!==''?i.lastHours:i.installedHours,
-      nextDate:i.nextDate,nextHours:i.nextHours,notes:[i.kind,i.partNumber?'PN '+i.partNumber:'',i.notes].filter(Boolean).join(' • '),engineServiceItemId:i.id
+      nextDate:i.nextDate||calculatedYearDue,nextHours:i.nextHours,notes:[i.kind,i.intervalYears?('Manufacturer calendar interval: '+i.intervalYears+' year'+(num(i.intervalYears)===1?'':'s')):'',i.partNumber?'PN '+i.partNumber:'',i.notes].filter(Boolean).join(' • '),engineServiceItemId:i.id
     };
     const idx=A(db.maintenance).findIndex(x=>String(x.id)===String(obj.id));if(idx>=0)db.maintenance[idx]=obj;else db.maintenance.push(obj);
   }
@@ -239,7 +253,7 @@
     const obj=blankService({
       ...(old||{}),id:old?.id||id||crypto.randomUUID(),title:val('engSvcTitle'),kind:val('engSvcKind'),
       manufacturer:val('engSvcManufacturer'),partNumber:val('engSvcPartNo'),installedDate:val('engSvcInstallDate'),installedHours:val('engSvcInstallHours'),
-      lastDate:val('engSvcLastDate'),lastHours:val('engSvcLastHours'),intervalDays:val('engSvcDays'),intervalHours:val('engSvcHours'),
+      lastDate:val('engSvcLastDate'),lastHours:val('engSvcLastHours'),intervalDays:val('engSvcDays'),intervalYears:val('engSvcYears'),intervalHours:val('engSvcHours'),
       nextDate:val('engSvcNextDate'),nextHours:val('engSvcNextHours'),notes:val('engSvcNotes'),history:A(old?.history)
     });
     const idx=p.serviceItems.findIndex(x=>String(x.id)===String(obj.id));if(idx>=0)p.serviceItems[idx]=obj;else p.serviceItems.push(obj);
