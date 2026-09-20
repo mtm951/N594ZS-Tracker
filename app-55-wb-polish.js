@@ -121,16 +121,32 @@
     updateWBCalculation();
   };
 
+  function wbMaxCargoFor(config,values=wbLoadValues()){
+    const wb=wbData(),s=wb.stations;if(!wbConfigReady(config))return {max:0,limiter:'empty W&B pending'};
+    const fuel=values.fuelGal*num(wb.fuelLbsPerGallon),baseW=num(config.emptyWeight)+values.pilot+values.passenger+fuel;
+    const baseM=wbMomentForConfig(config)+values.pilot*num(s.pilot)+values.passenger*num(s.passenger)+fuel*num(s.fuel);
+    const gross=Math.max(0,num(wb.maxGross)-baseW);let cg=Infinity;
+    if(num(s.cargo)>num(wb.aftLimit))cg=(num(wb.aftLimit)*baseW-baseM)/(num(s.cargo)-num(wb.aftLimit));
+    if(!Number.isFinite(cg))cg=gross;cg=Math.max(0,cg);
+    return gross<=cg?{max:gross,limiter:'max gross weight'}:{max:cg,limiter:'aft CG limit'};
+  }
+
   window.updateWBCalculation=function(){
     const box=document.getElementById('wbResults');if(!box)return;
-    const c=wbConfig(),takeoff=wbCalculate(),wb=wbData();
-    if(!takeoff.ready){
-      box.innerHTML=`<div class="wb-no-config wb-no-config-polished"><div class="wb-pending-icon">!</div><div><b>Loaded CG cannot be calculated yet.</b><span>${esc(c?.label||'Current configuration')} does not have an empty weight plus empty moment/CG. Those values are required before a real loaded CG can be computed.</span></div><div class="wb-pending-actions"><button class="btn primary" onclick="openWBConfig('${esc(c?.id||'current-912')}')">Enter 912 Empty W&B</button><button class="btn secondary" onclick="wbUseHistoricalEstimate()">Use 2018 582 Data for Estimate</button></div></div><div class="wb-estimate-note">Historical estimate mode is for comparison only. It does not represent the current 912 configuration and should not be used as current flight-loading data.</div>`;
-      return;
+    const selected=wbConfig(),wb=wbData();
+    let calcConfig=selected,estimateMode=false;
+    if(!wbConfigReady(calcConfig)){
+      const fallback=wb.configurations.find(x=>x.id==='2018-582'&&wbConfigReady(x))||wb.configurations.find(x=>x.status==='historical'&&wbConfigReady(x));
+      if(fallback){calcConfig=fallback;estimateMode=true}
+      else{
+        box.innerHTML=`<div class="wb-no-config wb-no-config-polished"><div class="wb-pending-icon">!</div><div><b>Loaded CG cannot be calculated yet.</b><span>${esc(selected?.label||'Current configuration')} does not have an empty weight plus empty moment/CG. Those values are required before CG can be computed.</span></div><div class="wb-pending-actions"><button class="btn primary" onclick="openWBConfig('${esc(selected?.id||'current-912')}')">Enter 912 Empty W&B</button></div></div>`;
+        return;
+      }
     }
+    const takeoff=wbCalculate(wbLoadValues(),calcConfig);
     const burn=clampBurn(),fuel=num(val('wbFuelGal'));
-    const landing=wbCalculate({...wbLoadValues(),fuelGal:Math.max(0,fuel-burn)},c);
-    const maxCargo=calculateMaxCargo(),remaining=Math.max(0,takeoff.grossMargin);
+    const landing=wbCalculate({...wbLoadValues(),fuelGal:Math.max(0,fuel-burn)},calcConfig);
+    const maxCargo=wbMaxCargoFor(calcConfig),remaining=Math.max(0,takeoff.grossMargin);
     const warnings=[];
     if(!takeoff.inWeight)warnings.push(`${Math.abs(takeoff.grossMargin).toFixed(1)} lb over max gross`);
     if(takeoff.fwdMargin<0)warnings.push(`${Math.abs(takeoff.fwdMargin).toFixed(2)} in forward of limit`);
@@ -138,8 +154,11 @@
     if(takeoff.fuelOver)warnings.push(`fuel exceeds ${num(wb.fuelMaxGallons).toFixed(1)} gal capacity`);
     if(burn>0&&(!landing.inWeight||!landing.inCg))warnings.push('after-burn condition outside entered limits');
     const allGood=takeoff.inWeight&&takeoff.inCg&&!takeoff.fuelOver&&landing.inWeight&&landing.inCg;
+    const primaryStatus=estimateMode?'<span class="wb-status pending">ESTIMATE USING 2018 / 582 EMPTY W&B</span>':wbStatusHTML(takeoff);
+    const basisNote=estimateMode?`Planning estimate only: using ${esc(calcConfig.label||'historical configuration')} (${num(calcConfig.emptyWeight).toFixed(1)} lb @ ${wbCgForConfig(calcConfig).toFixed(2)} in) because the current 912 empty W&B is still pending.`:'Based on the currently entered aircraft data and loading.';
     box.innerHTML=`
-      <div class="wb-result-head"><div>${wbStatusHTML(takeoff)}${burn>0?`<span class="wb-status ${landing.inWeight&&landing.inCg?'good':'bad'}">AFTER BURN ${landing.inWeight&&landing.inCg?'WITHIN':'OUTSIDE'} LIMITS</span>`:''}</div><span class="muted small">${warnings.length?esc(warnings.join(' • ')):'Based on the currently entered aircraft data and loading.'}</span></div>
+      <div class="wb-result-head"><div>${primaryStatus}${burn>0?`<span class="wb-status ${landing.inWeight&&landing.inCg?'good':'bad'}">AFTER BURN ${landing.inWeight&&landing.inCg?'WITHIN':'OUTSIDE'} LIMITS</span>`:''}</div><span class="muted small">${warnings.length?esc(warnings.join(' • ')):basisNote}</span></div>
+      ${estimateMode?`<div class="wb-estimate-note"><b>Estimated only.</b> These CG values are mathematically calculated from the known 2018 582 empty W&B, not the current 912 installation. Enter the post-912 empty weight and CG/moment to convert this to a current-aircraft calculation.</div>`:''}
       <div class="wb-metrics wb-metrics-polished">
         <div class="${takeoff.inWeight?'':'bad'}"><span>Takeoff weight</span><b>${takeoff.totalWeight.toFixed(1)} lb</b><small>${takeoff.grossMargin>=0?`${takeoff.grossMargin.toFixed(1)} lb below gross`:`${Math.abs(takeoff.grossMargin).toFixed(1)} lb over gross`}</small></div>
         <div class="${takeoff.inCg?'':'bad'}"><span>Takeoff CG</span><b>${takeoff.cg.toFixed(2)} in</b><small>${takeoff.fwdMargin.toFixed(2)} from fwd • ${takeoff.aftMargin.toFixed(2)} from aft</small></div>
@@ -148,7 +167,7 @@
       </div>
       <div class="wb-envelope-panel">
         <div class="section-head"><div><h3>CG / Weight Envelope</h3><div class="muted tiny">Shaded area = currently entered max gross and CG limits.</div></div><span class="mini-badge ${allGood?'green':'red'}">${allGood?'IN LIMITS':'CHECK LOAD'}</span></div>
-        ${chart(takeoff,landing,c)}
+        ${chart(takeoff,landing,calcConfig)}
         <div class="wb-chart-legend"><span><i class="takeoff"></i>Takeoff</span>${burn>0?'<span><i class="landing"></i>After burn</span>':''}<span><i class="safe"></i>Entered envelope</span></div>
       </div>`;
   };
