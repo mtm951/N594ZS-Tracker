@@ -51,14 +51,18 @@
   }
   function blank(v){return v===undefined||v===null||v===''}
   function sameValue(a,b){return String(a??'')===String(b??'')}
-  function adoptSourceValue(obj,field,sourceField,value,legacy=[]){
+  function adoptSourceValue(obj,field,sourceField,value,_legacy=[]){
     if(value===undefined)return;
     const current=obj[field],previous=obj[sourceField];
     if(previous===undefined){
-      if(blank(current)||sameValue(current,value)||legacy.some(v=>sameValue(current,v)))setChanged(obj,field,value);
+      // First adoption is deliberately conservative: a nonblank existing value is
+      // presumed user-owned unless it already equals the manufacturer value.
+      if(blank(current)||sameValue(current,value))setChanged(obj,field,value);
       setChanged(obj,sourceField,value);
       return;
     }
+    // Later source revisions may update a visible value only while it still equals
+    // the prior manufacturer value. Any user override is left untouched.
     if(blank(current)||sameValue(current,previous))setChanged(obj,field,value);
     setChanged(obj,sourceField,value);
   }
