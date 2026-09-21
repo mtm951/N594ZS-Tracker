@@ -101,8 +101,9 @@ renderPartRows=function(){
 function partMovementRows(part){
   const rows=[];
   for(const p of arr(db.purchases))if(String(p.inventoryPartId||'')===String(part.id)||arr(part.purchaseIds).map(String).includes(String(p.id))||(part.partNo&&p.pn&&String(part.partNo).toLowerCase()===String(p.pn).toLowerCase())){
-    const installedZero=p.disposition==='Installed'&&num(p.remainingQty)===0&&num(part.stockQty)===0&&partConsumedQty(part.id)===0;
-    rows.push({date:p.shipDate||'',kind:installedZero?'PURCHASE':'IN',desc:`Purchase • ${p.vendor||'Vendor'}${p.order?' • Order '+p.order:''}${p.invoice?' • Invoice '+p.invoice:''}`,qty:installedZero?num(p.qty):num(p.remainingQty===''?p.qty:p.remainingQty),unit:part.unit||'ea'});
+    const materialized=num(p.inventoryReceiptMaterializedQty);
+    const installedProvenanceOnly=p.disposition==='Installed'&&materialized<=0;
+    rows.push({date:p.shipDate||'',kind:installedProvenanceOnly?'PURCHASE':'IN',desc:`Purchase • ${p.vendor||'Vendor'}${p.order?' • Order '+p.order:''}${p.invoice?' • Invoice '+p.invoice:''}`,qty:installedProvenanceOnly?num(p.qty):(p.disposition==='Installed'?materialized:num(p.remainingQty===''?p.qty:p.remainingQty)),unit:part.unit||'ea'});
   }
   for(const l of arr(db.logs))for(const x of arr(l.consumedParts))if(Number(x.partId)===Number(part.id))rows.push({date:l.date||'',kind:'OUT',desc:l.work||'Work log consumption',qty:num(x.qty),unit:x.unit||part.unit||'ea'});
   for(const r of partReservationProjects(part.id))rows.push({date:'',kind:'RESERVE',desc:r.project.title,qty:num(r.item.qty),unit:r.item.unit||part.unit||'ea'});
