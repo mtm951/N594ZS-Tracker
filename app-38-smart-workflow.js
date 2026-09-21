@@ -46,13 +46,8 @@ function smartRenderOpsSafe(){
 
 const smartRenderNavBase=renderNav;
 renderNav=function(){ensureAircraftOpsNav();smartRenderNavBase()};
-const smartNavToBase=navTo;
-navTo=function(page){
-  ensureAircraftOpsNav();
-  if(page!=='ops')return smartNavToBase(page);
-  try{smartNavToBase(page)}catch(e){console.error('Aircraft Ops navigation failed',e);smartActivatePage('ops');renderNav();window.scrollTo({top:0,behavior:'smooth'});renderOpsFallback(e);return}
-  smartRenderOpsSafe();
-};
+// Navigation is coordinated centrally by app-61-performance. Aircraft Ops fallback
+// remains available through smartRenderOpsSafe/renderOpsFallback.
 
 // ---------- PROJECT PLANNED / RESERVED PARTS ----------
 const smartNormalizeBase=normalizeDB;
