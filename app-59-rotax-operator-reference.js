@@ -24,7 +24,7 @@
     {id:'rotax-om-e3-uls-egt-max',title:'912 ULS maximum EGT',system:'Exhaust',value:'880',units:'°C (1616 °F)',page:'2-5',notes:''},
     {id:'rotax-om-e3-uls-coolant-max',title:'912 ULS conventional-coolant maximum',system:'Cooling',value:'120',units:'°C (248 °F)',page:'2-6',notes:'Coolant exit temperature. Manual calls for permanent monitoring of coolant and cylinder-head temperature with conventional coolant.'},
     {id:'rotax-om-e3-uls-cht-max',title:'912 ULS cylinder-head temperature maximum',system:'Cooling',value:'135',units:'°C (275 °F)',page:'2-6',notes:'Stated for conventional and waterless coolant in this manual edition.'},
-    {id:'rotax-om-e3-uls-fuel-pressure',title:'912 ULS fuel-pressure operating reference',system:'Fuel',value:'0.15–0.4',units:'bar (2.2–5.8 psi)',page:'2-7',notes:'The manual shows 0.5 bar (7.26 psi) maximum only for the specified fuel pump from S/N 11.0036. Pump applicability must be confirmed.'},
+    {id:'rotax-om-e3-uls-fuel-pressure',title:'912 ULS fuel-pressure operating reference',system:'Fuel',value:'0.15–0.4',units:'bar (2.2–5.8 psi)',page:'2-7',notes:'The manual lists max. 0.4 bar (5.8 psi) and min. 0.15 bar (2.2 psi); 0.5 bar (7.26 psi) is applicable only for the fuel pump from S/N 11.0036.'},
     {id:'rotax-om-e3-uls-bank-angle',title:'912 ULS maximum bank-angle deviation reference',system:'Engine',value:'40',units:'degrees',page:'2-7',notes:'Manual notes the dry-sump lubrication system warrants lubrication up to this value.'},
     {id:'rotax-om-e3-uls-fuel-octane',title:'912 ULS minimum fuel knock resistance',system:'Fuel',value:'RON 95 / AKI 91',units:'minimum',page:'2-9',notes:'AVGAS 100LL is listed as usable, with the manual noting greater valve-seat stress and increased deposits/lead sediment. Selection is referred to current SI-912-016.'},
     {id:'rotax-om-e3-uls-oil-spec',title:'912 lubricant specification reference',system:'Engine',value:'API SG or higher',units:'',page:'2-10',notes:'Manual calls for oils with gear additives such as high-performance 4-stroke motorcycle oils; friction-modifier oils are unsuitable for the overload clutch. Selection is referred to current SI-912-016.'},
@@ -214,29 +214,53 @@
       .replace(/^\s*•\s*|\s*•\s*$/g,'')
       .trim();
   }
-  function targetAdd(x,ref){
-    if(!x||!ref)return false;
-    const original=String(x.target||'');
-    if(!original.includes('Current applicable Rotax 912 ULS documentation'))return false;
-    const clean=stripOperatorRefs(original);
-    const desired=clean+` • Current OM-912 manufacturer reference: ${ref}`;
-    if(original===desired)return false;
-    x.target=desired;
-    return true;
+  function exactRotaxFlightTarget(objective,original){
+    const o=String(objective||'').toLowerCase();
+    const prop=/ivo propeller|propeller instructions/i.test(original||'');
+    const propTail=prop?' • Aircraft/propeller target: use the applicable IVO instructions and the installed N594ZS propeller configuration.':'';
+
+    if(/initial start oil-pressure/.test(o))
+      return 'OM-912 p.3-7 / MML 12-20-00 p.14: oil pressure must build within 10 sec after start; increase engine speed only after a steady indication above 2 bar (29–30 psi).';
+    if(/ignition|run-up/.test(o))
+      return 'OM-912 p.3-9: ignition check at 4000 engine rpm; drop with either circuit OFF must not exceed 300 rpm; A/B drop difference must not exceed 115 rpm.';
+    if(/static full-power rpm/.test(o))
+      return 'MML 12-20-00 p.14: conduct only a short full-throttle ground run and confirm the engine reaches the aircraft/propeller-defined full-power speed; ROTAX specifically directs the user to the aircraft POH because rpm depends on the propeller.'+propTail;
+    if(/takeoff rpm/.test(o))
+      return 'OM-912 p.2-5: 912 S/ULS takeoff-speed limit 5800 rpm, maximum 5 min. This is an engine limit, not a required N594ZS takeoff-rpm target.'+propTail;
+    if(/oil pressure immediately after takeoff|takeoff \/ climb oil pressure|oil pressure during prolonged|hot-engine fuel pressure and oil pressure|oil pressure at each/.test(o))
+      return 'OM-912 p.2-5: oil pressure normal 2.0–5.0 bar (29–73 psi) above 3500 rpm; minimum 0.8 bar (12 psi) below 3500 rpm; max. 7 bar (102 psi) is allowed only briefly at cold start.';
+    if(/fuel pressure/.test(o))
+      return 'OM-912 p.2-7: fuel pressure min. 0.15 bar (2.2 psi), max. 0.4 bar (5.8 psi); 0.5 bar (7.26 psi) applies only to the fuel pump from S/N 11.0036.';
+    if(/oil temperature and coolant \/ cht|climb oil \/ coolant \/ cht|oil \/ coolant temperatures|oil \/ coolant temperature trend|climb rpm and engine temperatures/.test(o))
+      return 'OM-912 pp.2-5–2-6: oil temperature 50–130 °C (120–266 °F), normal approx. 90–110 °C; with conventional coolant, coolant-exit max. 120 °C and CHT max. 135 °C. Coolant/CHT monitoring depends on coolant/head configuration.';
+    if(/charging voltage|electrical behavior/.test(o))
+      return 'IM-912 24-00-00 p.6: the standard rectifier-regulator used with the internal generator is specified at 14.2 ± 0.3 V from 1000 ± 250 rpm. Apply this only if that charging configuration is installed.';
+    if(/egt/.test(o))
+      return 'OM-912 p.2-5: 912 S/ULS EGT max. 880 °C (1616 °F). IM-912 78-00-00 p.9 calls for EGT measurement at initial installation and verification during test flights.';
+    if(/idle \/ low-power rpm/.test(o))
+      return 'OM-912 p.2-5: minimum idle speed 1400 rpm. Record actual installed-propeller idle behavior; aircraft/propeller requirements may establish a higher practical setting.';
+    if(/throttle response/.test(o))
+      return 'OM-912 p.3-8: after throttling back to partial load, allow about 3 sec for constant speed before re-acceleration; record actual response and smoothness.';
+    if(/cruise rpm \/ speed \/ temperatures|low cruise point|mid cruise point|higher cruise point|early-flight stabilized cruise|mid-flight cruise|late-flight cruise|conservative cruise engine indications|engine indications/.test(o))
+      return 'OM-912 pp.2-5–2-7: record actual values and keep the engine within the applicable 912 S/ULS rpm, oil-pressure, oil-temperature, coolant/CHT, EGT and fuel-pressure limits. ROTAX engine performance data are not an N594ZS airframe/propeller performance target.';
+    if(/baseline stabilized indications|planned endpoint/.test(o))
+      return 'OM-912 pp.2-5–2-7: record all applicable 912 S/ULS operating indications and compare them with the published engine limits; use the N594ZS test plan for aircraft-specific stop criteria.';
+    if(/engine smoothness|vibration/.test(o))
+      return 'Record the observation. ROTAX does not state a numeric N594ZS vibration/smoothness target in the Operator Manual; use the applicable installation/propeller documentation for any quantitative limit.'+propTail;
+    if(/hot restart|approach \/ landing engine behavior|landing \/ rollout engine behavior/.test(o))
+      return 'Record actual engine behavior. No N594ZS-specific numeric target for this observation is stated in the supplied ROTAX Operator Manual; remain within the applicable operating limits.';
+    return 'ROTAX source context: use the applicable 912 S/ULS operating limits in OM-912 Chapter 2. No aircraft-specific N594ZS target is stated by ROTAX for this observation.';
   }
   function annotateStarterCards(){
     let changed=false;
     for(const f of A(db.flightCards).filter(x=>x.starter912)){
       for(const x of A(f.items)){
-        const o=String(x.objective||'').toLowerCase();
-        let ref='';
-        if(/initial start oil-pressure|oil pressure immediately after/.test(o))ref='oil pressure should rise within 10 sec; do not increase RPM until steady >2 bar (p.3-7)';
-        else if(/ignition|run-up/.test(o))ref='ignition check at 4000 rpm; max drop 300 rpm; max A/B drop difference 115 rpm (p.3-9)';
-        else if(/takeoff rpm/.test(o))ref='5800 rpm takeoff limit, max 5 min (p.2-5)';
-        else if(/fuel pressure/.test(o))ref='0.15–0.4 bar / 2.2–5.8 psi; 0.5 bar max only for specified later pump S/N (p.2-7)';
-        else if(/oil.*temp|temp.*oil|oil \/ coolant|oil \/ coolant \/ cht/.test(o))ref='oil 50–130 °C, normal approx. 90–110 °C (p.2-5); conventional-coolant max 120 °C and CHT max 135 °C (p.2-6)';
-        else if(/climb.*temperatures|engine indications/.test(o))ref='5800 rpm max 5 min; oil pressure/temp, coolant/CHT and EGT limits stored in Specs / Setup from OM-912';
-        if(ref&&targetAdd(x,ref))changed=true;
+        const original=String(x.target||'');
+        if(!original.includes('Current applicable Rotax 912 ULS documentation') &&
+           !original.includes('Current OM-912 manufacturer reference:') &&
+           !original.includes('Uploaded OM-912 reference:'))continue;
+        const desired=exactRotaxFlightTarget(x.objective,original);
+        if(desired&&desired!==original){x.target=desired;changed=true}
       }
     }
     return changed;
@@ -260,9 +284,9 @@
         ${specButton('rotax-om-e3-uls-max-continuous','Max continuous','5500 RPM','90 hp')}
         ${specButton('rotax-om-e3-uls-oil-pressure','Oil pressure','2.0–5.0 bar','normal above 3500 rpm')}
         ${specButton('rotax-om-e3-uls-oil-temperature','Oil temperature','50–130 °C','normal ~90–110 °C')}
-        ${specButton('rotax-om-e3-uls-fuel-pressure','Fuel pressure','0.15–0.4 bar','2.2–5.8 psi')}
-        ${specButton('rotax-om-e3-uls-coolant-max','Coolant max','120 °C','conventional coolant')}
-        ${specButton('rotax-om-e3-uls-cht-max','CHT max','135 °C','275 °F')}
+        ${specButton('rotax-om-e3-uls-fuel-pressure','Fuel pressure','0.15–0.4 bar','2.2–5.8 psi • 0.5 bar only specified pump S/N')}
+        ${specButton('rotax-om-e3-uls-coolant-max','Coolant-exit max','120 °C','conventional coolant')}
+        ${specButton('rotax-om-e3-uls-cht-max','CHT max','135 °C','per OM coolant-type section')}
         ${specButton('rotax-om-e3-uls-egt-max','EGT max','880 °C','1616 °F')}
       </div>
       <details class="rotax-reference-details"><summary>Normal-operation & performance references</summary>
@@ -271,7 +295,7 @@
           <div><span>Ignition check</span><b>4000 rpm • max drop 300 • max A/B difference 115</b></div>
           <div><span>Minimum fuel</span><b>RON 95 / AKI 91</b></div>
           <div><span>75% fuel reference</span><b>18.5 L/h / 4.9 GPH</b></div>
-          <div><span>75% variable-pitch table</span><b>5000 rpm • 68 hp • 26 inHg</b></div>
+          <div><span>OM variable-pitch table only</span><b>75%: 5000 rpm • 68 hp • 26 inHg</b></div>
           <div><span>Gear ratio</span><b>2.43 : 1</b></div>
         </div>
       </details>
