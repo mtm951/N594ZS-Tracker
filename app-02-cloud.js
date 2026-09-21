@@ -13,7 +13,10 @@ function cloudStatusLabel(text,kind=''){
 }
 
 function canCloudEdit(){return !cloudSession||!cloudWorkspaceId||cloudRole==='owner'||cloudRole==='editor'}
-function persistCloudCache(){try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(_e){}}
+function persistCloudCache(){
+  if(typeof persistBrowserData==='function'){Promise.resolve(persistBrowserData(db,{quiet:true})).catch(e=>console.warn('Cloud cache persistence failed',e));return}
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(_e){}
+}
 function markCloudSynced(){cloudDirty=false;cloudLastSyncedAt=new Date();cloudStatusLabel('Synced')}
 
 async function writeCloudState(){
