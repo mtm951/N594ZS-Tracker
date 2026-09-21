@@ -101,18 +101,20 @@
     openModal(`${modalHeader('Use Reserved Part',p.title)}<div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>Reserved: ${esc(item.qty)} ${esc(item.unit||part.unit||'ea')} • Calculated on hand: ${on===null?'—':esc(on+' '+(part.unit||'ea'))}</div><div class="form-grid">${field('Date','urDate',today(),'date')}${field('Quantity used','urQty',item.qty,'number','step="any" min="0.000001"')}${textareaField('Work performed','urWork',`Used ${part.name} on ${p.title}`)}${textareaField('Measurements / notes','urNotes',item.notes||'')}</div><div class="modal-actions"><button class="btn secondary" onclick="openProjectDetail(${p.id})">Cancel</button><button class="btn success" onclick="saveReservedPartUse(${p.id},${JSON.stringify(item.id)})">Record Use</button></div>`);
   };
 
-  function addProjectUseRecord(project,part,qty,unit,unitCost,notes,logId){
+  function addProjectUseRecord(project,part,qty,unit,unitCost,notes,logId,consumedItemId,projectPartId){
     project.partsUsed=arr(project.partsUsed);
-    project.partsUsed.push({id:uid(),partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:unitCost,notes:(notes?notes+' • ':'')+'Recorded from reservation use'+(logId?` • work log ${logId}`:'')});
+    const id=projectPartId||uid();
+    project.partsUsed.push({id:id,partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:unitCost,notes:(notes?notes+' • ':'')+'Recorded as physical inventory use'+(logId?` • work log ${logId}`:''),logId:logId||null,consumedItemId:consumedItemId||null,consumptionRecorded:!!logId});
+    return id;
   }
 
   window.saveReservedPartUse=function(projectId,itemId){
     var project=projectById(Number(projectId));if(!project)return;var item=arr(project.plannedParts).find(function(x){return String(x.id)===String(itemId)});if(!item)return;var part=partById(Number(item.partId));if(!part)return;
     var qty=Number(val('urQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity used.');if(qty>num(item.qty)+1e-9)return alert('Quantity used cannot exceed the reserved quantity.');
     var on=partAvailable(part);if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the part quantity negative. Record it anyway?'))return;
-    var logId=uid(),unit=item.unit||part.unit||'ea',notes=val('urNotes')||'';
-    db.logs.push({id:logId,date:val('urDate')||today(),airframeHours:'',engineHours:'',laborHours:'',system:project.system||part.system||'General',projectIds:[project.id],work:val('urWork')||`Used ${part.name}`,observations:notes,blockers:'',nextStep:'',consumedParts:[{id:uid(),partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:part.unitCost,notes:'Consumed from project reservation'}],otherCost:'',notes:'Created by Reserve → Use workflow.'});
-    addProjectUseRecord(project,part,qty,unit,part.unitCost,notes,logId);
+    var logId=uid(),consumedItemId=uid(),projectPartId=uid(),unit=item.unit||part.unit||'ea',notes=val('urNotes')||'';
+    db.logs.push({id:logId,date:val('urDate')||today(),airframeHours:'',engineHours:'',laborHours:'',system:project.system||part.system||'General',projectIds:[project.id],work:val('urWork')||`Used ${part.name}`,observations:notes,blockers:'',nextStep:'',consumedParts:[{id:consumedItemId,partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:part.unitCost,notes:'Consumed from project reservation',projectPartId:projectPartId}],otherCost:'',notes:'Created by Reserve → Use workflow.',origin:'reserved-part-use'});
+    addProjectUseRecord(project,part,qty,unit,part.unitCost,notes,logId,consumedItemId,projectPartId);
     item.qty=Math.max(0,num(item.qty)-qty);if(item.qty<=1e-9)project.plannedParts=arr(project.plannedParts).filter(function(x){return String(x.id)!==String(itemId)});
     if(!arr(part.linkedProjectIds).includes(project.id))part.linkedProjectIds.push(project.id);
     saveDB('Reserved part used and inventory consumption recorded.');openLogDetail(logId);
@@ -189,9 +191,9 @@
   window.saveQuickPartUse=function(){
     var partId=quickPartPickerId(),part=partId?partById(Number(partId)):null;if(!part)return alert('Choose an inventory part.');var qty=Number(val('qpuQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity.');
     var projectId=selectedNumber('qpuProject'),project=projectId?projectById(projectId):null,on=partAvailable(part);if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
-    var logId=uid(),unit=part.unit||'ea',work=val('qpuWork')||`Used ${part.name}${project?' on '+project.title:''}`,notes=val('qpuNotes')||'';
-    db.logs.push({id:logId,date:val('qpuDate')||today(),airframeHours:'',engineHours:'',laborHours:'',system:project?.system||part.system||'General',projectIds:project?[project.id]:[],work:work,observations:notes,blockers:'',nextStep:'',consumedParts:[{id:uid(),partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:part.unitCost,notes:'Quick Add physical consumption'}],otherCost:'',notes:'Created by Quick Add 2.0.'});
-    if(project){addProjectUseRecord(project,part,qty,unit,part.unitCost,notes,logId);if(!arr(part.linkedProjectIds).includes(project.id))part.linkedProjectIds.push(project.id);var reserved=arr(project.plannedParts).find(function(x){return Number(x.partId)===Number(part.id)});if(reserved){reserved.qty=Math.max(0,num(reserved.qty)-qty);if(reserved.qty<=1e-9)project.plannedParts=arr(project.plannedParts).filter(function(x){return String(x.id)!==String(reserved.id)})}}
+    var logId=uid(),consumedItemId=uid(),projectPartId=project?uid():null,unit=part.unit||'ea',work=val('qpuWork')||`Used ${part.name}${project?' on '+project.title:''}`,notes=val('qpuNotes')||'';
+    db.logs.push({id:logId,date:val('qpuDate')||today(),airframeHours:'',engineHours:'',laborHours:'',system:project?.system||part.system||'General',projectIds:project?[project.id]:[],work:work,observations:notes,blockers:'',nextStep:'',consumedParts:[{id:consumedItemId,partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:part.unitCost,notes:'Quick Add physical consumption',projectPartId:projectPartId}],otherCost:'',notes:'Created by Quick Add 2.0.',origin:'quick-part-use'});
+    if(project){addProjectUseRecord(project,part,qty,unit,part.unitCost,notes,logId,consumedItemId,projectPartId);if(!arr(part.linkedProjectIds).includes(project.id))part.linkedProjectIds.push(project.id);var reserved=arr(project.plannedParts).find(function(x){return Number(x.partId)===Number(part.id)});if(reserved){reserved.qty=Math.max(0,num(reserved.qty)-qty);if(reserved.qty<=1e-9)project.plannedParts=arr(project.plannedParts).filter(function(x){return String(x.id)!==String(reserved.id)})}}
     saveDB('Part use recorded.');openLogDetail(logId);
   };
 
