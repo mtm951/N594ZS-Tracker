@@ -73,7 +73,9 @@ function injectProjectReservations(projectId){
   const first=left.querySelector('.detail-card');if(first)first.insertAdjacentHTML('afterend',plannedPartsHTML(projectId));else left.insertAdjacentHTML('afterbegin',plannedPartsHTML(projectId));
 }
 const smartOpenProjectDetailBase=openProjectDetail;
-openProjectDetail=function(id){smartOpenProjectDetailBase(id);injectProjectReservations(Number(id))};
+// Project part presentation is owned by app-42's unified Project Parts workspace.
+// Reservation data/functions remain here, but this layer no longer injects a separate card.
+openProjectDetail=function(id){smartOpenProjectDetailBase(id)};
 
 function openReservePartModal(projectId){
   const p=projectById(projectId);if(!p)return;
