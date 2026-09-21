@@ -53,13 +53,28 @@
     try{if(typeof window.injectRotaxLineCard==='function')window.injectRotaxLineCard()}catch(e){console.warn('Rotax line-maintenance post-render failed',e)}
   }
 
+  function runDataInitializers(){
+    try{if(typeof window.ensureRotaxInstallPack==='function')window.ensureRotaxInstallPack()}catch(e){console.warn('Rotax install init failed',e)}
+    try{if(typeof window.ensureRotaxOperatorPack==='function')window.ensureRotaxOperatorPack()}catch(e){console.warn('Rotax operator init failed',e)}
+    try{if(typeof window.ensureRotaxLineProgram==='function')window.ensureRotaxLineProgram(false)}catch(e){console.warn('Rotax line init failed',e)}
+    try{if(typeof window.ensureKitfoxPohPack==='function')window.ensureKitfoxPohPack()}catch(e){console.warn('Kitfox POH init failed',e)}
+  }
+  window.runTrackerDataInitializers=runDataInitializers;
+
   function scheduleDataInitializers(){
     clearTimeout(initTimer);
     initTimer=setTimeout(()=>{
-      try{if(typeof window.ensureRotaxInstallPack==='function')window.ensureRotaxInstallPack()}catch(e){console.warn('Rotax install init failed',e)}
-      try{if(typeof window.ensureRotaxOperatorPack==='function')window.ensureRotaxOperatorPack()}catch(e){console.warn('Rotax operator init failed',e)}
-      try{if(typeof window.ensureRotaxLineProgram==='function')window.ensureRotaxLineProgram(false)}catch(e){console.warn('Rotax line init failed',e)}
-      try{if(typeof window.ensureKitfoxPohPack==='function')window.ensureKitfoxPohPack()}catch(e){console.warn('Kitfox POH init failed',e)}
+      // During startup, wait for cloud initialization to finish so source packs are
+      // seeded into the canonical cloud-loaded DB rather than a temporary local copy.
+      if(typeof initCloud==='function'&&window.__n594zsCloudBootComplete!==true)return;
+      // Realtime/cloud reloads call renderAll while cloudLoading is still true.
+      // Retry once the load releases instead of dropping a source-pack save.
+      if(typeof cloudLoading!=='undefined'&&cloudLoading){
+        clearTimeout(initTimer);
+        initTimer=setTimeout(scheduleDataInitializers,100);
+        return;
+      }
+      runDataInitializers();
     },25);
   }
 
