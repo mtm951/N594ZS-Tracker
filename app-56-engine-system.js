@@ -182,6 +182,8 @@
     hero.insertAdjacentHTML('afterend',enginePanelHTML());
   }
 
+  window.injectEngineSystemPanel=injectEnginePanel;
+
   const openSystemDashboardEngineBase=window.openSystemDashboard;
   window.openSystemDashboard=function(n){openSystemDashboardEngineBase(n);injectEnginePanel()};
 
