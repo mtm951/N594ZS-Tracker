@@ -120,9 +120,11 @@
 
   let lastOperatorPackDb=null;
   function persistOperatorPack(){
-    try{localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(_e){}
+    try{
+      if(typeof persistBrowserData==='function')Promise.resolve(persistBrowserData(db,{quiet:true})).catch(()=>{});
+      else localStorage.setItem(DB_KEY,JSON.stringify(db));
+    }catch(_e){}
     try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
-    [700,1800,4000].forEach(ms=>setTimeout(()=>{try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}},ms));
   }
   function ensureReferences(){
     db.settings=db.settings||{};
@@ -137,25 +139,23 @@
     if(db.docs.length!==beforeDocs)changed=true;
     const eqId=engineEquipmentId();
 
-    // Migrate already-seeded records after the user confirmed this is the current ROTAX reference.
+    // Once seeded, reference/spec/document/flight-card content is user-owned.
+    // Backfill only missing source metadata; never rewrite user prose or test targets.
     for(const r of refs){
       const s=db.specs.find(x=>String(x.id)===r.id);
       if(!s)continue;
-      if(s.status!=='Current Manufacturer Reference'){s.status='Current Manufacturer Reference';changed=true}
-      const refreshed=noteFor(r);
-      if(s.notes!==refreshed){s.notes=refreshed;changed=true}
-    }
-    if(doc){
-      const currentDocNote='OM-912 / P/N 899649. User-confirmed current ROTAX manufacturer reference for N594ZS. Effective pages include Rev. 1 dated April 01 2013. Aircraft-specific operating instructions remain governed by the applicable N594ZS/Kitfox documentation.';
-      if(doc.notes!==currentDocNote){doc.notes=currentDocNote;changed=true}
-    }
-    for(const f of A(db.flightCards)){
-      for(const x of A(f.items)){
-        const old=String(x.target||'');
-        const updated=stripOperatorRefs(old).replace(/\s*— VERIFY CURRENT APPLICABILITY/g,'').trim();
-        if(updated!==old){x.target=updated;changed=true}
+      const metadata={
+        status:'Current Manufacturer Reference',
+        source:SOURCE,
+        sourceRevision:`${DOCREF} • ${REV} • p.${r.page}`,
+        documentId:doc?.id||null
+      };
+      for(const [k,v] of Object.entries(metadata)){
+        if((s[k]===undefined||s[k]===null||s[k]==='')&&v!==null){s[k]=v;changed=true}
       }
+      if(s.rotaxSourceManaged!==true){s.rotaxSourceManaged=true;changed=true}
     }
+    if(doc&&doc.rotaxSourceManaged!==true){doc.rotaxSourceManaged=true;changed=true}
 
     if(!db.settings.rotaxOperatorManualEd3Seeded){
       for(const r of refs){
@@ -164,7 +164,7 @@
           id:r.id,title:r.title,system:r.system,value:r.value,units:r.units,
           status:'Current Manufacturer Reference',source:SOURCE,
           sourceRevision:`${DOCREF} • ${REV} • p.${r.page}`,
-          sourceUrl:'',documentId:doc.id,equipmentId:eqId,notes:noteFor(r)
+          sourceUrl:'',documentId:doc.id,equipmentId:eqId,notes:noteFor(r),rotaxSourceManaged:true
         });
         changed=true;
       }
@@ -198,8 +198,6 @@
       db.settings.rotaxOperatorManualEd3Seeded=true;
       changed=true;
     }
-
-    changed=annotateStarterCards()||changed;
 
     if(changed)persistOperatorPack();
     return changed;
