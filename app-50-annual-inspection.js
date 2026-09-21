@@ -204,16 +204,8 @@
     return reopenBase?reopenBase(type,id):undefined;
   };
 
-  const renderChecklistsBase=window.renderChecklists;
-  window.renderChecklists=function(){
-    renderChecklistsBase();
-    const c=checklistById(annualId),page=document.getElementById('page-checklists');if(!c||!page)return;
-    const cards=[...page.querySelectorAll('.checklist')],card=cards.find(x=>x.querySelector('.check-head b')?.textContent?.trim()===c.name);
-    if(card&&!card.querySelector('[data-annual-source-badge]')){
-      const note=card.querySelector('.task-note');
-      note?.insertAdjacentHTML('afterend','<div class="task-meta" data-annual-source-badge><span class="mini-badge">POH '+E(c.sourcePages)+'</span><span class="mini-badge">'+A(c.groupOrder).length+' groups</span><span class="mini-badge">click items for history & notes</span></div>');
-    }
-  };
+  // Checklist-list rendering is owned by the canonical checklist engine.
+
 
   if(!document.getElementById('annualInspectionStyle')){
     const s=document.createElement('style');s.id='annualInspectionStyle';
