@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION='5.15.4';
+const APP_VERSION='5.15.5';
 const DB_KEY='n594zs_v3';
 const OLD_DB_KEY='n594zs_v2';
 const NAV=[
