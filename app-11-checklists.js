@@ -41,8 +41,9 @@ function renderChecklistRows(){
   box.innerHTML=rows.map(c=>{
     const items=Array.isArray(c.items)?c.items:[];
     const done=items.filter(i=>i.done).length,pct=items.length?Math.round(done/items.length*100):0;
+    const inspectionMeta=c.inspectionMode?`<div class="task-meta"><span class="mini-badge">${esc(c.sourcePages?'POH '+c.sourcePages:'Source-backed')}</span>${Array.isArray(c.groupOrder)&&c.groupOrder.length?`<span class="mini-badge">${c.groupOrder.length} groups</span>`:''}<span class="mini-badge">click items for history & notes</span></div>`:'';
     return `<div class="checklist click-row" role="button" tabindex="0" data-checklist-id="${esc(String(c.id))}">
-      <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(checklistSystemName(c)||'Unassigned')} • ${esc(c.trigger||c.purpose)}</div></div>
+      <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(checklistSystemName(c)||'Unassigned')} • ${esc(c.trigger||c.purpose)}</div>${inspectionMeta}</div>
       <div style="min-width:150px"><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted right">${pct}%</div></div></div>
     </div>`;
   }).join('')||'<div class="empty">No matching checklists.</div>';
