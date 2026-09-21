@@ -87,8 +87,9 @@
     if(doc){
       if(!doc.revision){doc.revision='Edition 3 / Rev. 0';changed=true}
       if(!doc.issueDate){doc.issueDate='2021-01-01';changed=true}
-      if(!/IM-912/.test(doc.notes||'')){
-        doc.notes=[doc.notes,'Uploaded source: IM-912 / P/N 898644, Edition 3 / Rev. 0, January 01 2021. ROTAX states the Installation Manual is a general installation guide and should be used with the airframe manufacturer instructions and current applicable ROTAX documentation.'].filter(Boolean).join(' ');
+      if(!doc.rotaxSourceManaged){doc.rotaxSourceManaged=true;changed=true}
+      if(!doc.sourceNotes){
+        doc.sourceNotes='IM-912 / P/N 898644, Edition 3 / Rev. 0, January 01 2021. ROTAX states the Installation Manual is a general installation guide and should be used with the airframe manufacturer instructions and current applicable ROTAX documentation.';
         changed=true;
       }
     }
