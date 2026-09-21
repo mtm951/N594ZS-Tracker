@@ -16,6 +16,8 @@ normalizeDB=function(){
     x.title=x.title||'Maintenance item';x.system=x.system||'General';x.basis=x.basis||'date';x.meter=x.meter||'engine';
     x.intervalDays=x.intervalDays??'';x.intervalHours=x.intervalHours??'';x.lastDate=x.lastDate||'';x.lastHours=x.lastHours??'';
     x.nextDate=x.nextDate||'';x.nextHours=x.nextHours??'';x.notes=x.notes||'';
+    x.procedureItems=arr(x.procedureItems).map(i=>({...i,id:String(i.id||crypto.randomUUID()),text:i.text||'Checklist item',done:!!i.done,note:i.note||'',sourceManaged:!!i.sourceManaged}));
+    x.linkedChecklistSourceKey=x.linkedChecklistSourceKey||'';x.procedureSource=x.procedureSource||'';x.procedureSourceKey=x.procedureSourceKey||'';x.sourceDocumentId=x.sourceDocumentId||null;
   });
 };
 normalizeDB();
@@ -56,7 +58,63 @@ function renderMaintenanceRows(){
     trackerRecordMatchesSystem(m,sys,'maintenance')&&
     (!dueFilter||maintenanceDueInfo(m).status===dueFilter)
   ).sort((a,b)=>({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(a).status]??9)-({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(b).status]??9));
-  box.innerHTML=rows.map(m=>{const d=maintenanceDueInfo(m);return `<tr class="click-row" onclick="openMaintenanceModal(${m.id})"><td><b>${esc(m.title)}</b><div class="task-note">${esc(m.notes||m.sourceNotes||'')}</div></td><td>${esc(m.system||'—')}</td><td>${esc(m.basis==='both'?'Date + hours':m.basis||'—')}</td><td>${esc(d.reason||'Not set')}</td><td>${pill(d.status)}</td><td><button class="icon-btn" onclick="event.stopPropagation();openMaintenanceModal(${m.id})">Edit</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No matching maintenance items.</td></tr>';
+  box.innerHTML=rows.map(m=>{const d=maintenanceDueInfo(m),linked=m.linkedChecklistSourceKey?db.checklists.find(c=>c.sourceKey===m.linkedChecklistSourceKey):null,items=linked?arr(linked.items):arr(m.procedureItems),done=items.filter(i=>i.done).length,checkMeta=items.length?`<span class="mini-badge">${done}/${items.length} checklist</span>`:'';return `<tr class="click-row" onclick="openMaintenanceDetail(${m.id})"><td><b>${esc(m.title)}</b><div class="task-note">${esc(m.notes||m.sourceNotes||'')}</div>${checkMeta?`<div class="task-meta">${checkMeta}</div>`:''}</td><td>${esc(m.system||'—')}</td><td>${esc(m.basis==='both'?'Date + hours':m.basis||'—')}</td><td>${esc(d.reason||'Not set')}</td><td>${pill(d.status)}</td><td><button class="icon-btn" onclick="event.stopPropagation();openMaintenanceModal(${m.id})">Edit</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No matching maintenance items.</td></tr>';
+}
+
+function maintenanceProcedureProgress(m){
+  const linked=m?.linkedChecklistSourceKey?db.checklists.find(c=>c.sourceKey===m.linkedChecklistSourceKey):null;
+  const items=linked?arr(linked.items):arr(m?.procedureItems);
+  const done=items.filter(i=>i.done).length;
+  return {linked,items,done,pct:items.length?Math.round(done/items.length*100):0};
+}
+function openMaintenanceDetail(id){
+  const m=db.maintenance.find(x=>String(x.id)===String(id));if(!m)return;
+  const d=maintenanceDueInfo(m),p=maintenanceProcedureProgress(m),doc=m.sourceDocumentId?docById(Number(m.sourceDocumentId)):null;
+  currentDetail={type:'maintenance',id:m.id};
+  const sourceText=m.procedureSource||m.sourceNotes||'';
+  const checklist=p.linked
+    ?`<div class="detail-card"><div class="section-tools"><div><h3>Procedure Checklist</h3><div class="muted tiny">${esc(p.linked.name)} • ${p.done}/${p.items.length} complete</div></div><button class="primary" onclick="openChecklistDetail('${esc(String(p.linked.id))}')">Open Full Checklist</button></div><div class="progress" style="margin-top:10px"><div style="width:${p.pct}%"></div></div><div class="maintenance-procedure-preview">${p.items.slice(0,6).map(i=>`<div class="${i.done?'done':''}"><span>${i.done?'✓':'○'}</span><span>${esc(i.text)}</span></div>`).join('')}${p.items.length>6?`<div class="muted tiny">+${p.items.length-6} more items in the full checklist</div>`:''}</div></div>`
+    :p.items.length
+      ?`<div class="detail-card"><div class="section-tools"><div><h3>Procedure Checklist</h3><div class="muted tiny">${p.done}/${p.items.length} complete • source-backed high-level work list</div></div>${p.done?'<button class="secondary" onclick="resetMaintenanceProcedure('+m.id+')">Reset</button>':''}</div><div class="progress" style="margin:10px 0 12px"><div style="width:${p.pct}%"></div></div><div class="maintenance-procedure-list">${p.items.map(i=>`<div class="maintenance-procedure-item ${i.done?'done':''}"><label><input type="checkbox" ${i.done?'checked':''} onchange="toggleMaintenanceProcedureItem(${m.id},'${esc(String(i.id))}',this.checked)"><span>${esc(i.text)}</span></label><button class="linkbtn" onclick="openMaintenanceProcedureNote(${m.id},'${esc(String(i.id))}')">${i.note?'Note ✓':'Note'}</button>${i.note?`<div class="maintenance-procedure-note">${esc(i.note)}</div>`:''}</div>`).join('')}</div></div>`
+      :`<div class="detail-card"><h3>Procedure Checklist</h3><div class="empty">No procedure checklist is attached to this maintenance item yet.</div></div>`;
+  openModal(`${modalHeader(m.title,m.system+' • '+d.status)}
+    <div class="summary-strip">
+      <div class="summary-cell"><div class="lab">Status</div><div class="val">${pill(d.status)}</div></div>
+      <div class="summary-cell"><div class="lab">Basis</div><div class="val">${esc(m.basis==='both'?'Date + hours':m.basis||'—')}</div></div>
+      <div class="summary-cell"><div class="lab">Next due</div><div class="val maintenance-small-val">${esc(d.reason||'Not set')}</div></div>
+      <div class="summary-cell"><div class="lab">Checklist</div><div class="val">${p.items.length?(p.done+'/'+p.items.length):'—'}</div></div>
+    </div>
+    <div class="notice"><b>Maintenance aid:</b> This checklist summarizes source tasks for organization. Use the current applicable ROTAX manual / SI / SB and aircraft instructions for the actual procedure, torque values, limits and return-to-service requirements.</div>
+    ${checklist}
+    <div class="detail-card"><div class="section-tools"><h3>Source / Scheduling</h3>${doc?`<button class="secondary" onclick="openDocumentDetail(${doc.id})">Open Manual Record</button>`:''}</div>
+      <div class="kv"><span>Manufacturer source</span><b>${esc(sourceText||'Not linked')}</b></div>
+      <div class="kv"><span>Last completed</span><b>${esc([m.lastDate,m.lastHours!==''?(m.lastHours+' hr'):''].filter(Boolean).join(' • ')||'Not recorded')}</b></div>
+      <div class="kv"><span>Next due override</span><b>${esc([m.nextDate,m.nextHours!==''?(m.nextHours+' hr'):''].filter(Boolean).join(' • ')||'None')}</b></div>
+    </div>
+    <div class="modal-actions"><button class="secondary" onclick="openMaintenanceModal(${m.id})">Edit Schedule</button>${m.engineServiceItemId&&typeof openEngineServiceComplete==='function'?`<button class="primary" onclick="recordMaintenanceService(${m.id})">Record Service</button>`:''}<button class="secondary" onclick="closeModal()">Close</button></div>`,true);
+}
+function toggleMaintenanceProcedureItem(mid,pid,done){
+  const m=db.maintenance.find(x=>String(x.id)===String(mid)),i=arr(m?.procedureItems).find(x=>String(x.id)===String(pid));if(!m||!i)return;
+  i.done=!!done;i.completedAt=i.done?new Date().toISOString():'';
+  saveDB();openMaintenanceDetail(mid);
+}
+function openMaintenanceProcedureNote(mid,pid){
+  const m=db.maintenance.find(x=>String(x.id)===String(mid)),i=arr(m?.procedureItems).find(x=>String(x.id)===String(pid));if(!m||!i)return;
+  openModal(`${modalHeader('Checklist Note',m.title)}<div class="detail-card"><div class="detail-text">${esc(i.text)}</div></div>${textareaField('Notes / findings','mntProcNote',i.note||'')}<div class="modal-actions"><button class="secondary" onclick="openMaintenanceDetail(${m.id})">Cancel</button><button class="primary" onclick="saveMaintenanceProcedureNote(${m.id},'${esc(String(i.id))}')">Save Note</button></div>`,true);
+}
+function saveMaintenanceProcedureNote(mid,pid){
+  const m=db.maintenance.find(x=>String(x.id)===String(mid)),i=arr(m?.procedureItems).find(x=>String(x.id)===String(pid));if(!m||!i)return;
+  i.note=val('mntProcNote');saveDB('Checklist note saved.');openMaintenanceDetail(mid);
+}
+function resetMaintenanceProcedure(id){
+  const m=db.maintenance.find(x=>String(x.id)===String(id));if(!m||!confirm('Reset all checklist checkmarks and notes for this maintenance item?'))return;
+  arr(m.procedureItems).forEach(i=>{i.done=false;i.note='';i.completedAt=''});saveDB('Maintenance checklist reset.');openMaintenanceDetail(id);
+}
+function recordMaintenanceService(id){
+  const m=db.maintenance.find(x=>String(x.id)===String(id));if(!m||!m.engineServiceItemId||typeof openEngineServiceComplete!=='function')return;
+  const p=maintenanceProcedureProgress(m),remaining=p.items.length-p.done;
+  if(remaining>0&&!confirm(remaining+' checklist item'+(remaining===1?'':'s')+' remain incomplete. Record the service anyway?'))return;
+  openEngineServiceComplete(m.engineServiceItemId);
 }
 
 function openMaintenanceModal(id=null){
@@ -77,6 +135,9 @@ function saveMaintenance(id){
   const i=db.maintenance.findIndex(x=>String(x.id)===String(id));if(i>=0)db.maintenance[i]=obj;else db.maintenance.push(obj);closeModal();saveDB('Maintenance item saved.');
 }
 function deleteMaintenance(id){if(!confirm('Move this maintenance item to Trash?'))return;db.maintenance=db.maintenance.filter(x=>String(x.id)!==String(id));closeModal();saveDB('Maintenance item moved to Trash.')}
+(()=>{if(document.getElementById('maintenanceChecklistStyle'))return;const s=document.createElement('style');s.id='maintenanceChecklistStyle';s.textContent=`
+.maintenance-procedure-list{display:grid;gap:8px}.maintenance-procedure-item{border:1px solid var(--line);border-radius:9px;padding:10px;background:#fff}.maintenance-procedure-item>label{display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:13px;line-height:1.35}.maintenance-procedure-item input{width:auto;margin-top:2px}.maintenance-procedure-item.done>label span{text-decoration:line-through;opacity:.65}.maintenance-procedure-item>.linkbtn{margin-top:7px}.maintenance-procedure-note{margin:7px 0 0 25px;padding:7px 9px;border-radius:7px;background:#f7f9fb;font-size:12px;white-space:pre-wrap}.maintenance-procedure-preview{display:grid;gap:7px;margin-top:12px}.maintenance-procedure-preview>div{display:grid;grid-template-columns:18px 1fr;gap:7px;font-size:12px;line-height:1.35}.maintenance-procedure-preview>div.done{opacity:.65}.maintenance-small-val{font-size:13px!important;line-height:1.25}
+`;document.head.appendChild(s)})();
 
 // ---------- SHARED FILE LIBRARY ----------
 let filePreviewUrls=[];
