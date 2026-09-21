@@ -317,11 +317,7 @@
   window.ensureRotaxOperatorPack=ensureReferences;
   window.injectRotaxOperatorCard=injectOperatorCard;
 
-  const oldOpenSystem=window.openSystemDashboard;
-  window.openSystemDashboard=function(n){oldOpenSystem(n);ensureReferences();injectOperatorCard()};
-
-  const oldRenderAll=renderAll;
-  renderAll=function(){ensureReferences();oldRenderAll();injectOperatorCard()};
+  // Engine-card injection and source initialization are coordinated by app-61-performance.
 
   const style=document.createElement('style');
   style.id='rotaxOperatorReferenceStyle';
