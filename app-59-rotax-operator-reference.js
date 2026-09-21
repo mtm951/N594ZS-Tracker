@@ -152,9 +152,7 @@
     for(const f of A(db.flightCards).filter(x=>x.starter912)){
       for(const x of A(f.items)){
         const old=String(x.target||'');
-        const updated=old
-          .replace(/Uploaded OM-912 reference:/g,'Current OM-912 manufacturer reference:')
-          .replace(/\s*— VERIFY CURRENT APPLICABILITY/g,'');
+        const updated=stripOperatorRefs(old).replace(/\s*— VERIFY CURRENT APPLICABILITY/g,'').trim();
         if(updated!==old){x.target=updated;changed=true}
       }
     }
@@ -207,12 +205,23 @@
     return changed;
   }
 
+  function stripOperatorRefs(value){
+    return String(value||'')
+      .replace(/\s*•\s*(?:Uploaded OM-912 reference:|Current OM-912 manufacturer reference:)[^•]*(?=\s*•|$)/g,'')
+      .replace(/(?:Uploaded OM-912 reference:|Current OM-912 manufacturer reference:)[^•]*(?=\s*•|$)/g,'')
+      .replace(/\s{2,}/g,' ')
+      .replace(/\s*•\s*•\s*/g,' • ')
+      .replace(/^\s*•\s*|\s*•\s*$/g,'')
+      .trim();
+  }
   function targetAdd(x,ref){
     if(!x||!ref)return false;
-    const t=String(x.target||'');
-    if(!t.includes('Current applicable Rotax 912 ULS documentation'))return false;
-    if(t.includes('Uploaded OM-912 reference:'))return false;
-    x.target=t+` • Current OM-912 manufacturer reference: ${ref}`;
+    const original=String(x.target||'');
+    if(!original.includes('Current applicable Rotax 912 ULS documentation'))return false;
+    const clean=stripOperatorRefs(original);
+    const desired=clean+` • Current OM-912 manufacturer reference: ${ref}`;
+    if(original===desired)return false;
+    x.target=desired;
     return true;
   }
   function annotateStarterCards(){
