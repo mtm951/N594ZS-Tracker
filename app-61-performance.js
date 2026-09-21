@@ -58,6 +58,7 @@
     try{if(typeof window.ensureRotaxOperatorPack==='function')window.ensureRotaxOperatorPack()}catch(e){console.warn('Rotax operator init failed',e)}
     try{if(typeof window.ensureRotaxLineProgram==='function')window.ensureRotaxLineProgram(false)}catch(e){console.warn('Rotax line init failed',e)}
     try{if(typeof window.ensureKitfoxPohPack==='function')window.ensureKitfoxPohPack()}catch(e){console.warn('Kitfox POH init failed',e)}
+    try{if(typeof window.reconcileTrackerRecordLinks==='function')window.reconcileTrackerRecordLinks({persist:true})}catch(e){console.warn('Record link reconciliation failed',e)}
   }
   window.runTrackerDataInitializers=runDataInitializers;
 
