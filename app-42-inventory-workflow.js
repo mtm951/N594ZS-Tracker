@@ -8,6 +8,8 @@
 
   var style=document.createElement('style');
   style.textContent=`
+    .assigned-part-row{grid-template-columns:minmax(0,1fr) auto auto!important}
+    .assigned-use-btn{align-self:center;white-space:nowrap;padding:7px 11px}
     .inv-adjust-row{display:grid;grid-template-columns:86px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1f4;font-size:12px}
     .inv-adjust-row:last-child{border-bottom:0}.inv-adjust-pos{color:#21754a}.inv-adjust-neg{color:#984039}.inv-adjust-delta{font-weight:900;white-space:nowrap}.inv-ledger-note{margin-top:8px;padding:8px 10px;border-radius:7px;background:#f8fbfd;border:1px solid #e1e9ef}
     .reservation-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.quick-use-list{display:grid;gap:8px;margin-top:10px}.quick-use-item{width:100%;text-align:left;border:1px solid #d7e2e9;border-radius:9px;background:#fff;padding:11px;cursor:pointer;color:#17324c}.quick-use-item:hover{background:#f6fafc}.quick-use-item b{display:block}.quick-use-item small{display:block;color:#6e7f8e;margin-top:4px}.quick-use-qty{float:right;font-weight:900;color:#865b11}
@@ -111,6 +113,7 @@
   window.saveReservedPartUse=function(projectId,itemId){
     var project=projectById(Number(projectId));if(!project)return;var item=arr(project.plannedParts).find(function(x){return String(x.id)===String(itemId)});if(!item)return;var part=partById(Number(item.partId));if(!part)return;
     var qty=Number(val('urQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity used.');if(qty>num(item.qty)+1e-9)return alert('Quantity used cannot exceed the reserved quantity.');
+    if(typeof window.preparePartForPhysicalUse==='function')window.preparePartForPhysicalUse(part,qty);
     var on=partAvailable(part);if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the part quantity negative. Record it anyway?'))return;
     var logId=uid(),consumedItemId=uid(),projectPartId=uid(),unit=item.unit||part.unit||'ea',notes=val('urNotes')||'';
     db.logs.push({id:logId,date:val('urDate')||today(),airframeHours:'',engineHours:'',laborHours:'',system:project.system||part.system||'General',projectIds:[project.id],work:val('urWork')||`Used ${part.name}`,observations:notes,blockers:'',nextStep:'',consumedParts:[{id:consumedItemId,partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:part.unitCost,notes:'Consumed from project reservation',projectPartId:projectPartId}],otherCost:'',notes:'Created by Reserve → Use workflow.',origin:'reserved-part-use'});
@@ -128,22 +131,105 @@
       .sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''),undefined,{numeric:true,sensitivity:'base'})});
   }
 
+  function installedPurchaseSourcesForPart(part){
+    var explicit=arr(db.purchases).filter(function(p){
+      return p.disposition==='Installed'&&(
+        String(p.inventoryPartId||'')===String(part.id)||
+        arr(part.purchaseIds).map(String).includes(String(p.id))
+      );
+    });
+    if(explicit.length)return explicit;
+    if(part.partNo){
+      var pn=String(part.partNo).toLowerCase();
+      var same=arr(db.purchases).filter(function(p){return p.disposition==='Installed'&&p.pn&&String(p.pn).toLowerCase()===pn});
+      if(same.length===1)return same;
+    }
+    return [];
+  }
+
+  window.preparePartForPhysicalUse=function(part,qty){
+    if(!part||!Number.isFinite(Number(qty))||Number(qty)<=0)return {credited:0,sources:[]};
+    var need=Math.max(0,Number(qty)-Math.max(0,Number(partAvailable(part)??0)));
+    if(need<=0)return {credited:0,sources:[]};
+    var credited=0,sources=[];
+    installedPurchaseSourcesForPart(part).forEach(function(p){
+      if(credited>=need)return;
+      var materialized=num(p.inventoryReceiptMaterializedQty);
+      var availableCredit=Math.max(0,num(p.qty)-materialized);
+      if(availableCredit<=0)return;
+      var take=Math.min(availableCredit,need-credited);
+      if(take<=0)return;
+      part.stockQty=(part.stockQty===''?0:num(part.stockQty))+take;
+      p.inventoryReceiptMaterializedQty=materialized+take;
+      p.inventoryReceiptMaterialized=true;
+      p.inventoryApplied=true;
+      sources.push({purchaseId:p.id,qty:take,order:p.order||'',invoice:p.invoice||''});
+      credited+=take;
+    });
+    return {credited:credited,sources:sources};
+  };
+
+  function assignedUseDefaultQty(part){
+    var on=partAvailable(part);
+    if(on!==null&&on!==undefined&&num(on)>0)return Math.min(1,num(on));
+    var credit=installedPurchaseSourcesForPart(part).reduce(function(sum,p){
+      return sum+Math.max(0,num(p.qty)-num(p.inventoryReceiptMaterializedQty));
+    },0);
+    return credit>0?credit:1;
+  }
+
+  window.openAssignedPartUse=function(projectId,partId){
+    var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
+    var reserved=arr(project.plannedParts).find(function(x){return Number(x.partId)===Number(part.id)});
+    if(reserved&&typeof openUseReservedPartModal==='function')return openUseReservedPartModal(project.id,reserved.id);
+    var qty=assignedUseDefaultQty(part),on=partAvailable(part),sources=installedPurchaseSourcesForPart(part);
+    var installedSource=sources.length&&num(on)<=0;
+    openModal(`${modalHeader('Move Assigned Part to Used',project.title)}
+      <div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>Calculated on hand: ${on===null?'—':esc(on+' '+(part.unit||'ea'))}.${installedSource?' This part came from a purchase already marked Installed; recording use will preserve the purchase receipt as an inventory inflow and record the installation/use as the matching outflow, so on-hand does not go negative.':''}</div>
+      <div class="form-grid">
+        ${field('Date','apuDate',today(),'date')}
+        ${field('Quantity used','apuQty',qty,'number','step="any" min="0.000001"')}
+        ${textareaField('Work performed','apuWork',`Used ${part.name} on ${project.title}`)}
+        ${textareaField('Notes / measurement','apuNotes','')}
+      </div>
+      <div class="modal-actions"><button class="secondary" onclick="openProjectDetail(${project.id})">Cancel</button><button class="primary" onclick="saveAssignedPartUse(${project.id},${part.id})">Move to Parts Used</button></div>`,true);
+  };
+
+  window.saveAssignedPartUse=function(projectId,partId){
+    var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
+    var qty=Number(val('apuQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity used.');
+    var prep=window.preparePartForPhysicalUse(part,qty);
+    var on=partAvailable(part);
+    if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
+    var logId=uid(),consumedItemId=uid(),projectPartId=uid(),unit=part.unit||'ea',notes=val('apuNotes')||'';
+    db.logs.push({
+      id:logId,date:val('apuDate')||today(),airframeHours:'',engineHours:'',laborHours:'',system:project.system||part.system||'General',projectIds:[project.id],
+      work:val('apuWork')||`Used ${part.name} on ${project.title}`,observations:notes,blockers:'',nextStep:project.nextStep||'',
+      consumedParts:[{id:consumedItemId,partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:part.unitCost,notes:'Moved from Assigned Inventory Parts to Parts Used.',projectPartId:projectPartId}],
+      otherCost:'',notes:prep.credited?`Assigned → Used. ${prep.credited} ${unit} purchase receipt quantity materialized from installed purchase provenance.`:'Assigned → Used.',origin:'assigned-part-use'
+    });
+    addProjectUseRecord(project,part,qty,unit,part.unitCost,notes,logId,consumedItemId,projectPartId);
+    if(!arr(part.linkedProjectIds).includes(project.id))part.linkedProjectIds.push(project.id);
+    saveDB('Assigned part moved to Parts Used and inventory history updated.');
+    openProjectDetail(project.id);
+  };
+
   function projectAssignedPartsHTML(projectId){
     var project=projectById(Number(projectId));if(!project)return '';
-    var parts=projectLinkedInventoryParts(projectId);
+    var linked=projectLinkedInventoryParts(projectId);
+    var parts=linked.filter(function(part){return !arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)})});
     return `<div class="detail-card" id="projectAssignedInventoryCard">
-      <div class="section-tools"><div><h3>Assigned Inventory Parts</h3><div class="tiny muted">Parts linked to this project from inventory. Assignment is a relationship only; reservation and actual use remain separate.</div></div><span class="mini-badge">${parts.length}</span></div>
+      <div class="section-tools"><div><h3>Assigned Inventory Parts</h3><div class="tiny muted">Parts linked to this project but not yet recorded as used. Use moves the part into Parts Used and creates the physical inventory/work-history transaction.</div></div><span class="mini-badge">${parts.length}</span></div>
       ${parts.length?parts.map(function(part){
         var reserved=arr(project.plannedParts).some(function(x){return Number(x.partId)===Number(part.id)});
-        var used=arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)});
         var on=typeof partAvailable==='function'?partAvailable(part):part.stockQty;
         var free=typeof partFreeQty==='function'?partFreeQty(part):on;
-        var relation=used?'Used':reserved?'Reserved':'Assigned';
-        return `<div class="assigned-part-row click-row" onclick="openPartDetail(${part.id})">
-          <div><b>${esc(part.name||'Part')}</b><div class="task-note">${part.partNo?'PN '+esc(part.partNo)+' • ':''}${esc(part.system||'General')}${part.location?' • '+esc(part.location):''}</div></div>
-          <div class="assigned-part-stock"><span class="mini-badge">${esc(relation)}</span><small>On hand ${on===null||on===undefined?'—':esc(on+' '+(part.unit||'ea'))}${free!==null&&free!==undefined?' • Free '+esc(free+' '+(part.unit||'ea')):''}</small></div>
+        return `<div class="assigned-part-row">
+          <div class="click-row" onclick="openPartDetail(${part.id})"><b>${esc(part.name||'Part')}</b><div class="task-note">${part.partNo?'PN '+esc(part.partNo)+' • ':''}${esc(part.system||'General')}${part.location?' • '+esc(part.location):''}</div></div>
+          <div class="assigned-part-stock"><span class="mini-badge">${reserved?'Reserved':'Assigned'}</span><small>On hand ${on===null||on===undefined?'—':esc(on+' '+(part.unit||'ea'))}${free!==null&&free!==undefined?' • Free '+esc(free+' '+(part.unit||'ea')):''}</small></div>
+          <button class="btn success assigned-use-btn" onclick="event.stopPropagation();openAssignedPartUse(${project.id},${part.id})">${reserved?'Use Reserved':'Use'}</button>
         </div>`;
-      }).join(''):'<div class="empty">No inventory parts are assigned to this project yet.</div>'}
+      }).join(''):(linked.length?'<div class="empty">All assigned parts have been recorded in Parts Used.</div>':'<div class="empty">No inventory parts are assigned to this project yet.</div>')}
     </div>`;
   }
 
@@ -190,6 +276,7 @@
   function quickPartPickerId(){if(typeof partPickerId==='function')return partPickerId('qpu');return selectedNumber('qpuPartFallback')}
   window.saveQuickPartUse=function(){
     var partId=quickPartPickerId(),part=partId?partById(Number(partId)):null;if(!part)return alert('Choose an inventory part.');var qty=Number(val('qpuQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity.');
+    if(typeof window.preparePartForPhysicalUse==='function')window.preparePartForPhysicalUse(part,qty);
     var projectId=selectedNumber('qpuProject'),project=projectId?projectById(projectId):null,on=partAvailable(part);if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
     var logId=uid(),consumedItemId=uid(),projectPartId=project?uid():null,unit=part.unit||'ea',work=val('qpuWork')||`Used ${part.name}${project?' on '+project.title:''}`,notes=val('qpuNotes')||'';
     db.logs.push({id:logId,date:val('qpuDate')||today(),airframeHours:'',engineHours:'',laborHours:'',system:project?.system||part.system||'General',projectIds:project?[project.id]:[],work:work,observations:notes,blockers:'',nextStep:'',consumedParts:[{id:consumedItemId,partId:part.id,name:part.name,qty:qty,unit:unit,unitCost:part.unitCost,notes:'Quick Add physical consumption',projectPartId:projectPartId}],otherCost:'',notes:'Created by Quick Add 2.0.',origin:'quick-part-use'});
