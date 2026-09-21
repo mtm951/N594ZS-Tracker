@@ -164,7 +164,28 @@
     return {localChars:storageChars(),quota:estimate.quota||null,usage:estimate.usage||null,persistent:persistentStorageGranted,recoveryInIndexedDB:window.hasIndexedRecoveryPoint()};
   };
 
-  // Preserve an oversized legacy recovery point before clearing space even if
+  window.optimizeBrowserStorage=async function(showToast=true){
+    await freeLegacySpace();
+    await window.persistBrowserData(db,{quiet:true});
+    if(showToast){try{toast('Browser storage optimized and safety cache refreshed.','good')}catch(_e){}}
+    if(currentPage==='system'&&typeof renderSystem==='function')renderSystem();
+  };
+
+  const storageSystemBase=window.renderSystem;
+  if(typeof storageSystemBase==='function'){
+    window.renderSystem=async function(){
+      await storageSystemBase();
+      const page=document.getElementById('page-system'),grid=page?.querySelector('.grid');
+      if(!grid||document.getElementById('browserStorageHealthCard'))return;
+      const h=await window.getBrowserStorageHealth();
+      const used=h.usage!=null?formatBytes(h.usage):'—';
+      const quota=h.quota!=null?formatBytes(h.quota):'—';
+      const localApprox=formatBytes(Math.round((h.localChars||0)*2));
+      grid.insertAdjacentHTML('beforeend',`<div class="card span-12" id="browserStorageHealthCard"><div class="toolbar"><div><h2>Browser Storage</h2><div class="muted">Local cache health and recovery storage.</div></div><span class="mini-badge">${h.persistent===true?'persistent':'standard'}</span></div><div class="smart-status-strip"><div class="smart-status-card"><span>IndexedDB usage</span><b>${esc(used)}</b></div><div class="smart-status-card"><span>Browser quota</span><b>${esc(quota)}</b></div><div class="smart-status-card"><span>localStorage approx.</span><b>${esc(localApprox)}</b></div><div class="smart-status-card"><span>Recovery fallback</span><b>${h.recoveryInIndexedDB?'Ready':'Normal'}</b></div></div><div class="action-row"><button class="secondary" onclick="optimizeBrowserStorage()">Optimize Browser Storage</button></div><div class="tiny muted" style="margin-top:10px">Cloud data remains the shared source of truth. IndexedDB is the larger browser cache; localStorage is only a fast mirror when space permits.</div></div>`);
+    };
+  }
+
+    // Preserve an oversized legacy recovery point before clearing space even if
   // no save happens immediately after this release loads.
   freeLegacySpace().catch(()=>{});
   requestPersistentStorage().catch(()=>{});
