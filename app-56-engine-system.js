@@ -39,7 +39,7 @@
       manufacturer:src.manufacturer||'',
       notes:src.notes||'',
       sourceNotes:src.sourceNotes||'',
-      history:A(src.history).map(h=>({id:h.id||crypto.randomUUID(),date:h.date||'',hours:h.hours??'',action:h.action||'Service',notes:h.notes||''}))
+      history:A(src.history).map(h=>({...h,id:h.id||crypto.randomUUID(),date:h.date||'',hours:h.hours??'',action:h.action||'Service',notes:h.notes||''}))
     };
   }
   function blankBulletin(src={}){
