@@ -72,9 +72,11 @@
 
   let lastInstallPackDb=null;
   function persistRotaxInstallPack(){
-    try{localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(_e){}
+    try{
+      if(typeof persistBrowserData==='function')Promise.resolve(persistBrowserData(db,{quiet:true})).catch(()=>{});
+      else localStorage.setItem(DB_KEY,JSON.stringify(db));
+    }catch(_e){}
     try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
-    [700,1800,4000].forEach(ms=>setTimeout(()=>{try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}},ms));
   }
   function ensureRotaxInstallPack(){
     db.settings=db.settings||{};
@@ -92,28 +94,27 @@
     }
 
     db.specs=A(db.specs);
+    // Existing reference records are user-owned once created. Only backfill missing
+    // source metadata; never rewrite a value, title, notes, or checklist text.
     for(const r of refs){
       const s=db.specs.find(x=>String(x.id)===r.id);
       if(!s)continue;
-      const desired={
-        title:r.title,system:r.system,value:r.value,units:r.units,
-        status:'Current Manufacturer Reference',source:SOURCE,
+      const metadata={
+        status:'Current Manufacturer Reference',
+        source:SOURCE,
         sourceRevision:`${REV} • ${r.section} p.${r.page}`,
-        documentId:doc?.id||s.documentId||null,
-        notes:manualNote(r.section,r.page,r.notes)
+        documentId:doc?.id||null
       };
-      for(const [k,v] of Object.entries(desired))if(s[k]!==v){s[k]=v;changed=true}
+      for(const [k,v] of Object.entries(metadata)){
+        if((s[k]===undefined||s[k]===null||s[k]==='')&&v!==null){s[k]=v;changed=true}
+      }
+      if(s.rotaxSourceManaged!==true){s.rotaxSourceManaged=true;changed=true}
     }
     db.checklists=A(db.checklists);
     const preTrial=db.checklists.find(x=>x.name==='ROTAX 912 Installation Manual — Pre-Trial-Run Closeout');
     if(preTrial){
-      const oldItems=A(preTrial.items);
-      const rebuilt=trialItems.map((text,i)=>({id:oldItems[i]?.id??(i+1),text,done:!!oldItems[i]?.done,note:oldItems[i]?.note||''}));
-      const desiredNotes='Source: ROTAX 912 Series Installation Manual, IM-912 / P/N 898644, Edition 3 / Rev. 0, Chapter 10-10-00 pages 12–13. ROTAX states this checklist is not exhaustive and directs the user to the applicable Instructions for Continued Airworthiness and Operator’s Manual.';
-      if(preTrial.purpose!=='Source-backed checklist of ROTAX checks before an engine trial run.'){preTrial.purpose='Source-backed checklist of ROTAX checks before an engine trial run.';changed=true}
-      if(preTrial.notes!==desiredNotes){preTrial.notes=desiredNotes;changed=true}
-      if(preTrial.documentId!==(doc?.id||null)){preTrial.documentId=doc?.id||null;changed=true}
-      if(JSON.stringify(preTrial.items)!==JSON.stringify(rebuilt)){preTrial.items=rebuilt;changed=true}
+      if(!preTrial.documentId&&doc?.id){preTrial.documentId=doc.id;changed=true}
+      if(preTrial.rotaxSourceManaged!==true){preTrial.rotaxSourceManaged=true;changed=true}
     }
 
         if(!db.settings.rotaxInstallManualEd3R0Seeded){
@@ -124,7 +125,7 @@
           id:r.id,title:r.title,system:r.system,value:r.value,units:r.units,
           status:'Current Manufacturer Reference',source:SOURCE,sourceRevision:`${REV} • ${r.section} p.${r.page}`,
           sourceUrl:'',documentId:docId,equipmentId:eqId,
-          notes:manualNote(r.section,r.page,r.notes)
+          notes:manualNote(r.section,r.page,r.notes),rotaxSourceManaged:true
         });
         changed=true;
       }
@@ -140,7 +141,8 @@
           projectId:A(db.projects).find(p=>p.title==='Oil system prime / purge')?.id||null,
           documentId:doc?.id||null,
           notes:'Source: ROTAX 912 Series Installation Manual, IM-912 / P/N 898644, Edition 3 / Rev. 0, Chapter 10-10-00 pages 12–13. ROTAX states this checklist is not exhaustive and directs the user to the applicable Instructions for Continued Airworthiness and Operator’s Manual.',
-          items:trialItems.map((text,i)=>({id:i+1,text,done:false,note:''}))
+          items:trialItems.map((text,i)=>({id:i+1,text,done:false,note:''})),
+          rotaxSourceManaged:true
         });
         changed=true;
       }
