@@ -22,6 +22,7 @@
 
   function blankService(src={}){
     return {
+      ...src,
       id:src.id||crypto.randomUUID(),
       title:T(src.title)||'Engine service item',
       kind:T(src.kind)||'Service',
@@ -37,11 +38,13 @@
       partNumber:src.partNumber||'',
       manufacturer:src.manufacturer||'',
       notes:src.notes||'',
+      sourceNotes:src.sourceNotes||'',
       history:A(src.history).map(h=>({id:h.id||crypto.randomUUID(),date:h.date||'',hours:h.hours??'',action:h.action||'Service',notes:h.notes||''}))
     };
   }
   function blankBulletin(src={}){
     return {
+      ...src,
       id:src.id||crypto.randomUUID(),
       type:src.type||'Service Bulletin',
       number:src.number||'',
@@ -230,22 +233,23 @@
       ${field('Hour interval','engSvcHours',i.intervalHours,'number','step="0.1" min="0"')}
       ${field('Next due date (override)','engSvcNextDate',i.nextDate,'date')}
       ${field('Next due hours (override)','engSvcNextHours',i.nextHours,'number','step="0.1" min="0"')}
-      ${textareaField('Notes / source / specification','engSvcNotes',i.notes)}
-    </div><div class="notice" style="margin-top:12px">Where a fixed manufacturer interval is loaded from a current source document, it is pre-filled here. Keep aircraft-manufacturer and serial-number-specific requirements in mind where the source calls for them.</div>
+      ${textareaField('Notes','engSvcNotes',i.notes)}
+    </div>${i.sourceNotes?`<div class="notice" style="margin-top:12px"><b>Manufacturer source:</b> ${esc(i.sourceNotes)}</div>`:''}<div class="notice" style="margin-top:12px">Where a fixed manufacturer interval is loaded from a current source document, it is pre-filled here. Changing an interval here is treated as your override and will not be silently replaced by a later source refresh.</div>
     <div class="modal-actions">${existing?`<button class="btn danger" onclick="deleteEngineService('${esc(i.id)}')">Delete</button><button class="btn success" onclick="openEngineServiceComplete('${esc(i.id)}')">Record Service</button>`:''}<button class="btn secondary" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEngineService('${esc(i.id)}',${existing?'true':'false'})">Save</button></div>`,true);
   };
 
   function syncMaintenance(i){
     let m=A(db.maintenance).find(x=>String(x.engineServiceItemId||'')===String(i.id));
-    if(!m)m=A(db.maintenance).find(x=>T(x.system)==='Engine'&&T(x.title).toLowerCase()===T(i.title).toLowerCase());
     const baseDate=i.lastDate||i.installedDate||'';
     const calculatedYearDue=!i.nextDate&&num(i.intervalYears)>0&&baseDate?addYears(baseDate,i.intervalYears):'';
     const hasDate=!!(i.intervalDays||i.intervalYears||i.nextDate||calculatedYearDue),hasHours=!!(i.intervalHours||i.nextHours);
     const basis=hasDate&&hasHours?'both':hasHours?'hours':'date';
+    const sourceText=[i.kind,i.intervalYears?('Manufacturer calendar interval: '+i.intervalYears+' year'+(num(i.intervalYears)===1?'':'s')):'',i.partNumber?'PN '+i.partNumber:'',i.sourceNotes].filter(Boolean).join(' • ');
     const obj={
       ...(m||{}),id:m?.id||nextNumericId(db.maintenance,700),title:i.title,system:'Engine',basis,meter:'engine',
       intervalDays:i.intervalDays,intervalHours:i.intervalHours,lastDate:i.lastDate||i.installedDate,lastHours:i.lastHours!==''?i.lastHours:i.installedHours,
-      nextDate:i.nextDate||calculatedYearDue,nextHours:i.nextHours,notes:[i.kind,i.intervalYears?('Manufacturer calendar interval: '+i.intervalYears+' year'+(num(i.intervalYears)===1?'':'s')):'',i.partNumber?'PN '+i.partNumber:'',i.notes].filter(Boolean).join(' • '),engineServiceItemId:i.id
+      nextDate:i.nextDate||calculatedYearDue,nextHours:i.nextHours,
+      notes:m?.notes??i.notes??'',sourceNotes:sourceText,engineServiceItemId:i.id,rotaxManaged:i.mmlManaged===true||m?.rotaxManaged===true
     };
     const idx=A(db.maintenance).findIndex(x=>String(x.id)===String(obj.id));if(idx>=0)db.maintenance[idx]=obj;else db.maintenance.push(obj);
   }
