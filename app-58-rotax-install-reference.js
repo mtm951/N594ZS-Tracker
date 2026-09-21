@@ -12,6 +12,7 @@
   const A=v=>Array.isArray(v)?v:[];
   const SOURCE='ROTAX 912 Series Installation Manual';
   const REV='Ed. 3 / Rev. 0 • Jan 01 2021';
+  const DOC_KEY='rotax-im-912-ed3-r0';
   const manualNote=(section,page,extra='')=>[
     `IM-912 / P/N 898644 • ${section} p.${page}`,
     extra,
@@ -67,7 +68,9 @@
     return e?.id||null;
   }
   function installDoc(){
-    return A(db.docs).find(d=>Number(d.id)===301)||A(db.docs).find(d=>/912.*installation manual/i.test(d.name||''));
+    return A(db.docs).find(d=>d.sourceKey===DOC_KEY)||
+           A(db.docs).find(d=>Number(d.id)===301)||
+           A(db.docs).find(d=>/912.*installation manual/i.test(d.name||''));
   }
 
   let lastInstallPackDb=null;
@@ -88,6 +91,7 @@
       if(!doc.revision){doc.revision='Edition 3 / Rev. 0';changed=true}
       if(!doc.issueDate){doc.issueDate='2021-01-01';changed=true}
       if(!doc.rotaxSourceManaged){doc.rotaxSourceManaged=true;changed=true}
+      if(!doc.sourceKey){doc.sourceKey=DOC_KEY;changed=true}
       if(!doc.sourceNotes){
         doc.sourceNotes='IM-912 / P/N 898644, Edition 3 / Rev. 0, January 01 2021. ROTAX states the Installation Manual is a general installation guide and should be used with the airframe manufacturer instructions and current applicable ROTAX documentation.';
         changed=true;
