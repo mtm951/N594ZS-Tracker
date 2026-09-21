@@ -53,7 +53,7 @@ renderNav=function(){ensureAircraftOpsNav();smartRenderNavBase()};
 const smartNormalizeBase=normalizeDB;
 normalizeDB=function(){
   smartNormalizeBase();
-  db.projects=arr(db.projects);db.projects.forEach(p=>{p.plannedParts=arr(p.plannedParts).map(x=>({id:x.id||uid(),partId:x.partId?Number(x.partId):null,name:x.name||'',qty:num(x.qty)||1,unit:x.unit||'ea',notes:x.notes||''}))});
+  db.projects=arr(db.projects);db.projects.forEach(p=>{p.plannedParts=arr(p.plannedParts).map(x=>({...x,id:x.id||uid(),partId:x.partId?Number(x.partId):null,name:x.name||'',qty:num(x.qty)||1,unit:x.unit||'ea',notes:x.notes||''}))});
 };
 normalizeDB();
 
