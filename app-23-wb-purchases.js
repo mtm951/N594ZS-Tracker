@@ -163,10 +163,6 @@ renderSearchPage=async function(q=''){
   const count=box.querySelectorAll('.search-result').length,sub=document.querySelector('#page-search .toolbar .muted');if(sub)sub.textContent=`${count} result${count===1?'':'s'} for “${term}”`;if(count)box.querySelectorAll('.empty').forEach(x=>x.remove());
 };
 
-// Render/nav wrappers.
-const renderAllWbPurchaseBase=renderAll;
-renderAll=function(){renderAllWbPurchaseBase();renderWeightBalance();if(currentPage==='purchases')renderPurchases()};
-const navToWbPurchaseBase=navTo;
-navTo=function(page){navToWbPurchaseBase(page);if(page==='weightbalance')renderWeightBalance();else if(page==='purchases')renderPurchases()};
+// Page rendering/navigation is coordinated centrally by app-61-performance.
 
 const purchaseImportInput=document.getElementById('purchaseImportFile');if(purchaseImportInput)purchaseImportInput.addEventListener('change',async e=>{const f=e.target.files?.[0];e.target.value='';try{await importPurchaseCSVFile(f)}catch(err){alert('Could not import purchase CSV: '+err.message)}});
