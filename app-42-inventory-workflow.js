@@ -10,10 +10,11 @@
   style.textContent=`
     .assigned-part-row{grid-template-columns:minmax(0,1fr) auto auto!important}
     .assigned-use-btn{align-self:center;white-space:nowrap;padding:7px 11px}
+    .project-parts-workspace{overflow:hidden;padding:0!important}.project-parts-head{padding:14px 15px 11px;background:#fbfcfd;border-bottom:1px solid #e6edf2}.project-parts-head .action-row{flex-wrap:wrap;justify-content:flex-end}.project-parts-summary{display:flex;gap:7px;flex-wrap:wrap;padding:9px 15px;background:#f6f9fb;border-bottom:1px solid #e8eef2}.project-parts-summary span{font-size:10px;color:#687b89;border:1px solid #dce5eb;background:#fff;border-radius:999px;padding:5px 8px}.project-parts-summary b{color:#19364f}.project-parts-list{display:grid}.project-part-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,.7fr) auto;gap:11px;align-items:center;padding:11px 15px;border-bottom:1px solid #edf1f4}.project-part-row:last-child{border-bottom:0}.project-part-row:hover{background:#fbfdfe}.project-part-title{font-size:12px;font-weight:850;color:#18334b}.project-part-qty{display:grid;gap:4px;justify-items:start}.project-part-qty small{font-size:9px;line-height:1.3;color:var(--muted)}.project-part-stage{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}.project-part-stage.assigned{background:#edf3f7;color:#4f6879}.project-part-stage.reserved{background:#fff2cf;color:#805f18}.project-part-stage.used{background:#e4f3e8;color:#2b7143}.project-part-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.project-part-actions button{white-space:nowrap;padding:6px 9px}.custom-used{background:#fafcfa}
     .inv-adjust-row{display:grid;grid-template-columns:86px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1f4;font-size:12px}
     .inv-adjust-row:last-child{border-bottom:0}.inv-adjust-pos{color:#21754a}.inv-adjust-neg{color:#984039}.inv-adjust-delta{font-weight:900;white-space:nowrap}.inv-ledger-note{margin-top:8px;padding:8px 10px;border-radius:7px;background:#f8fbfd;border:1px solid #e1e9ef}
     .reservation-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.quick-use-list{display:grid;gap:8px;margin-top:10px}.quick-use-item{width:100%;text-align:left;border:1px solid #d7e2e9;border-radius:9px;background:#fff;padding:11px;cursor:pointer;color:#17324c}.quick-use-item:hover{background:#f6fafc}.quick-use-item b{display:block}.quick-use-item small{display:block;color:#6e7f8e;margin-top:4px}.quick-use-qty{float:right;font-weight:900;color:#865b11}
-    @media(max-width:760px){.inv-adjust-row{grid-template-columns:72px minmax(0,1fr) auto}.inv-adjust-row .inv-reverse{grid-column:2/-1;justify-self:start}.reservation-actions{grid-column:1/-1;justify-content:flex-start}}
+    @media(max-width:760px){.inv-adjust-row{grid-template-columns:72px minmax(0,1fr) auto}.inv-adjust-row .inv-reverse{grid-column:2/-1;justify-self:start}.reservation-actions{grid-column:1/-1;justify-content:flex-start}.project-part-row{grid-template-columns:1fr;gap:7px}.project-part-actions{justify-content:flex-start}.project-parts-head{align-items:flex-start;gap:10px}.project-parts-head .action-row{justify-content:flex-start}}
   `;
   document.head.appendChild(style);
 
@@ -214,41 +215,166 @@
     openProjectDetail(project.id);
   };
 
-  function projectAssignedPartsHTML(projectId){
+  function projectPartWorkspaceRows(projectId){
+    var project=projectById(Number(projectId));if(!project)return [];
+    var ids=new Set();
+    projectLinkedInventoryParts(projectId).forEach(function(part){ids.add(Number(part.id))});
+    arr(project.plannedParts).forEach(function(x){if(x.partId)ids.add(Number(x.partId))});
+    arr(project.partsUsed).forEach(function(x){if(x.partId)ids.add(Number(x.partId))});
+    var rows=[...ids].map(function(id){
+      var part=partById(id);if(!part)return null;
+      var reservations=arr(project.plannedParts).filter(function(x){return Number(x.partId)===Number(id)});
+      var uses=arr(project.partsUsed).filter(function(x){return Number(x.partId)===Number(id)});
+      var reservedQty=reservations.reduce(function(s,x){return s+num(x.qty)},0);
+      var usedQty=uses.reduce(function(s,x){return s+num(x.qty)},0);
+      var on=typeof partAvailable==='function'?partAvailable(part):part.stockQty;
+      var free=typeof partFreeQty==='function'?partFreeQty(part):on;
+      var stage=usedQty>0?(reservedQty>0?'Used + Reserved':'Used'):(reservedQty>0?'Reserved':'Assigned');
+      return {part:part,reservations:reservations,uses:uses,reservedQty:reservedQty,usedQty:usedQty,on:on,free:free,stage:stage};
+    }).filter(Boolean);
+    var custom=arr(project.partsUsed).filter(function(x){return !x.partId}).map(function(x){
+      return {part:null,custom:x,reservations:[],uses:[x],reservedQty:0,usedQty:num(x.qty),on:null,free:null,stage:'Used'};
+    });
+    return rows.concat(custom).sort(function(a,b){
+      var order={'Assigned':0,'Reserved':1,'Used + Reserved':2,'Used':3};
+      return (order[a.stage]??9)-(order[b.stage]??9)||String(a.part?.name||a.custom?.name||'').localeCompare(String(b.part?.name||b.custom?.name||''),undefined,{numeric:true,sensitivity:'base'});
+    });
+  }
+
+  function projectPartStageClass(stage){
+    if(stage==='Used')return 'used';
+    if(stage==='Reserved'||stage==='Used + Reserved')return 'reserved';
+    return 'assigned';
+  }
+
+  function projectPartWorkspaceHTML(projectId){
     var project=projectById(Number(projectId));if(!project)return '';
-    var linked=projectLinkedInventoryParts(projectId);
-    var parts=linked.filter(function(part){return !arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)})});
-    return `<div class="detail-card" id="projectAssignedInventoryCard">
-      <div class="section-tools"><div><h3>Assigned Inventory Parts</h3><div class="tiny muted">Parts linked to this project but not yet recorded as used. Use moves the part into Parts Used and creates the physical inventory/work-history transaction.</div></div><span class="mini-badge">${parts.length}</span></div>
-      ${parts.length?parts.map(function(part){
-        var reserved=arr(project.plannedParts).some(function(x){return Number(x.partId)===Number(part.id)});
-        var on=typeof partAvailable==='function'?partAvailable(part):part.stockQty;
-        var free=typeof partFreeQty==='function'?partFreeQty(part):on;
-        return `<div class="assigned-part-row">
-          <div class="click-row" onclick="openPartDetail(${part.id})"><b>${esc(part.name||'Part')}</b><div class="task-note">${part.partNo?'PN '+esc(part.partNo)+' • ':''}${esc(part.system||'General')}${part.location?' • '+esc(part.location):''}</div></div>
-          <div class="assigned-part-stock"><span class="mini-badge">${reserved?'Reserved':'Assigned'}</span><small>On hand ${on===null||on===undefined?'—':esc(on+' '+(part.unit||'ea'))}${free!==null&&free!==undefined?' • Free '+esc(free+' '+(part.unit||'ea')):''}</small></div>
-          <button class="btn success assigned-use-btn" onclick="event.stopPropagation();openAssignedPartUse(${project.id},${part.id})">${reserved?'Use Reserved':'Use'}</button>
-        </div>`;
-      }).join(''):(linked.length?'<div class="empty">All assigned parts have been recorded in Parts Used.</div>':'<div class="empty">No inventory parts are assigned to this project yet.</div>')}
+    var rows=projectPartWorkspaceRows(projectId);
+    var counts={assigned:0,reserved:0,used:0};
+    rows.forEach(function(r){
+      if(r.stage==='Assigned')counts.assigned++;
+      else if(r.stage==='Reserved')counts.reserved++;
+      else counts.used++;
+    });
+    return `<div class="detail-card project-parts-workspace" id="projectPartsWorkspace">
+      <div class="section-tools project-parts-head">
+        <div><h3>Project Parts</h3><div class="tiny muted">One workflow: Assigned → Reserved → Used. Assignment links a part; reservation holds quantity; Used records the actual installation/consumption and work history.</div></div>
+        <div class="action-row">
+          <button class="icon-btn" onclick="openAssignPartToProject(${project.id})">+ Assign</button>
+          <button class="icon-btn" onclick="openReservePartModal(${project.id})">+ Reserve</button>
+          <button class="icon-btn" onclick="addProjectPart(${project.id})">+ Use</button>
+        </div>
+      </div>
+      <div class="project-parts-summary">
+        <span><b>${counts.assigned}</b> Assigned</span>
+        <span><b>${counts.reserved}</b> Reserved</span>
+        <span><b>${counts.used}</b> Used</span>
+      </div>
+      <div class="project-parts-list">
+        ${rows.length?rows.map(function(r){
+          if(!r.part){
+            var x=r.custom;
+            return `<div class="project-part-row custom-used">
+              <div><div class="project-part-title">${esc(x.name||'Material')}</div><div class="task-note">${esc(x.notes||'Custom / unlinked material')}</div></div>
+              <div class="project-part-qty"><span class="project-part-stage used">Used</span><small>${esc(x.qty)} ${esc(x.unit||'')}</small></div>
+              <div class="project-part-actions"><button class="icon-btn" onclick="removeProjectPart(${project.id},${JSON.stringify(x.id)})">Remove</button></div>
+            </div>`;
+          }
+          var part=r.part,unit=part.unit||'ea',primaryReservation=r.reservations[0]||null;
+          var detail=[];
+          if(r.reservedQty>0)detail.push('Reserved '+r.reservedQty+' '+unit);
+          if(r.usedQty>0)detail.push('Used '+r.usedQty+' '+unit);
+          detail.push('On hand '+(r.on===null||r.on===undefined?'—':r.on+' '+unit));
+          if(r.free!==null&&r.free!==undefined)detail.push('Free '+r.free+' '+unit);
+          var note=[part.partNo?'PN '+part.partNo:'',part.system||'General',part.location||''].filter(Boolean).join(' • ');
+          return `<div class="project-part-row">
+            <div class="click-row" onclick="openPartDetail(${part.id})"><div class="project-part-title">${esc(part.name||'Part')}</div><div class="task-note">${esc(note)}</div></div>
+            <div class="project-part-qty"><span class="project-part-stage ${projectPartStageClass(r.stage)}">${esc(r.stage)}</span><small>${esc(detail.join(' • '))}</small></div>
+            <div class="project-part-actions">
+              ${r.stage==='Assigned'?'<button class="secondary" onclick="openReserveSpecificPart('+project.id+','+part.id+')">Reserve</button>':''}
+              ${r.stage==='Assigned'?'<button class="success" onclick="openAssignedPartUse('+project.id+','+part.id+')">Use</button>':''}
+              ${r.reservedQty>0&&primaryReservation?'<button class="success" onclick="openUseReservedPartModal('+project.id+','+JSON.stringify(primaryReservation.id)+')">Use Reserved</button>':''}
+              ${r.reservedQty>0&&primaryReservation?'<button class="secondary" onclick="removeReservedPart('+project.id+','+JSON.stringify(primaryReservation.id)+')">Release</button>':''}
+              ${r.usedQty>0&&r.reservedQty<=0?'<button class="secondary" onclick="openAssignedPartUse('+project.id+','+part.id+')">Use More</button>':''}
+              ${r.stage==='Assigned'?'<button class="icon-btn" onclick="unassignPartFromProject('+project.id+','+part.id+')">Unassign</button>':''}
+            </div>
+          </div>`;
+        }).join(''):'<div class="empty">No project parts yet. Assign a part, reserve one for this job, or record something as used.</div>'}
+      </div>
     </div>`;
   }
 
-  function injectProjectAssignedInventory(projectId){
-    var box=document.getElementById('modalBox');if(!box||box.querySelector('#projectAssignedInventoryCard'))return;
+  window.openAssignPartToProject=function(projectId){
+    var project=projectById(Number(projectId));if(!project)return;
+    openModal(`${modalHeader('Assign Part to Project',project.title)}
+      <div class="notice" style="margin-bottom:12px">Assignment only links the part to this project. It does not reserve quantity or reduce inventory.</div>
+      <div class="form-grid">
+        ${typeof searchablePartPicker==='function'?searchablePartPicker('apj',null,'Inventory part'):`<div class="full"><label>Inventory part</label><select id="apjPartFallback">${partOptions(null)}</select></div>`}
+      </div>
+      <div class="modal-actions"><button class="secondary" onclick="openProjectDetail(${project.id})">Cancel</button><button class="primary" onclick="saveAssignedPartToProject(${project.id})">Assign Part</button></div>`,true);
+  };
+
+  function assignedPartPickerId(){if(typeof partPickerId==='function')return partPickerId('apj');return selectedNumber('apjPartFallback')}
+
+  window.saveAssignedPartToProject=function(projectId){
+    var project=projectById(Number(projectId)),partId=assignedPartPickerId(),part=partId?partById(Number(partId)):null;
+    if(!project||!part)return alert('Choose an inventory part.');
+    part.linkedProjectIds=arr(part.linkedProjectIds).map(Number).filter(Boolean);
+    if(!part.linkedProjectIds.includes(project.id))part.linkedProjectIds.push(project.id);
+    saveDB('Part assigned to project.');
+    openProjectDetail(project.id);
+  };
+
+  window.unassignPartFromProject=function(projectId,partId){
+    var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
+    var hasReservation=arr(project.plannedParts).some(function(x){return Number(x.partId)===Number(part.id)});
+    var hasUse=arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)});
+    if(hasReservation||hasUse)return alert('Release the reservation first. Used parts remain related through project history.');
+    if(!confirm('Remove this part assignment from the project? Inventory will not change.'))return;
+    part.linkedProjectIds=arr(part.linkedProjectIds).filter(function(id){return Number(id)!==Number(project.id)});
+    saveDB('Part unassigned from project.');
+    openProjectDetail(project.id);
+  };
+
+  window.openReserveSpecificPart=function(projectId,partId){
+    var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
+    var free=typeof partFreeQty==='function'?partFreeQty(part):partAvailable(part);
+    openModal(`${modalHeader('Reserve Assigned Part',project.title)}
+      <div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>Free inventory: ${free===null||free===undefined?'—':esc(free+' '+(part.unit||'ea'))}. Reservation holds quantity for this project but does not consume it.</div>
+      <div class="form-grid">${field('Quantity to reserve','rspQty','1','number','step="any" min="0.0001"')}${textareaField('Planning note','rspNotes','')}</div>
+      <div class="modal-actions"><button class="secondary" onclick="openProjectDetail(${project.id})">Cancel</button><button class="primary" onclick="saveReserveSpecificPart(${project.id},${part.id})">Reserve</button></div>`);
+  };
+
+  window.saveReserveSpecificPart=function(projectId,partId){
+    var project=projectById(Number(projectId)),part=partById(Number(partId)),qty=num(val('rspQty'));if(!project||!part)return;
+    if(qty<=0)return alert('Enter a positive quantity.');
+    var existing=arr(project.plannedParts).find(function(x){return Number(x.partId)===Number(part.id)});
+    if(existing){existing.qty=num(existing.qty)+qty;if(val('rspNotes'))existing.notes=[existing.notes,val('rspNotes')].filter(Boolean).join(' • ')}
+    else project.plannedParts.push({id:uid(),partId:part.id,name:part.name,qty:qty,unit:part.unit||'ea',notes:val('rspNotes')});
+    if(!arr(part.linkedProjectIds).includes(project.id))part.linkedProjectIds.push(project.id);
+    saveDB('Assigned part reserved for project.');
+    openProjectDetail(project.id);
+  };
+
+  function injectProjectPartsWorkspace(projectId){
+    var box=document.getElementById('modalBox');if(!box)return;
+    box.querySelector('#projectPlannedPartsCard')?.remove();
+    box.querySelector('#projectAssignedInventoryCard')?.remove();
+    box.querySelector('#projectPartsWorkspace')?.remove();
     var left=box.querySelector('.detail-grid > div:first-child');if(!left)return;
-    var reserved=box.querySelector('#projectPlannedPartsCard');
-    if(reserved)reserved.insertAdjacentHTML('afterend',projectAssignedPartsHTML(projectId));
-    else{
-      var first=left.querySelector('.detail-card');
-      if(first)first.insertAdjacentHTML('afterend',projectAssignedPartsHTML(projectId));
-      else left.insertAdjacentHTML('afterbegin',projectAssignedPartsHTML(projectId));
-    }
+    var cards=[...left.querySelectorAll(':scope > .detail-card')];
+    var partsUsed=cards.find(function(card){return card.querySelector('h3')?.textContent?.trim()==='Parts Used'});
+    if(partsUsed)partsUsed.remove();
+    cards=[...left.querySelectorAll(':scope > .detail-card')];
+    var overview=cards.find(function(card){return card.querySelector('h3')?.textContent?.trim()==='Project Overview'})||cards[0];
+    if(overview)overview.insertAdjacentHTML('afterend',projectPartWorkspaceHTML(projectId));
+    else left.insertAdjacentHTML('afterbegin',projectPartWorkspaceHTML(projectId));
   }
 
   var openProjectDetailInventoryLinkBase=window.openProjectDetail;
   window.openProjectDetail=function(id){
     openProjectDetailInventoryLinkBase(id);
-    injectProjectAssignedInventory(Number(id));
+    injectProjectPartsWorkspace(Number(id));
   };
 
   // ----- Quick Add 2.0 -----
