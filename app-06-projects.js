@@ -51,7 +51,47 @@ function addProjectPart(projectId){
   openModal(`${modalHeader('Add Part Used',p.title)}<div class="form-grid"><div class="full"><label>Inventory part (optional)</label><select id="ppuPart" onchange="prefillProjectPart()">${partOptions(null)}</select></div>${field('Part / material name','ppuName','')}${field('Quantity','ppuQty','1','number','step="any"')}${field('Unit','ppuUnit','ea')}${field('Unit cost','ppuCost','', 'number','step="0.01" min="0"')}${textareaField('Notes','ppuNotes','')}</div><div class="modal-actions"><button class="btn secondary" onclick="openProjectDetail(${projectId})">Cancel</button><button class="btn primary" onclick="saveProjectPart(${projectId})">Add Part</button></div>`);
 }
 function prefillProjectPart(){const id=selectedNumber('ppuPart'),p=partById(id);if(!p)return;document.getElementById('ppuName').value=p.name;document.getElementById('ppuUnit').value=p.unit||'ea';document.getElementById('ppuCost').value=p.unitCost??''}
-function saveProjectPart(projectId){const p=projectById(projectId);if(!p)return;const partId=selectedNumber('ppuPart'),name=val('ppuName')||(partId?partName(partId):'');if(!name)return alert('Part name is required.');p.partsUsed.push({id:uid(),partId,name,qty:num(val('ppuQty'))||1,unit:val('ppuUnit')||'ea',unitCost:val('ppuCost'),notes:val('ppuNotes')});if(partId){const part=partById(partId);if(part&&!part.linkedProjectIds.includes(projectId))part.linkedProjectIds.push(projectId)}saveDB('Part added to project.');openProjectDetail(projectId)}
-function removeProjectPart(projectId,itemId){const p=projectById(projectId);if(!p||!confirm('Remove this part-use record from the project?'))return;p.partsUsed=p.partsUsed.filter(x=>x.id!==itemId);saveDB('Part-use record removed.');openProjectDetail(projectId)}
+function saveProjectPart(projectId){
+  const p=projectById(projectId);if(!p)return;
+  const partId=selectedNumber('ppuPart'),name=val('ppuName')||(partId?partName(partId):'');
+  if(!name)return alert('Part name is required.');
+  const qty=num(val('ppuQty'))||1,unit=val('ppuUnit')||'ea',unitCost=val('ppuCost'),notes=val('ppuNotes');
+  const projectPartId=uid();
+  const record={id:projectPartId,partId,name,qty,unit,unitCost,notes};
+  if(partId){
+    const part=partById(partId);
+    const on=part&&typeof partAvailable==='function'?partAvailable(part):null;
+    if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
+    const logId=uid(),consumedItemId=uid();
+    record.logId=logId;record.consumedItemId=consumedItemId;record.consumptionRecorded=true;
+    db.logs.push({
+      id:logId,date:today(),airframeHours:'',engineHours:'',laborHours:'',system:p.system||part?.system||'General',projectIds:[p.id],
+      work:`Used ${name} on ${p.title}`,observations:notes||'',blockers:'',nextStep:p.nextStep||'',
+      consumedParts:[{id:consumedItemId,partId,name,qty,unit,unitCost,notes:'Recorded from Project → Parts Used.',projectPartId}],
+      otherCost:'',notes:'Canonical physical inventory use created from the project Parts Used control.',origin:'project-part-use'
+    });
+    if(part&&!arr(part.linkedProjectIds).includes(projectId))part.linkedProjectIds.push(projectId);
+  }
+  p.partsUsed.push(record);
+  saveDB(partId?'Part use recorded and inventory updated.':'Part/material added to project.');
+  openProjectDetail(projectId);
+}
+function removeProjectPart(projectId,itemId){
+  const p=projectById(projectId);if(!p)return;
+  const item=arr(p.partsUsed).find(x=>String(x.id)===String(itemId));if(!item)return;
+  const linkedConsumption=item.consumptionRecorded&&item.logId;
+  const prompt=linkedConsumption?'Remove this part-use record? Its linked inventory-consumption entry will also be removed, returning the quantity to calculated on-hand inventory.':'Remove this part-use record from the project?';
+  if(!confirm(prompt))return;
+  if(linkedConsumption){
+    const log=logById(Number(item.logId));
+    if(log){
+      log.consumedParts=arr(log.consumedParts).filter(x=>String(x.id)!==String(item.consumedItemId)&&String(x.projectPartId)!==String(item.id));
+      if(log.origin==='project-part-use'&&!log.consumedParts.length)db.logs=db.logs.filter(x=>Number(x.id)!==Number(log.id));
+    }
+  }
+  p.partsUsed=arr(p.partsUsed).filter(x=>String(x.id)!==String(itemId));
+  saveDB(linkedConsumption?'Part use removed and inventory restored.':'Part-use record removed.');
+  openProjectDetail(projectId);
+}
 function linkDocumentToProject(projectId){if(!db.docs.length)return openDocModal(null,projectId);openModal(`${modalHeader('Link Document',projectName(projectId))}<div><label>Existing document</label><select id="linkDocId">${selectOptions(db.docs.map(d=>({value:d.id,label:d.name})),null,'— Select document —')}</select></div><div class="modal-actions"><button class="btn secondary" onclick="openProjectDetail(${projectId})">Cancel</button><button class="btn secondary" onclick="openDocModal(null,${projectId})">Create New</button><button class="btn primary" onclick="saveDocumentLink(${projectId})">Link</button></div>`)}
 function saveDocumentLink(projectId){const did=selectedNumber('linkDocId');if(!did)return alert('Choose a document.');const d=docById(did);if(!d.linkedProjectIds.includes(projectId))d.linkedProjectIds.push(projectId);saveDB('Document linked.');openProjectDetail(projectId)}
