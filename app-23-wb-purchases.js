@@ -44,7 +44,7 @@ normalizeDB=function(){
   db.purchases.forEach(p=>{
     p.vendor=p.vendor||'Aircraft Spruce';p.order=String(p.order||'');p.invoice=String(p.invoice||'');p.shipDate=p.shipDate||'';p.pn=p.pn||'';p.description=p.description||'Purchase item';
     p.qty=Number(p.qty)||0;p.unitPrice=Number(p.unitPrice)||0;p.disposition=p.disposition||'Unknown';if(p.remainingQty===undefined)p.remainingQty='';p.location=p.location||'';p.projectId=p.projectId||null;
-    p.system=p.system||purchaseSystem(p.description,p.pn);p.notes=p.notes||'';p.source=p.source||'Purchase history';p.sourceKey=p.sourceKey||'';p.inventoryPartId=p.inventoryPartId||null;p.inventoryApplied=!!p.inventoryApplied;
+    p.system=p.system||purchaseSystem(p.description,p.pn);p.notes=p.notes||'';p.source=p.source||'Purchase history';p.sourceKey=p.sourceKey||'';p.inventoryPartId=p.inventoryPartId||null;p.inventoryApplied=!!p.inventoryApplied;p.equipmentId=p.equipmentId||null;p.trackAsEquipment=!!(p.trackAsEquipment||p.equipmentId);
   });
   const existing=db.aircraft.wb||{},defaults=wbDefaults();
   db.aircraft.wb={...defaults,...existing,stations:{...defaults.stations,...(existing.stations||{})}};
