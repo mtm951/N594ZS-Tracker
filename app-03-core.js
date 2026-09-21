@@ -5,7 +5,11 @@ function saveDB(message){
     return;
   }
   normalizeDB();
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){toast('Could not save browser data: '+e.message,'bad');}
+  if(typeof persistBrowserData==='function'){
+    Promise.resolve(persistBrowserData(db)).catch(e=>console.warn('Browser cache save failed',e));
+  }else{
+    try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){console.warn('Browser cache save failed',e);}
+  }
   queueCloudSave();
   renderAll();
   if(message) toast(message,'good');
