@@ -21,7 +21,7 @@
     normalizeBase();
     (db.parts||[]).forEach(function(p){
       p.inventoryAdjustments=arr(p.inventoryAdjustments).map(function(a){return {
-        id:a.id||uid(),date:a.date||today(),delta:num(a.delta),reason:a.reason||'Adjustment',notes:a.notes||'',reverses:a.reverses||null
+        ...a,id:a.id||uid(),date:a.date||today(),delta:num(a.delta),reason:a.reason||'Adjustment',notes:a.notes||'',reverses:a.reverses||null
       }});
     });
   };
