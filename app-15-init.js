@@ -12,7 +12,11 @@ document.getElementById('importFile').addEventListener('change',e=>{const f=e.ta
 (async function bootTracker(){
   try{if(typeof hydrateBrowserCacheIfNeeded==='function')await hydrateBrowserCacheIfNeeded()}catch(e){console.warn('Browser cache hydration skipped',e)}
   renderAll();
-  initCloud();
+  try{await initCloud()}
+  finally{
+    window.__n594zsCloudBootComplete=true;
+    try{if(typeof window.runTrackerDataInitializers==='function')window.runTrackerDataInitializers()}catch(e){console.warn('Post-cloud data initialization failed',e)}
+  }
 })();
 
 // Load small, optional post-init UX layers without disturbing the core script order.
