@@ -12,7 +12,9 @@
   const REC_KEY='n594zs_local_recovery_v1';
   const SNAP_KEY='n594zs_record_snapshot_v4';
   const PENDING_KEY='n594zs_pending_cloud_v4';
+  const REC_IDB_MARKER='n594zs_recovery_idb_v1';
   let warnedFallback=false;
+  let persistentStorageGranted=null;
 
   function openCoreCache(){
     return new Promise((resolve,reject)=>{
@@ -54,6 +56,7 @@
     try{
       const parsed=JSON.parse(raw);
       await idbPut(idbKey,parsed);
+      if(idbKey==='recovery'){try{localStorage.setItem(REC_IDB_MARKER,'1')}catch(_e){}}
       localStorage.removeItem(key);
       return true;
     }catch(_e){return false}
@@ -88,7 +91,34 @@
     }
   }
 
-  window.persistBrowserData=async function(value=db,opts={}){
+  window.storeLocalRecoveryPoint=async function(point){
+    if(!point)return false;
+    await idbPut('recovery',point);
+    try{localStorage.setItem(REC_IDB_MARKER,'1')}catch(_e){}
+    return true;
+  };
+
+  window.readLocalRecoveryPoint=async function(){
+    try{
+      const raw=localStorage.getItem(REC_KEY);
+      if(raw)return JSON.parse(raw);
+    }catch(_e){}
+    try{return await idbGet('recovery')||null}catch(_e){return null}
+  };
+
+  window.hasIndexedRecoveryPoint=function(){
+    try{return localStorage.getItem(REC_IDB_MARKER)==='1'}catch(_e){return false}
+  };
+
+  async function requestPersistentStorage(){
+    if(!navigator.storage?.persist)return null;
+    try{
+      persistentStorageGranted=await navigator.storage.persist();
+      return persistentStorageGranted;
+    }catch(_e){return null}
+  }
+
+    window.persistBrowserData=async function(value=db,opts={}){
     const copy=typeof structuredClone==='function'?structuredClone(value):JSON.parse(JSON.stringify(value));
     const idbPromise=idbPut('core',copy);
     const json=JSON.stringify(value);
@@ -105,6 +135,7 @@
       warnedFallback=true;
       try{toast('Browser cache moved to larger local storage; cloud sync remains active.','good')}catch(_e){}
     }
+    try{await idbPut('meta',{lastSavedAt:new Date().toISOString(),localStorageMirror:localOK})}catch(_e){}
     return {localStorage:localOK,indexedDB:true};
   };
 
@@ -129,10 +160,20 @@
   window.getBrowserStorageHealth=async function(){
     let estimate={};
     try{estimate=await navigator.storage?.estimate?.()||{}}catch(_e){}
-    return {localChars:storageChars(),quota:estimate.quota||null,usage:estimate.usage||null};
+    if(persistentStorageGranted===null&&navigator.storage?.persisted){try{persistentStorageGranted=await navigator.storage.persisted()}catch(_e){}}
+    return {localChars:storageChars(),quota:estimate.quota||null,usage:estimate.usage||null,persistent:persistentStorageGranted,recoveryInIndexedDB:window.hasIndexedRecoveryPoint()};
   };
 
   // Preserve an oversized legacy recovery point before clearing space even if
   // no save happens immediately after this release loads.
   freeLegacySpace().catch(()=>{});
+  requestPersistentStorage().catch(()=>{});
+
+  // Best-effort mirror when the page is backgrounded. Normal saves already write
+  // synchronously to localStorage when possible; this adds an IndexedDB safety copy.
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden'){
+      try{idbPut('core',typeof structuredClone==='function'?structuredClone(db):JSON.parse(JSON.stringify(db))).catch(()=>{})}catch(_e){}
+    }
+  });
 })();
