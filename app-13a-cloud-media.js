@@ -58,7 +58,7 @@ async function migrateAircraftPhotoToCloudIfNeeded(){
   const blob=await response.blob();
   const subtype=(blob.type||'image/jpeg').split('/')[1]?.replace('jpeg','jpg')||'jpg';
   await uploadAircraftPhotoBlob(blob,`aircraft-photo.${subtype}`,blob.type||'image/jpeg');
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(_e){}
+  try{if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});else localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(_e){}
   return true;
 }
 
