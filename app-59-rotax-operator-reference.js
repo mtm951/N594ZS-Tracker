@@ -162,6 +162,15 @@
     if(doc&&doc.rotaxSourceManaged!==true){doc.rotaxSourceManaged=true;changed=true}
     if(doc&&!doc.sourceKey){doc.sourceKey=DOC_KEY;changed=true}
 
+    const operatorChecklistNames=new Set([
+      'ROTAX 912 Operator Manual — Daily / Preflight Reference',
+      'ROTAX 912 Operator Manual — Start / Warm-up / Run-up Reference'
+    ]);
+    for(const checklist of db.checklists.filter(x=>operatorChecklistNames.has(x.name))){
+      if(!checklist.documentId&&doc?.id){checklist.documentId=doc.id;changed=true}
+      if(checklist.rotaxSourceManaged!==true){checklist.rotaxSourceManaged=true;changed=true}
+    }
+
     if(!db.settings.rotaxOperatorManualEd3Seeded){
       for(const r of refs){
         if(db.specs.some(x=>String(x.id)===r.id))continue;
@@ -182,6 +191,8 @@
           system:'Engine',
           trigger:'Daily / before flight',
           projectId:null,
+          documentId:doc?.id||null,
+          rotaxSourceManaged:true,
           notes:'Source: OM-912 / P/N 899649, Edition 3, Chapters 3.1–3.3 (pages 3-2 through 3-6). Current ROTAX manufacturer reference supplied for N594ZS; aircraft-specific operating instructions remain governed by the applicable N594ZS/Kitfox documentation.',
           items:dailyItems.map((text,i)=>({id:i+1,text,done:false,note:''}))
         });
@@ -195,6 +206,8 @@
           system:'Engine',
           trigger:'Engine start / ground run',
           projectId:A(db.projects).find(p=>p.title==='Oil system prime / purge')?.id||null,
+          documentId:doc?.id||null,
+          rotaxSourceManaged:true,
           notes:'Source: OM-912 / P/N 899649, Edition 3, pages 3-7 through 3-9. Current ROTAX manufacturer reference supplied for N594ZS; use with the applicable aircraft-specific procedures and limitations.',
           items:startItems.map((text,i)=>({id:i+1,text,done:false,note:''}))
         });
@@ -204,6 +217,7 @@
       changed=true;
     }
 
+    if(annotateStarterCards())changed=true;
     if(changed)persistOperatorPack();
     return changed;
   }
