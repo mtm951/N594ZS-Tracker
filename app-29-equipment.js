@@ -209,6 +209,83 @@ window.reconcileTrackerRecordLinks=function(options={}){
   }
   return changed;
 };
+
+function trackerLinkHealth(){
+  const issues=[],purchaseIds=new Set(arr(db.purchases).map(x=>String(x.id))),partIds=new Set(arr(db.parts).map(x=>String(x.id))),equipmentIds=new Set(arr(db.equipment).map(x=>String(x.id))),projectIds=new Set(arr(db.projects).map(x=>String(x.id))),invoiceNos=new Set(arr(db.invoices).map(x=>String(x.invoice||x.id||'')));
+  const add=(severity,recordType,recordId,label,detail)=>issues.push({severity,recordType,recordId:String(recordId??''),label,detail});
+
+  arr(db.purchases).forEach(p=>{
+    if(p.inventoryPartId&&!partIds.has(String(p.inventoryPartId)))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Inventory link points to a missing part record.');
+    if(p.inventoryApplied&&!p.inventoryPartId)add('broken','purchase',p.id,p.description||p.pn||'Purchase','Purchase is marked applied to inventory but has no linked part.');
+    if(p.equipmentId&&!equipmentIds.has(String(p.equipmentId)))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Equipment link points to a missing equipment record.');
+    if(p.trackAsEquipment&&!purchaseEquipmentRecord(p))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Marked as lifecycle-tracked equipment but no equipment record is linked.');
+    if(p.projectId&&!projectIds.has(String(p.projectId)))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Linked project no longer exists.');
+    if(p.invoice&&!invoiceNos.has(String(p.invoice)))add('review','purchase',p.id,p.description||p.pn||'Purchase','No separate invoice/receipt totals record is stored for '+p.invoice+'. The purchase itself is still valid.');
+    if(p.disposition==='On Hand'&&!p.inventoryPartId)add('review','purchase',p.id,p.description||p.pn||'Purchase','On-hand purchase is not linked to an inventory part yet.');
+  });
+
+  arr(db.equipment).forEach(e=>{
+    if(e.purchaseId&&!purchaseIds.has(String(e.purchaseId)))add('broken','equipment',e.id,e.name||'Equipment','Purchase link points to a missing purchase record.');
+    if(e.inventoryPartId&&!partIds.has(String(e.inventoryPartId)))add('broken','equipment',e.id,e.name||'Equipment','Inventory link points to a missing part record.');
+    arr(e.linkedProjectIds).forEach(id=>{if(!projectIds.has(String(id)))add('broken','equipment',e.id,e.name||'Equipment','Linked project '+id+' no longer exists.')});
+  });
+
+  arr(db.parts).forEach(p=>{
+    arr(p.purchaseIds).forEach(id=>{if(!purchaseIds.has(String(id)))add('broken','part',p.id,p.name||'Part','Purchase backlink '+id+' points to a missing purchase.')});
+    if(p.equipmentId&&!equipmentIds.has(String(p.equipmentId)))add('broken','part',p.id,p.name||'Part','Equipment backlink points to a missing equipment record.');
+    arr(p.linkedProjectIds).forEach(id=>{if(!projectIds.has(String(id)))add('broken','part',p.id,p.name||'Part','Linked project '+id+' no longer exists.')});
+  });
+
+  arr(db.invoices).forEach(x=>arr(x.purchaseIds).forEach(id=>{if(!purchaseIds.has(String(id)))add('broken','invoice',x.invoice||x.id,'Invoice '+(x.invoice||x.id),'Purchase backlink '+id+' points to a missing purchase.')}));
+
+  const broken=issues.filter(x=>x.severity==='broken'),review=issues.filter(x=>x.severity==='review');
+  return {issues,broken,review,healthy:broken.length===0};
+}
+window.trackerLinkHealth=trackerLinkHealth;
+
+function trackerHealthOpenIssue(type,id){
+  closeModal();
+  setTimeout(()=>{
+    if(type==='purchase'&&typeof openPurchaseDetail==='function')return openPurchaseDetail(id);
+    if(type==='equipment'&&typeof openEquipmentDetail==='function')return openEquipmentDetail(Number(id));
+    if(type==='part'&&typeof openPartDetail==='function')return openPartDetail(Number(id));
+    if(type==='invoice'&&typeof openInvoiceGroup==='function')return openInvoiceGroup(id);
+  },20);
+}
+window.trackerHealthOpenIssue=trackerHealthOpenIssue;
+
+window.repairSafeRecordLinks=function(){
+  const changed=window.reconcileTrackerRecordLinks({persist:false});
+  if(changed){
+    saveDB('Safe record links repaired.');
+    setTimeout(()=>openTrackerLinkHealth(),60);
+  }else{
+    toast('No safe automatic link repairs were needed.','good');
+    openTrackerLinkHealth();
+  }
+};
+
+window.openTrackerLinkHealth=function(){
+  const h=trackerLinkHealth(),rows=h.issues;
+  const rowHtml=rows.map(x=>`<button class="tracker-health-row ${x.severity}" onclick="trackerHealthOpenIssue('${esc(x.recordType)}','${esc(x.recordId)}')"><span class="tracker-health-state">${x.severity==='broken'?'!':'i'}</span><span><b>${esc(x.label)}</b><small>${esc(x.detail)}</small></span><span class="tracker-health-open">›</span></button>`).join('');
+  openModal(`${modalHeader('Data Integrity','Purchase • inventory • equipment • invoice • project relationships')}
+    <div class="summary-strip tracker-health-summary"><div class="summary-cell"><div class="lab">Broken links</div><div class="val">${h.broken.length}</div></div><div class="summary-cell"><div class="lab">Review items</div><div class="val">${h.review.length}</div></div><div class="summary-cell"><div class="lab">Status</div><div class="val">${h.healthy?'Healthy':'Needs attention'}</div></div></div>
+    <div class="${h.healthy?'notice':'warning'}"><b>${h.healthy?'Relationship checks passed.':'Some explicit record links need attention.'}</b><br>Safe, unambiguous links are reconciled automatically after cloud load. This audit does not guess at ambiguous records or delete history.</div>
+    <div class="detail-card tracker-health-card"><div class="section-tools"><h3>Relationship Audit</h3><button class="secondary" onclick="repairSafeRecordLinks()">Repair Safe Links</button></div>
+      ${rows.length?rowHtml:'<div class="empty">No broken or unresolved record relationships found.</div>'}
+    </div>
+    <div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>`,true);
+};
+
+if(!document.getElementById('trackerLinkHealthStyle')){
+  const s=document.createElement('style');s.id='trackerLinkHealthStyle';s.textContent=`
+  .tracker-health-summary{margin-bottom:12px}.tracker-health-card{padding:0!important;overflow:hidden}.tracker-health-card>.section-tools{padding:12px 14px;border-bottom:1px solid var(--line)}
+  .tracker-health-row{appearance:none;width:100%;border:0;border-bottom:1px solid #e9eef2;background:#fff;display:grid;grid-template-columns:28px minmax(0,1fr) 18px;gap:10px;align-items:center;text-align:left;padding:11px 14px;color:inherit;cursor:pointer}.tracker-health-row:last-child{border-bottom:0}.tracker-health-row:hover{background:#f8fbfd}
+  .tracker-health-state{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:900}.tracker-health-row.broken .tracker-health-state{background:#fde8e6;color:#9a3f38}.tracker-health-row.review .tracker-health-state{background:#fff2cf;color:#8a6515}
+  .tracker-health-row b{display:block;font-size:12px}.tracker-health-row small{display:block;color:var(--muted);font-size:10px;line-height:1.35;margin-top:3px}.tracker-health-open{font-size:20px;color:#8aa0b0}
+  `;document.head.appendChild(s);
+}
+
 function equipmentMissingDocs(e){return !e.serialNo||!e.purchaseDate||e.purchasePrice===''||e.purchasePrice===null}
 function equipmentSortVal(e,key){
   if(key==='cost')return e.purchasePrice===''?null:Number(e.purchasePrice)||0;
