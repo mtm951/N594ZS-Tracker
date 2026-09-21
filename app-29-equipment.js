@@ -220,7 +220,7 @@ function trackerLinkHealth(){
     if(p.equipmentId&&!equipmentIds.has(String(p.equipmentId)))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Equipment link points to a missing equipment record.');
     if(p.trackAsEquipment&&!purchaseEquipmentRecord(p))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Marked as lifecycle-tracked equipment but no equipment record is linked.');
     if(p.projectId&&!projectIds.has(String(p.projectId)))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Linked project no longer exists.');
-    if(p.invoice&&!invoiceNos.has(String(p.invoice)))add('review','purchase',p.id,p.description||p.pn||'Purchase','No separate invoice/receipt totals record is stored for '+p.invoice+'. The purchase itself is still valid.');
+    const invKey=String(p.invoice||'');if(invKey&&!/^(PRIVATE-|MANUAL-)/i.test(invKey)&&!/-MANUAL$/i.test(invKey)&&!invoiceNos.has(invKey))add('review','purchase',p.id,p.description||p.pn||'Purchase','No separate invoice/receipt totals record is stored for '+p.invoice+'. The purchase itself is still valid.');
     if(p.disposition==='On Hand'&&!p.inventoryPartId)add('review','purchase',p.id,p.description||p.pn||'Purchase','On-hand purchase is not linked to an inventory part yet.');
   });
 
