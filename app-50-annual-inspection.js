@@ -27,12 +27,9 @@
     return {items,done,pct:items.length?Math.round(done/items.length*100):0};
   }
 
-  const openChecklistDetailBase=window.openChecklistDetail;
-  window.openChecklistDetail=function(id){
-    // UUID-based ROTAX checklists must pass through untouched; only the
-    // legacy numeric annual-inspection checklist uses this specialized renderer.
+  window.openAnnualInspectionChecklist=function(id){
     const c=checklistById(id);
-    if(!c||!sourceChecklist(c))return openChecklistDetailBase(id);
+    if(!c||!sourceChecklist(c))return;
     currentDetail={type:'checklist',id:Number(c.id)};
     const all=A(c.items),done=all.filter(i=>i.done||itemStatus(i)==='N/A').length,pct=all.length?Math.round(done/all.length*100):0;
     const finding=all.filter(i=>itemStatus(i)==='Finding').length;
