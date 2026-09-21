@@ -106,7 +106,7 @@
 
         <div class="detail-card">
           <div class="section-tools"><div><h3>Acquisition & Source</h3><div class="tiny muted">Purchase and invoice remain separate source records.</div></div></div>
-          ${c.purchase?`<div class="kv click-row" onclick="openPurchaseDetail('${esc(c.purchase.id)}')"><span>Purchase</span><b>${esc(c.purchase.vendor||c.purchase.seller||'Vendor')} • ${esc(c.purchase.shipDate||'date not recorded')}</b></div><div class="kv"><span>Purchase line</span><b>${db.settings.showCosts?fmtMoney(N(c.purchase.qty)*N(c.purchase.unitPrice)):'Hidden'}</b></div>`:'<div class="empty">No linked purchase record.</div>'}
+          ${c.purchase?`<div class="kv click-row" onclick="openPurchaseDetail('${esc(c.purchase.id)}')"><span>Purchase</span><b>${esc(c.purchase.vendor||c.purchase.seller||'Vendor')} • ${esc(c.purchase.shipDate||'date not recorded')}</b></div>${c.purchase.order?`<div class="kv"><span>Vendor order</span><b>${esc(c.purchase.order)}</b></div>`:''}<div class="kv"><span>Purchase line</span><b>${db.settings.showCosts?fmtMoney(N(c.purchase.qty)*N(c.purchase.unitPrice)):'Hidden'}</b></div>`:'<div class="empty">No linked purchase record.</div>'}
           ${c.invoice?`<div class="kv click-row" onclick="openInvoiceGroup('${esc(c.invoice.invoice||c.invoice.id)}')"><span>Invoice / receipt</span><b>#${esc(c.invoice.invoice||c.invoice.id)} • ${db.settings.showCosts?fmtMoney(c.invoice.total):'Hidden'}</b></div><div class="kv"><span>Freight / other</span><b>${db.settings.showCosts?fmtMoney(N(c.invoice.freight)+N(c.invoice.miscCharge)+N(c.invoice.tax)):'Hidden'}</b></div>`:(invoiceNo?`<div class="kv"><span>Invoice / reference</span><b>${esc(invoiceNo)}</b></div>`:'')}
           ${c.purchase?.notes?`<div class="detail-section"><label>Purchase notes</label><div class="detail-text">${esc(c.purchase.notes)}</div></div>`:''}
         </div>
@@ -119,7 +119,7 @@
         </div>
 
         <div class="detail-card">
-          <div class="section-tools"><h3>Projects</h3></div>
+          <div class="section-tools"><h3>Projects</h3>${c.part?'<button class="icon-btn" onclick="openPartProjectLinks('+c.part.id+')">Edit Links</button>':''}</div>
           ${projects.length?projects.map(p=>`<div class="kv click-row" onclick="openProjectDetail(${p.id})"><div><b>${esc(p.title)}</b><div class="task-note">${esc(p.nextStep||p.summary||'')}</div></div>${pill(p.status)}</div>`).join(''):'<div class="empty">No linked projects.</div>'}
         </div>
       </div><div>
