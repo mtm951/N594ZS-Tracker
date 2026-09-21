@@ -149,7 +149,7 @@
       const currentDocNote='OM-912 / P/N 899649. User-confirmed current ROTAX manufacturer reference for N594ZS. Effective pages include Rev. 1 dated April 01 2013. Aircraft-specific operating instructions remain governed by the applicable N594ZS/Kitfox documentation.';
       if(doc.notes!==currentDocNote){doc.notes=currentDocNote;changed=true}
     }
-    for(const f of A(db.flightCards).filter(x=>x.starter912)){
+    for(const f of A(db.flightCards)){
       for(const x of A(f.items)){
         const old=String(x.target||'');
         const updated=stripOperatorRefs(old).replace(/\s*— VERIFY CURRENT APPLICABILITY/g,'').trim();
