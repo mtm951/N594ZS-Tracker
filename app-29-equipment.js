@@ -282,7 +282,9 @@ function openEquipmentModal(id=null,prefill=null){
       ${field('Airframe hours at install','eqAfHours',e.airframeHoursAtInstall,'number','min="0" step="0.1"')}${field('Engine hours at install','eqEngHours',e.engineHoursAtInstall,'number','min="0" step="0.1"')}
       ${textareaField('Notes / provenance','eqNotes',e.notes)}
     </div>
-    <div class="modal-actions">${id?`<button class="danger" onclick="deleteEquipment(${e.id})">Move to Trash</button>`:''}<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveEquipment(${id||'null'},${JSON.stringify(String(e.purchaseId||''))})">Save Equipment</button></div>`,true);
+    <div class="modal-actions">${id?`<button class="danger" onclick="deleteEquipment(${e.id})">Move to Trash</button>`:''}<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" id="saveEquipmentBtn">Save Equipment</button></div>`,true);
+  const saveBtn=document.getElementById('saveEquipmentBtn');
+  if(saveBtn)saveBtn.addEventListener('click',()=>saveEquipment(id,String(e.purchaseId||'')),{once:true});
 }
 
 function saveEquipment(id,purchaseId=''){
