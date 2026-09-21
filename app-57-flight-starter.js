@@ -228,6 +228,8 @@
   style.textContent=`
     .flight-program-strip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:#f8fafc}
     .flight-program-strip span{font-size:11px;color:var(--muted)}
+    .flight-target-source{max-width:520px;min-width:260px;font-size:12px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
+    @media(max-width:760px){.flight-target-source{min-width:220px;max-width:320px}}
   `;
   document.head.appendChild(style);
 })();
