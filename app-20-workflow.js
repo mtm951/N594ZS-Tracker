@@ -138,7 +138,4 @@ function openReadinessGate(phase){const target=WORKFLOW_PHASE_ORDER[phase]??0,ps
 const renderDashboardWorkflowBase=renderDashboard;
 renderDashboard=function(){renderDashboardWorkflowBase();const page=document.getElementById('page-dashboard');if(!page)return;const start=phaseGateInfo('engine-start'),flight=phaseGateInfo('flight'),focus=db.projects.filter(p=>p.status!=='Done'&&p.focusToday).length;const strip=document.createElement('div');strip.className='card dashboard-readiness-strip';strip.innerHTML=`<button onclick="navTo('readiness')"><span>Project Readiness</span><b>${workflowOverallPercent()}%</b></button><button onclick="openReadinessGate('engine-start')"><span>Before Engine Start</span><b>${start.open.length} open</b></button><button onclick="openReadinessGate('flight')"><span>Before Flight</span><b>${flight.open.length} open</b></button><button onclick="navTo('readiness')"><span>Today’s Focus</span><b>${focus}</b></button>`;page.insertBefore(strip,page.firstChild)};
 
-const renderAllWorkflowBase=renderAll;
-renderAll=function(){renderAllWorkflowBase();if(currentPage==='readiness')renderReadiness()};
-const navToWorkflowBase=navTo;
-navTo=function(page){navToWorkflowBase(page);if(page==='readiness')renderReadiness()};
+// Readiness rendering/navigation is coordinated centrally by app-61-performance.
