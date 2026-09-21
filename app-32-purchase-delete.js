@@ -11,6 +11,9 @@ function deletePurchaseRecord(id){
   const extra=notes.length?`\n\n${notes.join('\n')}`:'';
   if(!confirm(`Delete this purchase?\n\n${p.description||p.pn||'Purchase'}${p.vendor?`\n${p.vendor}`:''}${p.invoice?`\nInvoice / order: ${p.invoice}`:''}${extra}\n\nIt will be moved to Trash and can be restored later.`))return;
   linkedEquipment.forEach(e=>{e.purchaseId='';});
+  if(inventoryPart)inventoryPart.purchaseIds=arr(inventoryPart.purchaseIds).filter(pid=>String(pid)!==String(id));
+  const invoice=typeof invoiceRecord==='function'&&p.invoice?invoiceRecord(p.invoice):null;
+  if(invoice)invoice.purchaseIds=arr(invoice.purchaseIds).filter(pid=>String(pid)!==String(id));
   db.purchases=db.purchases.filter(x=>String(x.id)!==String(id));
   closeModal();
   saveDB('Purchase moved to Trash.');
