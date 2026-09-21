@@ -283,6 +283,9 @@
     navTo('documents');
   };
 
+  window.ensureRotaxOperatorPack=ensureReferences;
+  window.injectRotaxOperatorCard=injectOperatorCard;
+
   const oldOpenSystem=window.openSystemDashboard;
   window.openSystemDashboard=function(n){oldOpenSystem(n);ensureReferences();injectOperatorCard()};
 
