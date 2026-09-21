@@ -55,3 +55,25 @@ function deleteChecklistItem(cid,iid){
   c.items=c.items.filter(x=>String(x.id)!==String(iid));
   saveDB('Checklist item deleted.');openChecklistDetail(c.id);
 }
+
+
+function toggleChecklistItemByDataset(_el,cid,iid){
+  toggleChecklistItem(cid,iid,!!_el.checked);
+}
+
+if(!window.__n594zsChecklistDelegationBound){
+  window.__n594zsChecklistDelegationBound=true;
+  document.addEventListener('click',event=>{
+    if(event.target.closest('input,button,a,select,textarea,label'))return;
+    const card=event.target.closest('.checklist[data-checklist-id]');
+    if(!card)return;
+    openChecklistDetail(card.dataset.checklistId);
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Enter'&&event.key!==' ')return;
+    const card=event.target.closest('.checklist[data-checklist-id]');
+    if(!card)return;
+    event.preventDefault();
+    openChecklistDetail(card.dataset.checklistId);
+  });
+}
