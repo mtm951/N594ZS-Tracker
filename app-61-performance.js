@@ -59,6 +59,7 @@
       try{if(typeof window.ensureRotaxInstallPack==='function')window.ensureRotaxInstallPack()}catch(e){console.warn('Rotax install init failed',e)}
       try{if(typeof window.ensureRotaxOperatorPack==='function')window.ensureRotaxOperatorPack()}catch(e){console.warn('Rotax operator init failed',e)}
       try{if(typeof window.ensureRotaxLineProgram==='function')window.ensureRotaxLineProgram(false)}catch(e){console.warn('Rotax line init failed',e)}
+      try{if(typeof window.ensureKitfoxPohPack==='function')window.ensureKitfoxPohPack()}catch(e){console.warn('Kitfox POH init failed',e)}
     },25);
   }
 
