@@ -40,11 +40,11 @@ normalizeDB=function(){
   });
   db.inspections.forEach(i=>{
     i.id=String(i.id||crypto.randomUUID());i.title=i.title||'Inspection';i.type=i.type||'General Inspection';i.date=i.date||today();i.status=i.status||'Open';i.projectId=i.projectId||null;i.airframeHours=i.airframeHours??'';i.engineHours=i.engineHours??'';i.notes=i.notes||'';
-    i.items=arr(i.items).map(x=>({id:String(x.id||crypto.randomUUID()),section:x.section||'General',label:x.label||'Inspection item',result:x.result||'Pending',notes:x.notes||'',source:x.source||''}));
+    i.items=arr(i.items).map(x=>({...x,id:String(x.id||crypto.randomUUID()),section:x.section||'General',label:x.label||'Inspection item',result:x.result||'Pending',notes:x.notes||'',source:x.source||''}));
   });
   db.flightCards.forEach(f=>{
     f.id=String(f.id||crypto.randomUUID());f.title=f.title||'Flight test card';f.date=f.date||today();f.status=f.status||'Planned';f.projectId=f.projectId||null;f.runId=f.runId||null;f.conditions=f.conditions||'';f.notes=f.notes||'';
-    f.items=arr(f.items).map(x=>({id:String(x.id||crypto.randomUUID()),objective:x.objective||'Test point',target:x.target||'',actual:x.actual||'',result:x.result||'Pending',notes:x.notes||''}));
+    f.items=arr(f.items).map(x=>({...x,id:String(x.id||crypto.randomUUID()),objective:x.objective||'Test point',target:x.target||'',actual:x.actual||'',result:x.result||'Pending',notes:x.notes||''}));
   });
   db.parts=arr(db.parts);db.parts.forEach(p=>{p.partType=p.partType||((p.status==='Installed')?'Installed Component':'Inventory')});
   db.docs=arr(db.docs);db.docs.forEach(d=>{d.docStatus=d.docStatus||'Current';d.applicability=d.applicability||'';d.linkedEquipmentIds=arr(d.linkedEquipmentIds).map(Number).filter(Number.isFinite)});
