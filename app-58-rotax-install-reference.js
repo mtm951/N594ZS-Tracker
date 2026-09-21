@@ -21,8 +21,8 @@
   const refs=[
     {id:'rotax-im-e3r0-serial-location',title:'Engine serial-number location',system:'Engine',value:'Ignition cover, left side opposite electric starter',units:'',section:'00-00-00',page:'2',notes:'ROTAX instructs that the engine serial number be provided for inquiries and parts because same-type engines can require different support/spares.'},
     {id:'rotax-im-e3r0-generator',title:'Internal generator output',system:'Electrical',value:'Approx. 250',units:'W AC @ 5800 rpm',section:'24-00-00',page:'5',notes:''},
-    {id:'rotax-im-e3r0-reg-voltage',title:'Rectifier-regulator output voltage',system:'Electrical',value:'14.2 ± 0.3',units:'V',section:'24-00-00',page:'6',notes:'Manual states this output from 1000 ± 250 rpm; regulator current limit max. 22 A and component temperature max. 80 °C.'},
-    {id:'rotax-im-e3r0-reg-fuse',title:'Rectifier-regulator protection',system:'Electrical',value:'25',units:'A slow-blow fuse / CB',section:'24-00-00',page:'7',notes:'Manual also specifies main-circuit wire size at least 2.5 mm² (14 AWG) and capacitor at least 22000 µF / 25 V for the standard rectifier-regulator installation.'},
+    {id:'rotax-im-e3r0-reg-voltage',title:'Standard rectifier-regulator output voltage',system:'Electrical',value:'14.2 ± 0.3',units:'V',section:'24-00-00',page:'6',notes:'For the standard external rectifier-regulator used with the internal generator: output from 1000 ± 250 rpm; regulator current limit max. 22 A and component temperature max. 80 °C.'},
+    {id:'rotax-im-e3r0-reg-fuse',title:'Standard rectifier-regulator protection',system:'Electrical',value:'25',units:'A slow-blow fuse / CB',section:'24-00-00',page:'7',notes:'For the standard rectifier-regulator/internal-generator installation: 25 A slow-blow protection, main-circuit wire at least 2.5 mm² (14 AWG), capacitor at least 22000 µF / 25 V. The optional external alternator has separate wiring/protection requirements.'},
     {id:'rotax-im-e3r0-fuel-return',title:'Fuel return line',system:'Fuel',value:'Mandatory',units:'',section:'73-00-00',page:'7',notes:'If the ROTAX fuel distributor/regulator is not used, the return restriction must regulate fuel pressure within ROTAX operating limits.'},
     {id:'rotax-im-e3r0-fine-filter',title:'Fuel fine-filter mesh',system:'Fuel',value:'0.1',units:'mm (70–100 µm)',section:'73-00-00',page:'7',notes:'Additional fine filter in the feed line from tank to pumps; accessible for service. Manual warns against plastic filters in the engine compartment and paper filters.'},
     {id:'rotax-im-e3r0-aux-pump-pressure',title:'Auxiliary fuel-pump maximum pressure',system:'Fuel',value:'0.31',units:'bar (4.5 psi)',section:'73-00-00',page:'8',notes:'ROTAX recommends an electrical auxiliary fuel pump; the entire fuel system must remain within specified pressure limits.'},
@@ -47,6 +47,7 @@
     'Check throttle and choke controls reach both stops and operate through the correct range',
     'Confirm no tools, foreign objects or loose items remain in the engine compartment',
     'Check propeller security and pitch setting',
+    'If equipped with propeller control: verify the control reaches both stops and operates through the correct range',
     'Secure aircraft / chock wheels and secure the propeller area',
     'Perform visual inspection of engine and accessories',
     'Check for leaks',
@@ -94,11 +95,28 @@
     for(const r of refs){
       const s=db.specs.find(x=>String(x.id)===r.id);
       if(!s)continue;
-      if(s.status!=='Current Manufacturer Reference'){s.status='Current Manufacturer Reference';changed=true}
-      const refreshed=manualNote(r.section,r.page,r.notes);
-      if(s.notes!==refreshed){s.notes=refreshed;changed=true}
+      const desired={
+        title:r.title,system:r.system,value:r.value,units:r.units,
+        status:'Current Manufacturer Reference',source:SOURCE,
+        sourceRevision:`${REV} • ${r.section} p.${r.page}`,
+        documentId:doc?.id||s.documentId||null,
+        notes:manualNote(r.section,r.page,r.notes)
+      };
+      for(const [k,v] of Object.entries(desired))if(s[k]!==v){s[k]=v;changed=true}
     }
-    if(!db.settings.rotaxInstallManualEd3R0Seeded){
+    db.checklists=A(db.checklists);
+    const preTrial=db.checklists.find(x=>x.name==='ROTAX 912 Installation Manual — Pre-Trial-Run Closeout');
+    if(preTrial){
+      const oldItems=A(preTrial.items);
+      const rebuilt=trialItems.map((text,i)=>({id:oldItems[i]?.id??(i+1),text,done:!!oldItems[i]?.done,note:oldItems[i]?.note||''}));
+      const desiredNotes='Source: ROTAX 912 Series Installation Manual, IM-912 / P/N 898644, Edition 3 / Rev. 0, Chapter 10-10-00 pages 12–13. ROTAX states this checklist is not exhaustive and directs the user to the applicable Instructions for Continued Airworthiness and Operator’s Manual.';
+      if(preTrial.purpose!=='Source-backed checklist of ROTAX checks before an engine trial run.'){preTrial.purpose='Source-backed checklist of ROTAX checks before an engine trial run.';changed=true}
+      if(preTrial.notes!==desiredNotes){preTrial.notes=desiredNotes;changed=true}
+      if(preTrial.documentId!==(doc?.id||null)){preTrial.documentId=doc?.id||null;changed=true}
+      if(JSON.stringify(preTrial.items)!==JSON.stringify(rebuilt)){preTrial.items=rebuilt;changed=true}
+    }
+
+        if(!db.settings.rotaxInstallManualEd3R0Seeded){
       const eqId=engineEquipmentId(),docId=doc?.id||null;
       for(const r of refs){
         if(db.specs.some(x=>String(x.id)===r.id))continue;
@@ -116,11 +134,12 @@
         db.checklists.push({
           id:crypto.randomUUID(),
           name:'ROTAX 912 Installation Manual — Pre-Trial-Run Closeout',
-          purpose:'Source-backed closeout of the Installation Manual checks before an engine trial run.',
+          purpose:'Source-backed checklist of ROTAX checks before an engine trial run.',
           system:'Engine',
           trigger:'Before first engine run',
           projectId:A(db.projects).find(p=>p.title==='Oil system prime / purge')?.id||null,
-          notes:'Source: ROTAX 912 Series Installation Manual, IM-912, Edition 3 / Rev. 0, Chapter 10-10-00 pages 12–13. The manual explicitly says this checklist is not exhaustive and points to the latest Operator’s Manual / Instructions for Continued Airworthiness.',
+          documentId:doc?.id||null,
+          notes:'Source: ROTAX 912 Series Installation Manual, IM-912 / P/N 898644, Edition 3 / Rev. 0, Chapter 10-10-00 pages 12–13. ROTAX states this checklist is not exhaustive and directs the user to the applicable Instructions for Continued Airworthiness and Operator’s Manual.',
           items:trialItems.map((text,i)=>({id:i+1,text,done:false,note:''}))
         });
         changed=true;
