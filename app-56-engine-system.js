@@ -187,11 +187,7 @@
 
   window.injectEngineSystemPanel=injectEnginePanel;
 
-  const openSystemDashboardEngineBase=window.openSystemDashboard;
-  window.openSystemDashboard=function(n){openSystemDashboardEngineBase(n);injectEnginePanel()};
-
-  const renderAllEngineBase=renderAll;
-  renderAll=function(){renderAllEngineBase();injectEnginePanel()};
+  // Rendering is coordinated by the late performance layer; expose only the targeted hook.
 
   window.openEngineProfileModal=function(){
     const p=engineProgram().profile;
