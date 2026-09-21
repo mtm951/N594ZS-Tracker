@@ -37,7 +37,7 @@ normalizeDB=function(){
     e.engineHoursAtInstall=e.engineHoursAtInstall??'';
     e.notes=e.notes||'';
     e.linkedProjectIds=arr(e.linkedProjectIds).map(Number).filter(Boolean);
-    e.history=arr(e.history).map(h=>({id:Number(h.id)||uid(),date:h.date||'',action:h.action||'Note',hours:h.hours??'',notes:h.notes||''}));
+    e.history=arr(e.history).map(h=>({...h,id:Number(h.id)||uid(),date:h.date||'',action:h.action||'Note',hours:h.hours??'',notes:h.notes||''}));
   });
 };
 normalizeDB();
