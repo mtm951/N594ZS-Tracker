@@ -131,8 +131,9 @@ function openMaintenanceModal(id=null){
     <div class="modal-actions">${id?`<button class="danger" onclick="deleteMaintenance(${id})">Move to Trash</button>`:''}<button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveMaintenance(${id||'null'})">Save</button></div>`,true);
 }
 function saveMaintenance(id){
-  const obj={id:id||nextNumericId(db.maintenance,700),title:val('mntTitle').trim()||'Maintenance item',system:val('mntSystem').trim()||'General',basis:val('mntBasis')||'date',meter:val('mntMeter')||'engine',intervalDays:val('mntDays'),intervalHours:val('mntHours'),lastDate:val('mntLastDate'),lastHours:val('mntLastHours'),nextDate:val('mntNextDate'),nextHours:val('mntNextHours'),notes:val('mntNotes')};
-  const i=db.maintenance.findIndex(x=>String(x.id)===String(id));if(i>=0)db.maintenance[i]=obj;else db.maintenance.push(obj);closeModal();saveDB('Maintenance item saved.');
+  const existing=id!==null&&id!==undefined&&id!==''?db.maintenance.find(x=>String(x.id)===String(id)):null;
+  const obj={...(existing||{}),id:existing?.id||id||nextNumericId(db.maintenance,700),title:val('mntTitle').trim()||'Maintenance item',system:val('mntSystem').trim()||'General',basis:val('mntBasis')||'date',meter:val('mntMeter')||'engine',intervalDays:val('mntDays'),intervalHours:val('mntHours'),lastDate:val('mntLastDate'),lastHours:val('mntLastHours'),nextDate:val('mntNextDate'),nextHours:val('mntNextHours'),notes:val('mntNotes')};
+  const i=db.maintenance.findIndex(x=>String(x.id)===String(obj.id));if(i>=0)db.maintenance[i]=obj;else db.maintenance.push(obj);closeModal();saveDB('Maintenance item saved.');
 }
 function deleteMaintenance(id){if(!confirm('Move this maintenance item to Trash?'))return;db.maintenance=db.maintenance.filter(x=>String(x.id)!==String(id));closeModal();saveDB('Maintenance item moved to Trash.')}
 (()=>{if(document.getElementById('maintenanceChecklistStyle'))return;const s=document.createElement('style');s.id='maintenanceChecklistStyle';s.textContent=`
