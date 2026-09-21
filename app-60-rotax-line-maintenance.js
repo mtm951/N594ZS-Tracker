@@ -221,18 +221,29 @@
 
   function ensureChecklist(doc){
     db.checklists=A(db.checklists);
-    if(!db.checklists.some(x=>x.name==='ROTAX 912 — 100 hr / Annual Engine Check')){
-      db.checklists.push({
-        id:crypto.randomUUID(),name:'ROTAX 912 — 100 hr / Annual Engine Check',
-        purpose:'Current ROTAX line-maintenance schedule for the recurring 100-hour / annual engine check.',
-        system:'Engine',trigger:'Every 100 engine hr / 12 months',
-        projectId:null,
-        notes:`Source: ${DOCREF}, ${REV}, Chapter 05-20-00 pages 2 and 9-16. First 25-hour inspection uses the 100-hour check scope. Conditional leaded-fuel and configuration-specific tasks remain subject to the manual.`,
-        documentId:doc?.id||null,
-        items:annualItems.map((text,i)=>({id:i+1,text,done:false,note:''})),
-        rotaxSourceManaged:true
-      });
+    const key='rotax-mml-912-100h-annual';
+    let c=db.checklists.find(x=>x.sourceKey===key)||
+      db.checklists.find(x=>x.name==='ROTAX 912 — 100 hr / Annual Engine Check');
+    if(c){
+      if(!c.sourceKey){c.sourceKey=key;mmlDirty=true}
+      if(c.rotaxSourceManaged!==true){c.rotaxSourceManaged=true;mmlDirty=true}
+      if(!c.documentId&&doc?.id){c.documentId=doc.id;mmlDirty=true}
+      return c;
     }
+    // A previously seeded checklist that the owner later removed or renamed should
+    // not be silently recreated. Only create it during the initial source import.
+    if(db.settings?.rotaxMmlEd4Rev2Seeded)return null;
+    c={
+      id:crypto.randomUUID(),name:'ROTAX 912 — 100 hr / Annual Engine Check',
+      purpose:'Current ROTAX line-maintenance schedule for the recurring 100-hour / annual engine check.',
+      system:'Engine',trigger:'Every 100 engine hr / 12 months',
+      projectId:null,
+      notes:`Source: ${DOCREF}, ${REV}, Chapter 05-20-00 pages 2 and 9-16. First 25-hour inspection uses the 100-hour check scope. Conditional leaded-fuel and configuration-specific tasks remain subject to the manual.`,
+      documentId:doc?.id||null,
+      items:annualItems.map((text,i)=>({id:i+1,text,done:false,note:''})),
+      rotaxSourceManaged:true,sourceKey:key
+    };
+    db.checklists.push(c);mmlDirty=true;return c;
   }
 
   function tboHTML(){
