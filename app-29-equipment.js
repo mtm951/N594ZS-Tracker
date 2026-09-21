@@ -273,7 +273,7 @@ function openEquipmentModal(id=null,prefill=null){
   openModal(`${modalHeader(id?'Edit Equipment':'Add Equipment',e.name||'Major component / installed equipment')}
     <div class="form-grid">
       ${field('Equipment / component','eqName',e.name,'text','required')}${field('System','eqSystem',e.system)}
-      ${field('Category','eqCategory',e.category)}<div><label>Status</label><select id="eqStatus">${['Installed','Spare','Removed','Replaced','Planned','Verify'].map(s=>`<option ${e.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      ${field('Category','eqCategory',e.category)}<div><label>Status</label><select id="eqStatus">${['Installed','On Hand','Spare','Removed','Replaced','Planned','Verify'].map(s=>`<option ${e.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
       ${field('Manufacturer','eqManufacturer',e.manufacturer)}${field('Model','eqModel',e.model)}
       ${field('Part number','eqPartNo',e.partNo)}${field('Serial number','eqSerialNo',e.serialNo)}
       ${field('Purchase date','eqPurchaseDate',e.purchaseDate,'date')}${field('Install date','eqInstallDate',e.installDate,'date')}
