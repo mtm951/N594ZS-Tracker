@@ -281,10 +281,16 @@
   window.saveEngineServiceComplete=function(id){
     const i=engineProgram().serviceItems.find(x=>String(x.id)===String(id));if(!i)return;
     const date=val('engDoneDate')||today(),hours=val('engDoneHours'),action=val('engDoneAction')||'Serviced',notes=val('engDoneNotes');
+    const linkedMaintenance=A(db.maintenance).find(x=>String(x.engineServiceItemId||'')===String(i.id));
+    const linkedChecklist=linkedMaintenance?.linkedChecklistSourceKey?A(db.checklists).find(c=>c.sourceKey===linkedMaintenance.linkedChecklistSourceKey):null;
+    const activeChecklist=linkedChecklist?A(linkedChecklist.items):A(linkedMaintenance?.procedureItems);
+    const checklistSnapshot=activeChecklist.map(x=>({id:String(x.id),text:x.text||'',done:!!x.done,note:x.note||''}));
     i.lastDate=date;i.lastHours=hours;i.nextDate='';i.nextHours='';
     if(i.kind==='Component'&&action==='Replaced'){i.installedDate=date;i.installedHours=hours}
-    i.history.push({id:crypto.randomUUID(),date,hours,action,notes});
+    i.history.push({id:crypto.randomUUID(),date,hours,action,notes,checklistSnapshot});
     syncMaintenance(i);
+    if(linkedChecklist)A(linkedChecklist.items).forEach(x=>{x.done=false;x.note='';x.completedAt=''});
+    else if(linkedMaintenance)A(linkedMaintenance.procedureItems).forEach(x=>{x.done=false;x.note='';x.completedAt=''});
     if(document.getElementById('engDoneLog')?.checked){
       db.logs.push({id:uid(),date,airframeHours:'',engineHours:hours,laborHours:'',system:'Engine',projectIds:[],work:action+' — '+i.title,observations:notes,blockers:'',nextStep:'',consumedParts:[],otherCost:'',notes:'Created from Engine service tracker.'});
     }
