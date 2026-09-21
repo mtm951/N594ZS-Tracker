@@ -32,6 +32,7 @@ normalizeDB=function(){
     e.vendor=e.vendor||'';
     e.purchasePrice=(e.purchasePrice===''||e.purchasePrice===null||e.purchasePrice===undefined)?'':Number(e.purchasePrice)||0;
     e.purchaseId=e.purchaseId||'';
+    e.inventoryPartId=e.inventoryPartId||null;
     e.invoice=e.invoice||'';
     e.airframeHoursAtInstall=e.airframeHoursAtInstall??'';
     e.engineHoursAtInstall=e.engineHoursAtInstall??'';
@@ -39,6 +40,8 @@ normalizeDB=function(){
     e.linkedProjectIds=arr(e.linkedProjectIds).map(Number).filter(Boolean);
     e.history=arr(e.history).map(h=>({...h,id:Number(h.id)||uid(),date:h.date||'',action:h.action||'Note',hours:h.hours??'',notes:h.notes||''}));
   });
+  arr(db.parts).forEach(p=>{p.purchaseIds=arr(p.purchaseIds).map(String);p.equipmentId=p.equipmentId||null});
+  arr(db.invoices).forEach(x=>{x.purchaseIds=arr(x.purchaseIds).map(String)});
 };
 normalizeDB();
 
