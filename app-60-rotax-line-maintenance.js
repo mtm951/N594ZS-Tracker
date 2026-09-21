@@ -12,6 +12,7 @@
   const SOURCE='ROTAX 912 Series Maintenance Manual Line';
   const DOCREF='MML-912 / P/N 899196';
   const REV='Ed. 04 / Rev. 2 • June 01 2025';
+  const DOC_KEY='rotax-mml-912-ed4-r2';
 
   function lineProgram(){
     db.aircraft.engineProgram=db.aircraft.engineProgram||{};
@@ -69,7 +70,8 @@
 
   function ensureDoc(){
     db.docs=A(db.docs);
-    let d=db.docs.find(x=>/maintenance manual line/i.test(x.name||'')&&/rotax|912/i.test([x.publisher,x.name,x.notes].join(' ')));
+    let d=db.docs.find(x=>x.sourceKey===DOC_KEY)||
+      db.docs.find(x=>/maintenance manual line/i.test(x.name||'')&&/rotax|912/i.test([x.publisher,x.name,x.notes].join(' ')));
     if(d){
       // Existing document records are user-owned. Only fill missing source metadata.
       const defaults={
@@ -80,6 +82,7 @@
       };
       for(const [k,v] of Object.entries(defaults))if(blank(d[k]))setChanged(d,k,v);
       if(blank(d.rotaxSourceManaged))setChanged(d,'rotaxSourceManaged',true);
+      if(blank(d.sourceKey))setChanged(d,'sourceKey',DOC_KEY);
       if(!/MML-912/.test(d.notes||'')&&blank(d.sourceNotes))setChanged(d,'sourceNotes',`${DOCREF}. Current ROTAX line-maintenance reference supplied for N594ZS.`);
       return d;
     }
@@ -96,7 +99,7 @@
       notes:`${DOCREF}. Current ROTAX line-maintenance reference for 912 Series. Revision 2 is a complete revision dated June 01 2025.`,
       linkedProjectIds:A(db.projects).filter(p=>['Engine','Fuel','Cooling'].includes(p.system)).map(p=>p.id),
       linkedPartIds:A(db.parts).filter(p=>['Engine','Fuel','Cooling'].includes(p.system)).map(p=>p.id),
-      linkedLogIds:[],updates:[],rotaxSourceManaged:true
+      linkedLogIds:[],updates:[],rotaxSourceManaged:true,sourceKey:DOC_KEY
     };
     db.docs.push(d);mmlDirty=true;return d;
   }
