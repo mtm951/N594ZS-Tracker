@@ -212,8 +212,7 @@ if(!document.getElementById('equipmentPolishStyle')){
   document.head.appendChild(equipmentStyle);
 }
 
-const renderAllEquipmentBase=renderAll;
-renderAll=function(){renderAllEquipmentBase();renderEquipment()};
+// Equipment page rendering is coordinated centrally by app-61-performance.
 
 const reopenDetailEquipmentBase=typeof reopenDetail==='function'?reopenDetail:null;
 reopenDetail=function(type,id){if(type==='equipment')return openEquipmentDetail(Number(id));if(reopenDetailEquipmentBase)return reopenDetailEquipmentBase(type,id)};
