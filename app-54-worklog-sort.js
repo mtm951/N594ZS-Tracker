@@ -57,14 +57,23 @@
     });
   }
 
+  function logSystemFilterOptions(){
+    const names=(typeof window.systemNames==='function'
+      ?window.systemNames()
+      :unique(db.logs.map(x=>x.system).filter(Boolean)).sort((a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'})));
+    const unassigned=db.logs.some(x=>!String(x.system||'').trim());
+    return '<option value="">All systems</option>'+
+      names.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')+
+      (unassigned?'<option value="__unassigned__">Unassigned</option>':'');
+  }
+
   window.renderLogbook=function(){
-    const systems=unique(db.logs.map(x=>x.system).filter(Boolean)).sort();
     const linkedProjects=unique(db.logs.flatMap(l=>l.projectIds).map(projectName).filter(Boolean)).sort((a,b)=>a.localeCompare(b));
     document.getElementById('page-logbook').innerHTML=`<div class="card">
       <div class="toolbar"><div><h1>Work Log</h1><div class="muted">Search the full work record, filter by system or project, and click any column heading to sort.</div></div><button class="btn primary" onclick="openLogModal()">+ Add Work Entry</button></div>
       <div class="controls">
         <input id="logSearch" placeholder="Search work, parts, projects, notes, blockers…" oninput="renderLogRows()">
-        <select id="logSystem" onchange="renderLogRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select>
+        <select id="logSystem" onchange="renderLogRows()">${logSystemFilterOptions()}</select>
         <select id="logProject" onchange="renderLogRows()"><option value="">All projects</option>${linkedProjects.map(s=>`<option>${esc(s)}</option>`).join('')}</select>
       </div>
       <div class="table-wrap" style="margin-top:11px"><table><thead><tr>
