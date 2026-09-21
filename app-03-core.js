@@ -42,16 +42,65 @@ function projectName(id){return projectById(id)?.title||'Unlinked'}
 function partName(id){return partById(id)?.name||'Unlinked'}
 function isClosedOrder(o){return ['Received','Cancelled'].includes(o.status)}
 function toast(text,type=''){const w=document.getElementById('toastWrap');if(!w)return;const d=document.createElement('div');d.className='toast '+type;d.textContent=text;w.appendChild(d);setTimeout(()=>d.remove(),3200)}
+const modalHistory=[];
+let modalPendingParent=null;
 function modalHeader(title,subtitle=''){return `<div class="modal-head"><div><div class="modal-title">${esc(title)}</div>${subtitle?`<div class="muted small" style="margin-top:3px">${esc(subtitle)}</div>`:''}</div><button class="icon-btn" data-modal-close onclick="closeModal()" aria-label="Close">✕</button></div>`}
+function modalSnapshot(){
+  const b=document.getElementById('modalBox');
+  if(!b)return null;
+  return {html:b.innerHTML,className:b.className,scrollTop:b.scrollTop,currentDetail:currentDetail?JSON.parse(JSON.stringify(currentDetail)):null};
+}
+function modalNavigationCodeIsDetail(code=''){
+  return /(?:openProjectDetail|openPartDetail|openOrderDetail|openLogDetail|openDocumentDetail|openChecklistDetail|openMaintenanceDetail|openPurchaseDetail|openEquipmentDetail|openComponentView|openInvoiceGroup|openPartPurchaseHistory)\s*\(/.test(code);
+}
+function armModalParentSnapshot(target){
+  const m=document.getElementById('modal');
+  if(!m?.classList.contains('open'))return;
+  const clickable=target?.closest?.('[onclick]');
+  const code=clickable?.getAttribute?.('onclick')||'';
+  if(!modalNavigationCodeIsDetail(code))return;
+  const snap=modalSnapshot();if(!snap)return;
+  modalPendingParent=snap;
+  setTimeout(()=>{if(modalPendingParent===snap)modalPendingParent=null},0);
+}
+function decorateNestedModal(){
+  const b=document.getElementById('modalBox'),x=b?.querySelector('[data-modal-close]');
+  if(!x)return;
+  x.setAttribute('onclick','modalBack()');
+  x.setAttribute('data-modal-back','1');
+  x.setAttribute('aria-label','Back to previous detail');
+  x.setAttribute('title','Back to previous detail');
+}
 function openModal(html,wide=false){
   const m=document.getElementById('modal'),b=document.getElementById('modalBox');
+  const parent=modalPendingParent;modalPendingParent=null;
+  if(parent&&m.classList.contains('open'))modalHistory.push(parent);
   b.className='modal-box'+(wide?' wide':'');b.innerHTML=html;
   if(!b.querySelector('[data-modal-close]')){
     b.insertAdjacentHTML('afterbegin','<button class="icon-btn" data-modal-close onclick="closeModal()" aria-label="Close popup" title="Close" style="position:sticky;top:0;float:right;z-index:25;margin:-4px -4px 8px 8px;background:#fff">✕</button>');
   }
+  if(parent)decorateNestedModal();
   m.classList.add('open');
+  b.scrollTop=0;
 }
-function closeModal(){document.getElementById('modal').classList.remove('open');currentDetail=null;objectUrls.forEach(URL.revokeObjectURL);objectUrls=[]}
+function modalBack(){
+  const m=document.getElementById('modal'),b=document.getElementById('modalBox');
+  const prev=modalHistory.pop();
+  if(!prev)return closeModal();
+  b.className=prev.className||'modal-box';
+  b.innerHTML=prev.html||'';
+  currentDetail=prev.currentDetail||null;
+  m.classList.add('open');
+  requestAnimationFrame(()=>{b.scrollTop=prev.scrollTop||0});
+}
+function modalDismiss(){
+  const b=document.getElementById('modalBox');
+  if(b?.querySelector('[data-modal-back]'))modalBack();else closeModal();
+}
+function closeModal(){
+  modalHistory.length=0;modalPendingParent=null;
+  document.getElementById('modal').classList.remove('open');currentDetail=null;objectUrls.forEach(URL.revokeObjectURL);objectUrls=[]
+}
 function field(label,id,value='',type='text',extra=''){return `<div><label for="${id}">${esc(label)}</label><input id="${id}" type="${type}" value="${esc(value)}" ${extra}></div>`}
 function textareaField(label,id,value='',extraClass='full'){return `<div class="${extraClass}"><label for="${id}">${esc(label)}</label><textarea id="${id}">${esc(value)}</textarea></div>`}
 function selectOptions(items,current,emptyLabel='— Select —'){return `<option value="">${esc(emptyLabel)}</option>`+items.map(x=>{const value=typeof x==='object'?x.value:x;const label=typeof x==='object'?x.label:x;return `<option value="${esc(value)}" ${String(current??'')===String(value)?'selected':''}>${esc(label)}</option>`}).join('')}
@@ -61,7 +110,7 @@ function systemOptions(current){const s=unique([...db.projects.map(x=>x.system),
 function formatBytes(n){if(!n)return '0 B';const u=['B','KB','MB','GB'];let i=0,v=n;while(v>=1024&&i<u.length-1){v/=1024;i++}return `${v.toFixed(i?1:0)} ${u[i]}`}
 
 function renderNav(){document.getElementById('nav').innerHTML=NAV.map(([id,label])=>`<button data-nav="${id}" class="${id===currentPage?'active':''}" onclick="navTo('${id}')">${label}</button>`).join('')}
-function navTo(page){currentPage=page;document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+page)?.classList.add('active');renderNav();if(page==='access'&&typeof renderAccess==='function')renderAccess();window.scrollTo({top:0,behavior:'smooth'})}
+function navTo(page){modalHistory.length=0;modalPendingParent=null;currentPage=page;document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+page)?.classList.add('active');renderNav();if(page==='access'&&typeof renderAccess==='function')renderAccess();window.scrollTo({top:0,behavior:'smooth'})}
 function setControl(id,value=''){const el=document.getElementById(id);if(el)el.value=value??''}
 function openProjectsView(filters={}){navTo('projects');setControl('projectSearch',filters.query||'');setControl('projectStatus',filters.status||'');setControl('projectSystem',filters.system||'');setControl('projectPriority',filters.priority||'');renderProjectRows()}
 function openOrdersView(status=''){navTo('orders');setControl('orderSearch','');setControl('orderStatus',status||'');renderOrderRows()}
@@ -72,6 +121,7 @@ function activateOnEnter(event,fn){if(event.key==='Enter'||event.key===' '){even
 // Modal escape hatches: X is universal; Escape and backdrop-click also close popups.
 if(!window.__n594zsModalEscapeBound){
   window.__n594zsModalEscapeBound=true;
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('modal')?.classList.contains('open'))closeModal()});
-  document.addEventListener('click',e=>{const m=document.getElementById('modal');if(e.target===m&&m.classList.contains('open'))closeModal()});
+  document.addEventListener('click',e=>armModalParentSnapshot(e.target),true);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('modal')?.classList.contains('open'))modalDismiss()});
+  document.addEventListener('click',e=>{const m=document.getElementById('modal');if(e.target===m&&m.classList.contains('open'))modalDismiss()});
 }
