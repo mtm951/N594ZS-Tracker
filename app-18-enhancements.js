@@ -161,11 +161,7 @@ async function renderSearchPage(q=''){
   page.innerHTML=`<div class="card"><div class="toolbar"><div><h1>Search</h1><div class="muted">${results.length} result${results.length===1?'':'s'} for “${esc(term)}”</div></div></div><div class="search-results">${results.slice(0,100).map(r=>`<button class="search-result" onclick="${r.go}"><span class="mini-badge">${esc(r.kind)}</span><b>${esc(r.label||'Untitled')}</b><small>${esc(r.sub||'')}</small></button>`).join('')||'<div class="empty">No matches.</div>'}</div></div>`;
 }
 
-// ---------- WRAP EXISTING RENDER/NAV ----------
-const renderAllV4Base=renderAll;
-renderAll=function(){renderAllV4Base();renderMaintenance();if(currentPage==='files')renderFiles();if(currentPage==='activity')renderActivity();if(currentPage==='trash')renderTrash();if(currentPage==='system')renderSystem();if(currentPage==='search')renderSearchPage();};
-const navToV4Base=navTo;
-navTo=function(page){navToV4Base(page);if(page==='maintenance')renderMaintenance();else if(page==='files')renderFiles();else if(page==='activity')renderActivity();else if(page==='trash')renderTrash();else if(page==='system')renderSystem();else if(page==='search')renderSearchPage();};
+// Page rendering/navigation is coordinated centrally by app-61-performance.
 
 const libraryFileInput=document.getElementById('libraryFile');if(libraryFileInput)libraryFileInput.addEventListener('change',async e=>{const files=[...(e.target.files||[])];e.target.value='';await uploadLibraryFiles(files)});
 document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){e.preventDefault();document.getElementById('globalSearchInput')?.focus()}});
