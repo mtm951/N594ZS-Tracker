@@ -60,6 +60,7 @@ function saveProjectPart(projectId){
   const record={id:projectPartId,partId,name,qty,unit,unitCost,notes};
   if(partId){
     const part=partById(partId);
+    if(part&&typeof window.preparePartForPhysicalUse==='function')window.preparePartForPhysicalUse(part,qty);
     const on=part&&typeof partAvailable==='function'?partAvailable(part):null;
     if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
     const logId=uid(),consumedItemId=uid();
