@@ -5,29 +5,55 @@
 function checklistItemById(c,id){return c?.items?.find(x=>String(x.id)===String(id))||null}
 function isAnnualInspectionChecklist(c){return !!c?.inspectionMode&&Number(c.id)===503}
 
+function checklistSystemName(c){
+  if(typeof window.systemRecordMatches==='function'&&typeof window.systemNames==='function'){
+    const direct=String(c?.system||'').trim();
+    if(direct)return direct;
+  }
+  return String(c?.system||'').trim();
+}
+function checklistSystemOptions(selected=''){
+  const names=typeof window.systemNames==='function'
+    ? window.systemNames()
+    : [...new Set(db.checklists.map(c=>checklistSystemName(c)).filter(Boolean))].sort();
+  return '<option value="">All systems</option>'+names.map(n=>'<option value="'+esc(n)+'" '+(String(n)===String(selected)?'selected':'')+'>'+esc(n)+'</option>').join('');
+}
 function renderChecklists(){
   const page=document.getElementById('page-checklists');if(!page)return;
-  page.innerHTML=`<div class="card"><div class="toolbar"><div><h1>Checklists</h1><div class="muted">Click a checklist to open its purpose, trigger, linked project, item notes and supporting files.</div></div><button class="btn primary" id="checklistNewBtn">+ New Checklist</button></div>
-    ${db.checklists.map(c=>{const items=arr(c.items),done=items.filter(i=>i.done).length,pct=items.length?Math.round(done/items.length*100):0;return `
-      <div class="checklist click-row" role="button" tabindex="0" data-checklist-id="${esc(String(c.id))}">
-        <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(c.trigger||c.purpose)}</div></div>
-        <div style="min-width:150px"><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted right" style="margin-top:4px">${pct}%</div></div></div>
-        <div class="check-body">${items.slice(0,5).map(i=>`<div class="check-item"><input type="checkbox" data-checklist-checkbox data-checklist-id="${esc(String(c.id))}" data-item-id="${esc(String(i.id))}" ${i.done?'checked':''}><span class="${i.done?'done':''}">${esc(i.text)}</span></div>`).join('')||'<div class="empty">No checklist items.</div>'}
-        ${items.length>5?`<div class="tiny muted" style="padding-top:8px">+ ${items.length-5} more items — click to open</div>`:''}</div>
-      </div>`}).join('')||'<div class="empty">No checklists yet.</div>'}
+  page.innerHTML=`<div class="card"><div class="toolbar"><div><h1>Checklists</h1><div class="muted">Procedures grouped by aircraft system.</div></div><button class="btn primary" id="checklistNewBtn">+ New Checklist</button></div>
+    <div class="controls"><input id="checklistSearch" placeholder="Search checklists…"><select id="checklistSystem">${checklistSystemOptions('')}</select></div>
+    <div id="checklistRows"></div>
   </div>`;
-
   document.getElementById('checklistNewBtn')?.addEventListener('click',()=>openChecklistModal());
-  page.querySelectorAll('[data-checklist-id].checklist').forEach(card=>{
+  document.getElementById('checklistSearch')?.addEventListener('input',renderChecklistRows);
+  document.getElementById('checklistSystem')?.addEventListener('change',renderChecklistRows);
+  renderChecklistRows();
+}
+function renderChecklistRows(){
+  const box=document.getElementById('checklistRows');if(!box)return;
+  const q=String(document.getElementById('checklistSearch')?.value||'').trim().toLowerCase();
+  const sys=String(document.getElementById('checklistSystem')?.value||'');
+  const rows=db.checklists.filter(c=>{
+    const hay=[c.name,c.purpose,c.trigger,c.system,c.notes,...((Array.isArray(c.items)?c.items:[]).map(i=>[i.text,i.note].join(' ')))].join(' ').toLowerCase();
+    const systemMatch=!sys||(typeof window.systemRecordMatches==='function'?window.systemRecordMatches(c,sys,'checklists'):String(c.system||'')===sys);
+    return (!q||hay.includes(q))&&systemMatch;
+  });
+  box.innerHTML=rows.map(c=>{
+    const items=Array.isArray(c.items)?c.items:[];
+    const done=items.filter(i=>i.done).length,pct=items.length?Math.round(done/items.length*100):0;
+    return `<div class="checklist click-row" role="button" tabindex="0" data-checklist-id="${esc(String(c.id))}">
+      <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(checklistSystemName(c)||'Unassigned')} • ${esc(c.trigger||c.purpose)}</div></div>
+      <div style="min-width:150px"><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted right">${pct}%</div></div></div>
+    </div>`;
+  }).join('')||'<div class="empty">No matching checklists.</div>';
+
+  box.querySelectorAll('.checklist[data-checklist-id]').forEach(card=>{
     const open=()=>openChecklistDetail(card.dataset.checklistId);
-    card.addEventListener('click',e=>{if(e.target.closest('input,button,a,select,textarea,label'))return;open()});
+    card.addEventListener('click',open);
     card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open()}});
   });
-  page.querySelectorAll('[data-checklist-checkbox]').forEach(box=>{
-    box.addEventListener('click',e=>e.stopPropagation());
-    box.addEventListener('change',e=>toggleChecklistItem(box.dataset.checklistId,box.dataset.itemId,e.target.checked));
-  });
 }
+window.renderChecklistRows=renderChecklistRows;
 
 function openChecklistModal(id=null){
   const existing=id!==null&&id!==undefined&&id!==''?checklistById(id):null;
