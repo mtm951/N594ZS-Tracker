@@ -19,7 +19,7 @@
     systems:['renderSystems'],
     equipment:['renderEquipment'],
     weightbalance:['renderWeightBalance'],
-    ops:['renderOps'],
+    ops:['smartRenderOpsSafe','renderOps'],
     readiness:['renderReadiness'],
     projects:['renderProjects'],
     parts:['renderParts'],
@@ -82,6 +82,7 @@
       const elapsed=performance.now()-started;
       if(elapsed>80)console.debug('[N594ZS] slow page render',page,Math.round(elapsed)+'ms');
       if(page==='systems')systemsPostRender();
+      try{if(typeof ensureQuickAdd==='function')ensureQuickAdd()}catch(_e){}
       return true;
     }
     return false;
