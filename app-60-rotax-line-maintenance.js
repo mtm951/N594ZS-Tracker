@@ -306,16 +306,7 @@
   window.ensureRotaxLineProgram=ensureAll;
   window.injectRotaxLineCard=injectCard;
 
-  const oldOpenSystem=window.openSystemDashboard;
-  window.openSystemDashboard=function(n){
-    // Recalculate conditional intervals only when the Engine workspace is opened,
-    // not during every full-app render.
-    ensureAll(n==='Engine');
-    oldOpenSystem(n);
-    injectCard();
-  };
-  const oldRenderAll=renderAll;
-  renderAll=function(){ensureAll(false);oldRenderAll();injectCard()};
+  // Engine-card injection and source initialization are coordinated by app-61-performance.
 
   const style=document.createElement('style');
   style.id='rotaxLineProgramStyle';
