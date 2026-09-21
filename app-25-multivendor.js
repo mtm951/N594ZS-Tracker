@@ -63,6 +63,4 @@ openInvoiceGroup=function(invoice){
   else if(x.notes)card.insertAdjacentHTML('beforeend',`<div class="notice" style="margin-top:10px">${esc(x.notes)}</div>`);
 };
 
-// Refresh current page after cloud data arrives so vendor controls/totals are current.
-const renderAllMultiVendorBase=renderAll;
-renderAll=function(){renderAllMultiVendorBase();if(currentPage==='purchases')renderPurchases()};
+// Purchase rendering after cloud refresh is coordinated centrally by app-61-performance.
