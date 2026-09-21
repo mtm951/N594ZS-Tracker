@@ -9,8 +9,11 @@ document.getElementById('photoFile').addEventListener('change',async e=>{
 });
 document.getElementById('entityFile').addEventListener('change',async e=>{const files=[...(e.target.files||[])],type=e.target.dataset.entityType,rawId=e.target.dataset.entityId,id=/^\d+$/.test(String(rawId||''))?Number(rawId):rawId;e.target.value='';if(!type||!rawId||!files.length)return;await saveSelectedFiles(type,id,files)});
 document.getElementById('importFile').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{await importBackupObject(JSON.parse(r.result))}catch(err){alert('Could not import backup: '+err.message)}finally{e.target.value=''}};r.readAsText(f)});
-renderAll();
-initCloud();
+(async function bootTracker(){
+  try{if(typeof hydrateBrowserCacheIfNeeded==='function')await hydrateBrowserCacheIfNeeded()}catch(e){console.warn('Browser cache hydration skipped',e)}
+  renderAll();
+  initCloud();
+})();
 
 // Load small, optional post-init UX layers without disturbing the core script order.
 (function(){
