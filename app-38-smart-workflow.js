@@ -164,11 +164,4 @@ function openQuickAdd(){
 }
 ensureQuickAdd();
 
-// Final render safety: even if the rich Ops renderer faults, keep the rest of the app and nav usable.
-const smartRenderAllBase=renderAll;
-renderAll=function(){
-  let err=null;try{smartRenderAllBase()}catch(e){err=e;console.error('Render recovered by v5.1 smart workflow',e)}
-  ensureAircraftOpsNav();try{renderNav()}catch(_e){}
-  if(currentPage==='ops'||err)smartRenderOpsSafe();else injectSmartOpsStatus();
-  ensureQuickAdd();
-};
+// Page-level render safety is coordinated centrally by app-61-performance; smartRenderOpsSafe remains the Ops renderer.
