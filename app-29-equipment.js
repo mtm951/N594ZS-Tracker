@@ -290,12 +290,33 @@ function openEquipmentModal(id=null,prefill=null){
 function saveEquipment(id,purchaseId=''){
   const old=id?equipmentById(id):null;
   const obj={
-    ...(old||{}),id:id||nextNumericId(db.equipment,900),name:val('eqName')||'Installed equipment',system:val('eqSystem')||'General',category:val('eqCategory')||'Component',status:val('eqStatus')||'Installed',manufacturer:val('eqManufacturer'),model:val('eqModel'),partNo:val('eqPartNo'),serialNo:val('eqSerialNo'),purchaseDate:val('eqPurchaseDate'),installDate:val('eqInstallDate'),vendor:val('eqVendor'),purchasePrice:val('eqPurchasePrice'),invoice:val('eqInvoice'),location:val('eqLocation')||'Installed',airframeHoursAtInstall:val('eqAfHours'),engineHoursAtInstall:val('eqEngHours'),notes:val('eqNotes'),purchaseId:purchaseId||old?.purchaseId||'',linkedProjectIds:arr(old?.linkedProjectIds),history:arr(old?.history)
+    ...(old||{}),id:id||nextNumericId(db.equipment,900),name:val('eqName')||'Installed equipment',system:val('eqSystem')||'General',category:val('eqCategory')||'Component',status:val('eqStatus')||'Installed',manufacturer:val('eqManufacturer'),model:val('eqModel'),partNo:val('eqPartNo'),serialNo:val('eqSerialNo'),purchaseDate:val('eqPurchaseDate'),installDate:val('eqInstallDate'),vendor:val('eqVendor'),purchasePrice:val('eqPurchasePrice'),invoice:val('eqInvoice'),location:val('eqLocation')||'Installed',airframeHoursAtInstall:val('eqAfHours'),engineHoursAtInstall:val('eqEngHours'),notes:val('eqNotes'),purchaseId:purchaseId||old?.purchaseId||'',inventoryPartId:old?.inventoryPartId||null,linkedProjectIds:arr(old?.linkedProjectIds),history:arr(old?.history)
   };
   const i=db.equipment.findIndex(x=>Number(x.id)===Number(id));if(i>=0)db.equipment[i]=obj;else db.equipment.push(obj);
+  if(obj.purchaseId){
+    const p=arr(db.purchases).find(x=>String(x.id)===String(obj.purchaseId));
+    if(p){
+      p.trackAsEquipment=true;p.equipmentId=obj.id;
+      reconcilePurchaseLinks(p,{createPart:['On Hand','Installed'].includes(p.disposition),createEquipment:false});
+    }
+  }
+  if(obj.inventoryPartId){
+    const part=partById(Number(obj.inventoryPartId));if(part)part.equipmentId=obj.id;
+  }
   closeModal();saveDB('Equipment record saved.');
 }
-function deleteEquipment(id){if(!confirm('Move this equipment record to Trash? Purchase history and attached receipts are not deleted.'))return;db.equipment=db.equipment.filter(e=>Number(e.id)!==Number(id));closeModal();saveDB('Equipment record moved to Trash.')}
+function deleteEquipment(id){
+  if(!confirm('Move this equipment record to Trash? Purchase history and attached receipts are not deleted.'))return;
+  const e=equipmentById(id);
+  if(e?.purchaseId){
+    const p=arr(db.purchases).find(x=>String(x.id)===String(e.purchaseId));
+    if(p){p.equipmentId=null;p.trackAsEquipment=false}
+  }
+  if(e?.inventoryPartId){
+    const part=partById(Number(e.inventoryPartId));if(part&&Number(part.equipmentId)===Number(id))part.equipmentId=null;
+  }
+  db.equipment=db.equipment.filter(x=>Number(x.id)!==Number(id));closeModal();saveDB('Equipment record moved to Trash.');
+}
 
 function openEquipmentFromPurchase(){
   const used=new Set(db.equipment.map(e=>String(e.purchaseId||'')).filter(Boolean));
