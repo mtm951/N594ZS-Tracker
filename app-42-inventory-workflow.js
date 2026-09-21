@@ -253,8 +253,8 @@
     var counts={assigned:0,reserved:0,used:0};
     rows.forEach(function(r){
       if(r.stage==='Assigned')counts.assigned++;
-      else if(r.stage==='Reserved')counts.reserved++;
-      else counts.used++;
+      if(r.reservedQty>0)counts.reserved++;
+      if(r.usedQty>0)counts.used++;
     });
     return `<div class="detail-card project-parts-workspace" id="projectPartsWorkspace">
       <div class="section-tools project-parts-head">
@@ -295,6 +295,7 @@
               ${r.stage==='Assigned'?'<button class="success" onclick="openAssignedPartUse('+project.id+','+part.id+')">Use</button>':''}
               ${r.reservedQty>0&&primaryReservation?'<button class="success" onclick="openUseReservedPartModal('+project.id+','+JSON.stringify(primaryReservation.id)+')">Use Reserved</button>':''}
               ${r.reservedQty>0&&primaryReservation?'<button class="secondary" onclick="removeReservedPart('+project.id+','+JSON.stringify(primaryReservation.id)+')">Release</button>':''}
+              ${r.usedQty>0?'<button class="secondary" onclick="openProjectPartUseHistory('+project.id+','+part.id+')">Usage</button>':''}
               ${r.usedQty>0&&r.reservedQty<=0?'<button class="secondary" onclick="openAssignedPartUse('+project.id+','+part.id+')">Use More</button>':''}
               ${r.stage==='Assigned'?'<button class="icon-btn" onclick="unassignPartFromProject('+project.id+','+part.id+')">Unassign</button>':''}
             </div>
@@ -303,6 +304,20 @@
       </div>
     </div>`;
   }
+
+  window.openProjectPartUseHistory=function(projectId,partId){
+    var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
+    var uses=arr(project.partsUsed).filter(function(x){return Number(x.partId)===Number(part.id)});
+    openModal(`${modalHeader('Part Usage History',project.title)}
+      <div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>These entries are actual recorded use/install events. Removing one also reverses its linked work-log inventory consumption when that link exists.</div>
+      <div class="detail-card">
+        ${uses.length?uses.map(function(x){
+          var log=x.logId?logById(Number(x.logId)):null;
+          return `<div class="kv"><div><b>${esc((log?.date||'Date not recorded')+' • '+x.qty+' '+(x.unit||part.unit||'ea'))}</b><div class="task-note">${esc(x.notes||log?.work||'Recorded use')}</div></div><div class="action-row">${log?`<button class="secondary" onclick="openLogDetail(${log.id})">Work Log</button>`:''}<button class="danger" onclick="removeProjectPart(${project.id},${JSON.stringify(x.id)})">Remove</button></div></div>`;
+        }).join(''):'<div class="empty">No recorded usage entries for this part.</div>'}
+      </div>
+      <div class="modal-actions"><button class="secondary" onclick="openProjectDetail(${project.id})">Back to Project</button></div>`,true);
+  };
 
   window.openAssignPartToProject=function(projectId){
     var project=projectById(Number(projectId));if(!project)return;
