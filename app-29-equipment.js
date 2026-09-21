@@ -328,7 +328,7 @@ function openEquipmentFromPurchase(){
 function promotePurchaseToEquipment(){
   const id=val('eqPurchasePick'),p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return alert('Choose a purchase.');
   closeModal();
-  openEquipmentModal(null,{id:null,name:p.description||'Installed equipment',system:p.system||'General',category:'Component',manufacturer:p.vendor||'',model:'',partNo:p.pn||'',serialNo:'',status:p.disposition==='Installed'?'Installed':'Verify',location:p.disposition==='Installed'?'Installed':'',purchaseDate:p.shipDate||'',installDate:'',vendor:p.vendor||'',purchasePrice:p.priceKnown===false?'':num(p.qty)*num(p.unitPrice),purchaseId:p.id,invoice:p.invoice||p.order||'',airframeHoursAtInstall:'',engineHoursAtInstall:'',notes:`Created from purchase history${p.seller?' • seller: '+p.seller:''}. ${p.notes||''}`.trim(),linkedProjectIds:p.projectId?[Number(p.projectId)]:[],history:[]});
+  openEquipmentModal(null,{id:null,name:p.description||'Tracked component',system:p.system||'General',category:'Component',manufacturer:'',model:'',partNo:p.pn||'',serialNo:'',status:p.disposition==='Installed'?'Installed':p.disposition==='On Hand'?'On Hand':'Verify',location:p.location||(p.disposition==='Installed'?'Installed':p.disposition==='On Hand'?'On hand':''),purchaseDate:p.shipDate||'',installDate:'',vendor:p.vendor||'',purchasePrice:p.priceKnown===false?'':num(p.qty)*num(p.unitPrice),purchaseId:p.id,inventoryPartId:p.inventoryPartId||null,invoice:p.invoice||p.order||'',airframeHoursAtInstall:'',engineHoursAtInstall:'',notes:`Created from purchase history${p.seller?' • seller: '+p.seller:''}. ${p.notes||''}`.trim(),linkedProjectIds:p.projectId?[Number(p.projectId)]:[],history:[]});
 }
 
 async function openEquipmentDetail(id){
