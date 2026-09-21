@@ -155,12 +155,6 @@
 
   window.ensureRotaxInstallPack=ensureRotaxInstallPack;
 
-  const renderAllRotaxBase=renderAll;
-  renderAll=function(){
-    ensureRotaxInstallPack();
-    renderAllRotaxBase();
-  };
-
   const renderOpsSpecsRotaxBase=window.renderOpsSpecs;
   if(typeof renderOpsSpecsRotaxBase==='function'){
     window.renderOpsSpecs=function(){
