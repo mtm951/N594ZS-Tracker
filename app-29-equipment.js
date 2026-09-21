@@ -196,7 +196,7 @@ window.reconcileTrackerRecordLinks=function(options={}){
     if(e.inventoryPartId)changed=setLinkValue(p,'inventoryPartId',e.inventoryPartId)||changed;
   });
   arr(db.purchases).forEach(p=>{
-    const createPart=!!(p.inventoryApplied||(p.trackAsEquipment&&['On Hand','Installed'].includes(p.disposition)));
+    const createPart=!!(p.inventoryApplied||(p.trackAsEquipment&&p.disposition==='On Hand'));
     const out=reconcilePurchaseLinks(p,{createPart,createEquipment:!!p.trackAsEquipment});
     changed=out.changed||changed;
   });
@@ -297,7 +297,7 @@ function saveEquipment(id,purchaseId=''){
     const p=arr(db.purchases).find(x=>String(x.id)===String(obj.purchaseId));
     if(p){
       p.trackAsEquipment=true;p.equipmentId=obj.id;
-      reconcilePurchaseLinks(p,{createPart:['On Hand','Installed'].includes(p.disposition),createEquipment:false});
+      reconcilePurchaseLinks(p,{createPart:p.disposition==='On Hand'||p.inventoryApplied,createEquipment:false});
     }
   }
   if(obj.inventoryPartId){
