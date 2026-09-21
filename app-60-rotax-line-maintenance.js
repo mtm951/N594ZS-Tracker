@@ -260,6 +260,9 @@
     return changed;
   }
 
+  window.ensureRotaxLineProgram=ensureAll;
+  window.injectRotaxLineCard=injectCard;
+
   const oldOpenSystem=window.openSystemDashboard;
   window.openSystemDashboard=function(n){
     // Recalculate conditional intervals only when the Engine workspace is opened,
