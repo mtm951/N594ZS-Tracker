@@ -45,15 +45,38 @@
   }
   window.rotax912TboForSerial=tboForSerial;
 
+  let mmlDirty=false;
+  function setChanged(obj,key,value){
+    if(obj[key]!==value){obj[key]=value;mmlDirty=true}
+  }
+  function blank(v){return v===undefined||v===null||v===''}
+  function sameValue(a,b){return String(a??'')===String(b??'')}
+  function adoptSourceValue(obj,field,sourceField,value,legacy=[]){
+    if(value===undefined)return;
+    const current=obj[field],previous=obj[sourceField];
+    if(previous===undefined){
+      if(blank(current)||sameValue(current,value)||legacy.some(v=>sameValue(current,v)))setChanged(obj,field,value);
+      setChanged(obj,sourceField,value);
+      return;
+    }
+    if(blank(current)||sameValue(current,previous))setChanged(obj,field,value);
+    setChanged(obj,sourceField,value);
+  }
+
   function ensureDoc(){
     db.docs=A(db.docs);
     let d=db.docs.find(x=>/maintenance manual line/i.test(x.name||'')&&/rotax|912/i.test([x.publisher,x.name,x.notes].join(' ')));
     if(d){
-      d.revision='Edition 04 / Revision 2';
-      d.issueDate='2025-06-01';
-      d.publisher='BRP-Rotax';
-      d.system='Engine';
-      if(!/MML-912/.test(d.notes||''))d.notes=[d.notes,`${DOCREF}. Current ROTAX line-maintenance reference supplied for N594ZS.`].filter(Boolean).join(' ');
+      // Existing document records are user-owned. Only fill missing source metadata.
+      const defaults={
+        revision:'Edition 04 / Revision 2',
+        issueDate:'2025-06-01',
+        publisher:'BRP-Rotax',
+        system:'Engine'
+      };
+      for(const [k,v] of Object.entries(defaults))if(blank(d[k]))setChanged(d,k,v);
+      if(blank(d.rotaxSourceManaged))setChanged(d,'rotaxSourceManaged',true);
+      if(!/MML-912/.test(d.notes||'')&&blank(d.sourceNotes))setChanged(d,'sourceNotes',`${DOCREF}. Current ROTAX line-maintenance reference supplied for N594ZS.`);
       return d;
     }
     const nums=db.docs.map(x=>Number(x.id)).filter(Number.isFinite);
@@ -69,49 +92,66 @@
       notes:`${DOCREF}. Current ROTAX line-maintenance reference for 912 Series. Revision 2 is a complete revision dated June 01 2025.`,
       linkedProjectIds:A(db.projects).filter(p=>['Engine','Fuel','Cooling'].includes(p.system)).map(p=>p.id),
       linkedPartIds:A(db.parts).filter(p=>['Engine','Fuel','Cooling'].includes(p.system)).map(p=>p.id),
-      linkedLogIds:[],updates:[]
+      linkedLogIds:[],updates:[],rotaxSourceManaged:true
     };
-    db.docs.push(d);return d;
+    db.docs.push(d);mmlDirty=true;return d;
   }
 
   function ensureService(title,defs={}){
     const p=lineProgram();
     let i=p.serviceItems.find(x=>T(x.title).toLowerCase()===title.toLowerCase());
     if(!i){
-      i={id:crypto.randomUUID(),title,kind:defs.kind||'Service',installedDate:'',installedHours:'',lastDate:'',lastHours:'',intervalDays:'',intervalYears:'',intervalHours:'',nextDate:'',nextHours:'',partNumber:'',manufacturer:'',notes:'',history:[]};
-      p.serviceItems.push(i);
+      i={id:crypto.randomUUID(),title,kind:defs.kind||'Service',installedDate:'',installedHours:'',lastDate:'',lastHours:'',intervalDays:'',intervalYears:'',intervalHours:'',nextDate:'',nextHours:'',partNumber:'',manufacturer:'',notes:'',sourceNotes:'',history:[],mmlManaged:true};
+      p.serviceItems.push(i);mmlDirty=true;
     }
-    i.kind=defs.kind||i.kind||'Service';
-    if(defs.intervalHours!==undefined)i.intervalHours=defs.intervalHours;
-    if(defs.intervalYears!==undefined)i.intervalYears=defs.intervalYears;
-    if(defs.intervalDays!==undefined)i.intervalDays=defs.intervalDays;
-    if(defs.nextHours!==undefined&&i.nextHours==='')i.nextHours=defs.nextHours;
-    if(defs.installedHours!==undefined&&i.installedHours==='')i.installedHours=defs.installedHours;
-    i.manufacturer=i.manufacturer||defs.manufacturer||'ROTAX';
-    const marker='ROTAX MML source:';
-    const src=defs.notes||'';
-    const existing=T(i.notes);
-    i.notes=existing.includes(marker)?existing:[existing,`${marker} ${src}`].filter(Boolean).join(' • ');
-    i.mmlManaged=true;
+    if(blank(i.kind))setChanged(i,'kind',defs.kind||'Service');
+    if(blank(i.manufacturer))setChanged(i,'manufacturer',defs.manufacturer||'ROTAX');
+    if(i.mmlManaged!==true)setChanged(i,'mmlManaged',true);
+
+    // Manufacturer intervals are tracked separately. If the visible value still
+    // equals the previous manufacturer value, it may update. A user-customized
+    // value is preserved.
+    adoptSourceValue(i,'intervalHours','rotaxSourceIntervalHours',defs.intervalHours,[2,25,50,100,200,400,600,1000]);
+    adoptSourceValue(i,'intervalYears','rotaxSourceIntervalYears',defs.intervalYears,[1,5,10,12,15]);
+    adoptSourceValue(i,'intervalDays','rotaxSourceIntervalDays',defs.intervalDays,[]);
+    adoptSourceValue(i,'nextHours','rotaxSourceNextHours',defs.nextHours,[]);
+    if(defs.installedHours!==undefined&&blank(i.installedHours))setChanged(i,'installedHours',defs.installedHours);
+    if(defs.notes!==undefined)setChanged(i,'sourceNotes',defs.notes);
     return i;
   }
+
   function syncMaintenance(i){
     db.maintenance=A(db.maintenance);
-    let m=db.maintenance.find(x=>String(x.engineServiceItemId||'')===String(i.id))||
-          db.maintenance.find(x=>T(x.system)==='Engine'&&T(x.title).toLowerCase()===T(i.title).toLowerCase());
+    // Never hijack a user-created maintenance record merely because its title matches.
+    let m=db.maintenance.find(x=>String(x.engineServiceItemId||'')===String(i.id));
+    if(!m){
+      m={
+        id:nextNumericId(db.maintenance,760),
+        title:i.title,system:'Engine',basis:'date',meter:'engine',
+        intervalDays:'',intervalHours:'',lastDate:'',lastHours:'',
+        nextDate:'',nextHours:'',notes:'',engineServiceItemId:i.id,
+        rotaxManaged:true,sourceNotes:i.sourceNotes||''
+      };
+      db.maintenance.push(m);mmlDirty=true;
+    }
+    if(blank(m.engineServiceItemId))setChanged(m,'engineServiceItemId',i.id);
+    if(m.rotaxManaged!==true)setChanged(m,'rotaxManaged',true);
+    if(blank(m.title))setChanged(m,'title',i.title);
+    if(blank(m.system))setChanged(m,'system','Engine');
+    if(blank(m.meter))setChanged(m,'meter','engine');
+    if(i.sourceNotes!==undefined)setChanged(m,'sourceNotes',i.sourceNotes);
+
     const baseDate=i.lastDate||i.installedDate||'';
     const yearDue=num(i.intervalYears)>0&&baseDate?addYears(baseDate,i.intervalYears):'';
     const hasDate=!!(i.intervalDays||i.intervalYears||i.nextDate||yearDue),hasHours=!!(i.intervalHours||i.nextHours);
-    const obj={
-      ...(m||{}),id:m?.id||nextNumericId(db.maintenance,760),title:i.title,system:'Engine',
-      basis:hasDate&&hasHours?'both':hasHours?'hours':'date',meter:'engine',
-      intervalDays:i.intervalDays||'',intervalHours:i.intervalHours||'',
-      lastDate:i.lastDate||i.installedDate||'',lastHours:i.lastHours!==''?i.lastHours:i.installedHours,
-      nextDate:i.nextDate||yearDue||'',nextHours:i.nextHours||'',
-      notes:[i.kind,i.intervalYears?`Manufacturer calendar interval: ${i.intervalYears} year${Number(i.intervalYears)===1?'':'s'}`:'',i.notes].filter(Boolean).join(' • '),
-      engineServiceItemId:i.id
-    };
-    const idx=db.maintenance.findIndex(x=>String(x.id)===String(obj.id));if(idx>=0)db.maintenance[idx]=obj;else db.maintenance.push(obj);
+    const sourceBasis=hasDate&&hasHours?'both':hasHours?'hours':'date';
+    adoptSourceValue(m,'basis','rotaxSourceBasis',sourceBasis,['date','hours','both']);
+    adoptSourceValue(m,'intervalDays','rotaxSourceIntervalDays',i.intervalDays||'',[]);
+    adoptSourceValue(m,'intervalHours','rotaxSourceIntervalHours',i.intervalHours||'',[2,25,50,100,200,400,600,1000]);
+    adoptSourceValue(m,'lastDate','rotaxSourceLastDate',i.lastDate||i.installedDate||'',[]);
+    adoptSourceValue(m,'lastHours','rotaxSourceLastHours',i.lastHours!==''?i.lastHours:i.installedHours,[]);
+    adoptSourceValue(m,'nextDate','rotaxSourceNextDate',i.nextDate||yearDue||'',[]);
+    adoptSourceValue(m,'nextHours','rotaxSourceNextHours',i.nextHours||'',[]);
   }
 
   function applyIntervals(){
@@ -182,7 +222,8 @@
         projectId:null,
         notes:`Source: ${DOCREF}, ${REV}, Chapter 05-20-00 pages 2 and 9-16. First 25-hour inspection uses the 100-hour check scope. Conditional leaded-fuel and configuration-specific tasks remain subject to the manual.`,
         documentId:doc?.id||null,
-        items:annualItems.map((text,i)=>({id:i+1,text,done:false,note:''}))
+        items:annualItems.map((text,i)=>({id:i+1,text,done:false,note:''})),
+        rotaxSourceManaged:true
       });
     }
   }
@@ -243,21 +284,23 @@
 
   let lastMmlDb=null;
   function persistMmlNoRender(){
-    try{localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(_e){}
+    try{
+      if(typeof persistBrowserData==='function')Promise.resolve(persistBrowserData(db,{quiet:true})).catch(()=>{});
+      else localStorage.setItem(DB_KEY,JSON.stringify(db));
+    }catch(_e){}
     try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
-    [700,1800,4000].forEach(ms=>setTimeout(()=>{try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}},ms));
   }
   function ensureAll(force=false){
     db.settings=db.settings||{};
     if(!force&&lastMmlDb===db&&db.settings.rotaxMmlEd4Rev2Seeded)return false;
     lastMmlDb=db;
+    mmlDirty=false;
     const doc=ensureDoc();
     applyIntervals();
     ensureChecklist(doc);
-    const changed=!db.settings.rotaxMmlEd4Rev2Seeded;
-    db.settings.rotaxMmlEd4Rev2Seeded=true;
-    if(changed)persistMmlNoRender();
-    return changed;
+    if(!db.settings.rotaxMmlEd4Rev2Seeded){db.settings.rotaxMmlEd4Rev2Seeded=true;mmlDirty=true}
+    if(mmlDirty)persistMmlNoRender();
+    return mmlDirty;
   }
 
   window.ensureRotaxLineProgram=ensureAll;
