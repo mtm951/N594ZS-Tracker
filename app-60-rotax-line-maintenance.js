@@ -127,6 +127,139 @@
     return i;
   }
 
+
+  // High-level, source-backed work checklists for the recurring maintenance cards.
+  // These are intentionally concise execution aids, not replacements for the MML,
+  // applicable SI/SB instructions, torque tables, or aircraft-specific procedures.
+  const MAINTENANCE_PROCEDURES={
+    'cooling hoses':[
+      'Review the current applicable ROTAX cooling-system hose replacement procedure before starting.',
+      'Replace the rubber cooling-system hoses due by the calendar interval.',
+      'Inspect hose routing and connections for leakage, heat hardening, porosity, loose connections, kinks and restrictions.',
+      'Restore the cooling system, verify coolant level / venting, and inspect for leakage after the required engine run.'
+    ],
+    'fuel hoses':[
+      'Review the current applicable ROTAX fuel-hose instructions, including SI-912-022 where applicable.',
+      'Replace the rubber fuel-system hoses due by the calendar interval.',
+      'Inspect fuel-line routing, security, leakage, heat hardening, porosity, kinks / restrictions, and inspect steel lines for cracks or scuffing.',
+      'Restore the fuel system and perform the applicable leak / operating-pressure verification before return to service.'
+    ],
+    'oil hoses':[
+      'Review the current applicable ROTAX lubrication-system hose replacement procedure before opening the system.',
+      'Replace the applicable rubber oil-supply hoses due by calendar interval.',
+      'Inspect routing and security for leakage, heat hardening, porosity, kinks and restrictions.',
+      'Restore the lubrication system and complete any required purge / priming and leak / oil-pressure verification before operation.'
+    ],
+    'fuel pump':[
+      'Review the current applicable ROTAX fuel-pump replacement instructions and part applicability.',
+      'Replace the fuel pump due by calendar interval.',
+      'Inspect fuel-line connections, routing and security after installation.',
+      'Perform the applicable fuel-system leak and operating-pressure verification.'
+    ],
+    'carburetor diaphragms':[
+      'Review the current applicable ROTAX carburetor diaphragm replacement procedure.',
+      'Replace both carburetor diaphragms due by calendar interval.',
+      'Inspect diaphragm seating and the surrounding carburetor components during reassembly.',
+      'Verify carburetor operation and synchronization as required after reassembly.'
+    ],
+    'carburetor sockets':[
+      'Review the current applicable ROTAX carburetor-socket inspection / replacement procedure.',
+      'Replace the carburetor sockets due by calendar interval.',
+      'Inspect seating, security and condition of the carburetor attachment.',
+      'Verify carburetor operation / synchronization after reassembly as applicable.'
+    ],
+    'oil & filter change':[
+      'Review the current applicable ROTAX oil-change procedure and approved operating-fluid requirements.',
+      'Drain / change the engine oil in accordance with the current procedure.',
+      'Remove the oil filter, cut it open without introducing chips, and inspect the media for wear or missing material.',
+      'Install a new oil filter and restore the specified oil level.',
+      'Run the engine as required, inspect for leakage, and recheck the oil filter by hand when cold.'
+    ],
+    'carburetor service / synchronization':[
+      'Inspect carburetor actuation for free movement and full stop-to-stop travel.',
+      'Check / adjust idle speed as applicable.',
+      'Perform the required mechanical synchronization.',
+      'Perform the required pneumatic synchronization.',
+      'Run the engine and verify smooth operation and acceptable idle / synchronization.'
+    ],
+    'throttle / choke adjustment':[
+      'Inspect throttle and choke controls for free movement and full travel.',
+      'Verify cable sleeves, stops and attachments are secure and correctly positioned.',
+      'Adjust throttle / choke travel as required by the current applicable instructions.',
+      'Recheck idle and full-travel operation before closing the task.'
+    ],
+    'carburetor 200 hr inspection / float check':[
+      'Inspect the float-chamber ventilation arrangement.',
+      'Remove / inspect the carburetors as required by the current 200-hour procedure.',
+      'Check float condition / weight in accordance with the current ROTAX limits.',
+      'Inspect carburetor sockets as required by the 200-hour schedule.',
+      'Reassemble and verify carburetor operation / synchronization as applicable.'
+    ],
+    'differential pressure check':[
+      'Review the current ROTAX differential-pressure test procedure and applicable interval conditions.',
+      'Perform the differential-pressure check using the current procedure.',
+      'Record the measured results for all cylinders.',
+      'Investigate / resolve any result outside the current applicable ROTAX criteria before return to service.'
+    ],
+    'spark plug replacement':[
+      'Review the current applicable ROTAX spark-plug instructions and correct plug applicability.',
+      'Remove and inspect the installed spark plugs and related ignition connections.',
+      'Install genuine / applicable replacement spark plugs using the current ROTAX procedure and specified torque.',
+      'Reconnect / secure ignition leads and perform the applicable engine / ignition check.'
+    ],
+    'propeller gearbox friction-torque check':[
+      'Confirm the gearbox / overload-clutch configuration and applicability of the friction-torque check.',
+      'Perform the friction-torque check in free rotation using the current ROTAX procedure.',
+      'Record the measured result.',
+      'Compare the result with the current applicable ROTAX limit and resolve any out-of-limit condition.'
+    ],
+    'propeller gearbox / overload clutch inspection':[
+      'Confirm the applicable gearbox / overload-clutch configuration and interval, including any conditional 600-hour requirement.',
+      'Inspect the gear set for pitting as required by the current 1000-hour schedule.',
+      'Inspect overload-clutch tooth wear as required.',
+      'Complete the overload-clutch inspection required by the current ROTAX procedure.',
+      'Record findings and any corrective action / component replacement.'
+    ],
+    'air-intake heat-up measurement':[
+      'Review the current ROTAX air-intake heat-up measurement procedure.',
+      'Configure the aircraft / cowling as required by the source procedure.',
+      'Measure and record the air-intake heat-up under the specified test conditions.',
+      'Compare the result with the current applicable ROTAX requirement and document the result.'
+    ],
+    'exhaust fixation retorque — first 2 hr':[
+      'Review the current ROTAX exhaust-fixation inspection / tightening instructions.',
+      'Inspect the exhaust fixation at the cylinder heads.',
+      'Re-tighten / torque the fixation in accordance with the current ROTAX specification.',
+      'After the applicable engine run, inspect the exhaust attachment for security and leakage.'
+    ]
+  };
+
+  function maintenanceProcedureKey(title){
+    return 'rotax-mml-'+T(title).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  }
+  function maintenanceProcedureFor(title){return MAINTENANCE_PROCEDURES[T(title).toLowerCase()]||[]}
+  function syncMaintenanceProcedure(m,i){
+    const title=T(i.title),defs=maintenanceProcedureFor(title);
+    const doc=db.docs.find(x=>x.sourceKey===DOC_KEY);
+    if(blank(m.sourceDocumentId)&&doc?.id)setChanged(m,'sourceDocumentId',doc.id);
+    if(title.toLowerCase()==='100 hr / annual engine inspection'){
+      if(blank(m.linkedChecklistSourceKey))setChanged(m,'linkedChecklistSourceKey','rotax-mml-912-100h-annual');
+      return;
+    }
+    if(!defs.length)return;
+    const key=maintenanceProcedureKey(title),existing=A(m.procedureItems),byId=new Map(existing.map(x=>[String(x.id),x]));
+    const managed=defs.map((text,index)=>{
+      const id=key+'-'+(index+1),old=byId.get(id)||{};
+      return {id,text,done:!!old.done,note:old.note||'',sourceManaged:true};
+    });
+    const custom=existing.filter(x=>x&&x.sourceManaged!==true);
+    const next=[...managed,...custom];
+    if(m.procedureSourceKey!==key)setChanged(m,'procedureSourceKey',key);
+    if(m.procedureSource!==i.sourceNotes)setChanged(m,'procedureSource',i.sourceNotes||'');
+    if(m.procedureSourceManaged!==true)setChanged(m,'procedureSourceManaged',true);
+    if(JSON.stringify(existing)!==JSON.stringify(next)){m.procedureItems=next;mmlDirty=true}
+  }
+
   function syncMaintenance(i){
     db.maintenance=A(db.maintenance);
     // Never hijack a user-created maintenance record merely because its title matches.
@@ -159,6 +292,7 @@
     adoptSourceValue(m,'lastHours','rotaxSourceLastHours',i.lastHours!==''?i.lastHours:i.installedHours,[]);
     adoptSourceValue(m,'nextDate','rotaxSourceNextDate',i.nextDate||yearDue||'',[]);
     adoptSourceValue(m,'nextHours','rotaxSourceNextHours',i.nextHours||'',[]);
+    syncMaintenanceProcedure(m,i);
   }
 
   function applyIntervals(){
