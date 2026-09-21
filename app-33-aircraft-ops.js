@@ -243,7 +243,4 @@ renderSearchPage=async function(q=''){
 const renderRunsOpsBase=renderRuns;
 renderRuns=function(){renderRunsOpsBase();const page=document.getElementById('page-runs');if(!page||page.querySelector('[data-trend-link]'))return;const card=page.querySelector('.card');card?.insertAdjacentHTML('beforeend',`<div class="notice" data-trend-link style="margin-top:12px"><b>Trend view available.</b> <button class="linkbtn" onclick="navTo('ops');setOpsTab('trends')">Open run/test trends →</button></div>`)};
 
-const renderAllOpsWorkspaceBase=renderAll;
-renderAll=function(){renderAllOpsWorkspaceBase();renderOps();};
-const navToOpsWorkspaceBase=navTo;
-navTo=function(page){navToOpsWorkspaceBase(page);if(page==='ops')renderOps();};
+// Aircraft Ops page rendering/navigation is coordinated centrally; smart fallback remains in app-38.
