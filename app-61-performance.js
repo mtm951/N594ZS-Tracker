@@ -20,6 +20,7 @@
     equipment:['renderEquipment'],
     weightbalance:['renderWeightBalance'],
     ops:['renderOps'],
+    readiness:['renderReadiness'],
     projects:['renderProjects'],
     parts:['renderParts'],
     orders:['renderOrders'],
@@ -91,15 +92,6 @@
     activatePage(p);
     if(callPageRenderer(p))return true;
 
-    // Readiness is retained as a compatibility fallback because older tracker
-    // builds populated that workspace through the legacy all-page render chain.
-    if(p==='readiness'){
-      const started=performance.now();
-      legacyFullRender();
-      const elapsed=performance.now()-started;
-      if(elapsed>80)console.debug('[N594ZS] legacy readiness render',Math.round(elapsed)+'ms');
-      return true;
-    }
     return false;
   };
 
@@ -131,9 +123,7 @@
     }
 
     // Render the destination exactly once through the central page registry.
-    if(!callPageRenderer(target)&&target==='readiness'){
-      legacyFullRender();
-    }
+    callPageRenderer(target);
     activatePage(target);
     scheduleDataInitializers();
   };
