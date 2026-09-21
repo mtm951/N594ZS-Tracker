@@ -98,7 +98,7 @@ function purchaseInventoryQty(p){
 function createPartForPurchase(p){
   const installed=p.disposition==='Installed',qty=purchaseInventoryQty(p);
   const part={
-    id:uid(),name:p.description||p.pn||'Purchased component',partNo:p.pn||'',system:p.system||'General',unit:'ea',
+    id:uid(),name:p.description||p.pn||'Purchased component',partNo:p.pn||'',system:p.system||'General',unit:p.unit||'ea',
     stockQty:installed?0:qty,minQty:'',status:installed?'Installed':'On Hand',vendor:p.vendor||'',url:'',unitCost:p.unitPrice||'',
     location:p.location||(installed?'Installed':'On hand'),purchaseDate:p.shipDate||'',
     notes:'Linked automatically from purchase'+(p.invoice?' invoice '+p.invoice:'')+'.',
@@ -196,7 +196,7 @@ window.reconcileTrackerRecordLinks=function(options={}){
     if(e.inventoryPartId)changed=setLinkValue(p,'inventoryPartId',e.inventoryPartId)||changed;
   });
   arr(db.purchases).forEach(p=>{
-    const createPart=!!(p.inventoryApplied||(p.trackAsEquipment&&p.disposition==='On Hand'));
+    const createPart=!!(p.inventoryApplied||['On Hand','Installed'].includes(p.disposition));
     const out=reconcilePurchaseLinks(p,{createPart,createEquipment:!!p.trackAsEquipment});
     changed=out.changed||changed;
   });
@@ -221,7 +221,7 @@ function trackerLinkHealth(){
     if(p.trackAsEquipment&&!purchaseEquipmentRecord(p))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Marked as lifecycle-tracked equipment but no equipment record is linked.');
     if(p.projectId&&!projectIds.has(String(p.projectId)))add('broken','purchase',p.id,p.description||p.pn||'Purchase','Linked project no longer exists.');
     const invKey=String(p.invoice||'');if(invKey&&!/^(PRIVATE-|MANUAL-)/i.test(invKey)&&!/-MANUAL$/i.test(invKey)&&!invoiceNos.has(invKey))add('review','purchase',p.id,p.description||p.pn||'Purchase','No separate invoice/receipt totals record is stored for '+p.invoice+'. The purchase itself is still valid.');
-    if(p.disposition==='On Hand'&&!p.inventoryPartId)add('review','purchase',p.id,p.description||p.pn||'Purchase','On-hand purchase is not linked to an inventory part yet.');
+    if(['On Hand','Installed'].includes(p.disposition)&&!p.inventoryPartId)add('review','purchase',p.id,p.description||p.pn||'Purchase',(p.disposition==='Installed'?'Installed':'On-hand')+' purchase is not linked to a parts/inventory record yet.');
   });
 
   arr(db.equipment).forEach(e=>{
