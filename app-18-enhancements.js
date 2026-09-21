@@ -35,15 +35,30 @@ function maintenanceDueInfo(m){
 
 function renderMaintenance(){
   const page=document.getElementById('page-maintenance');if(!page)return;
-  const items=[...db.maintenance].sort((a,b)=>({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(a).status]??9)-({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(b).status]??9));
   const gates=db.projects.filter(p=>p.status!=='Done'&&/before|return|flight|engine/i.test(p.trigger||''));
   page.innerHTML=`<div class="grid">
     <div class="card span-8"><div class="toolbar"><div><h1>Maintenance</h1><div class="muted">Recurring date/hour items plus return-to-service gates from your active projects.</div></div><button class="primary" onclick="openMaintenanceModal()">+ Add Maintenance Item</button></div>
-      <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Item</th><th>System</th><th>Basis</th><th>Next due</th><th>Status</th><th></th></tr></thead><tbody>${items.map(m=>{const d=maintenanceDueInfo(m);return `<tr class="click-row" onclick="openMaintenanceModal(${m.id})"><td><b>${esc(m.title)}</b><div class="task-note">${esc(m.notes)}</div></td><td>${esc(m.system)}</td><td>${esc(m.basis==='both'?'Date + hours':m.basis)}</td><td>${esc(d.reason||'Not set')}</td><td>${pill(d.status)}</td><td><button class="icon-btn" onclick="event.stopPropagation();openMaintenanceModal(${m.id})">Edit</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No recurring maintenance items yet.</td></tr>'}</tbody></table></div>
+      <div class="controls" style="margin-top:10px"><input id="maintenanceSearch" placeholder="Search maintenance…"><select id="maintenanceSystem">${trackerSystemFilterOptions('')}</select><select id="maintenanceDue"><option value="">All due states</option><option>Due</option><option>Due Soon</option><option>OK</option></select></div>
+      <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Item</th><th>System</th><th>Basis</th><th>Next due</th><th>Status</th><th></th></tr></thead><tbody id="maintenanceRows"></tbody></table></div>
     </div>
     <div class="card span-4"><div class="section-head"><h2>Return-to-service gates</h2><button class="linkbtn" onclick="openProjectsView({status:'Active'})">Projects</button></div>${gates.slice(0,10).map(p=>`<div class="blocker click-row" onclick="openProjectDetail(${p.id})"><span class="dot"></span><div><b>${esc(p.title)}</b><div class="task-note">${esc(p.trigger)} • ${esc(p.nextStep||'No next step')}</div></div></div>`).join('')||'<div class="empty">No open return-to-service gates.</div>'}</div>
   </div>`;
+  document.getElementById('maintenanceSearch')?.addEventListener('input',renderMaintenanceRows);
+  document.getElementById('maintenanceSystem')?.addEventListener('change',renderMaintenanceRows);
+  document.getElementById('maintenanceDue')?.addEventListener('change',renderMaintenanceRows);
+  renderMaintenanceRows();
 }
+function renderMaintenanceRows(){
+  const box=document.getElementById('maintenanceRows');if(!box)return;
+  const q=(val('maintenanceSearch')||'').toLowerCase(),sys=val('maintenanceSystem'),dueFilter=val('maintenanceDue');
+  const rows=[...db.maintenance].filter(m=>
+    (!q||cloudStableJSON(m).toLowerCase().includes(q))&&
+    trackerRecordMatchesSystem(m,sys,'maintenance')&&
+    (!dueFilter||maintenanceDueInfo(m).status===dueFilter)
+  ).sort((a,b)=>({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(a).status]??9)-({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(b).status]??9));
+  box.innerHTML=rows.map(m=>{const d=maintenanceDueInfo(m);return `<tr class="click-row" onclick="openMaintenanceModal(${m.id})"><td><b>${esc(m.title)}</b><div class="task-note">${esc(m.notes||m.sourceNotes||'')}</div></td><td>${esc(m.system||'—')}</td><td>${esc(m.basis==='both'?'Date + hours':m.basis||'—')}</td><td>${esc(d.reason||'Not set')}</td><td>${pill(d.status)}</td><td><button class="icon-btn" onclick="event.stopPropagation();openMaintenanceModal(${m.id})">Edit</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No matching maintenance items.</td></tr>';
+}
+
 function openMaintenanceModal(id=null){
   const m=id?db.maintenance.find(x=>x.id===id):{id:null,title:'',system:'',basis:'date',meter:'engine',intervalDays:'',intervalHours:'',lastDate:'',lastHours:'',nextDate:'',nextHours:'',notes:''};
   if(!m)return;
