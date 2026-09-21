@@ -13,6 +13,7 @@
   const SOURCE='ROTAX 912 Series Operators Manual';
   const DOCREF='OM-912 / P/N 899649';
   const REV='Edition 3 • LEP Rev. 1 • Apr 01 2013';
+  const DOC_KEY='rotax-om-912-ed3';
   const CURRENT_CAUTION='Current ROTAX manufacturer reference supplied for N594ZS. Aircraft-specific operating instructions and limitations remain governed by the applicable N594ZS/Kitfox documentation.';
 
   const refs=[
@@ -87,7 +88,8 @@
     return e?.id||null;
   }
   function operatorDoc(){
-    return A(db.docs).find(d=>/912.*operator.?s manual/i.test(d.name||''))||
+    return A(db.docs).find(d=>d.sourceKey===DOC_KEY)||
+           A(db.docs).find(d=>/912.*operator.?s manual/i.test(d.name||''))||
            A(db.docs).find(d=>/operator.?s manual/i.test(d.name||'')&&/rotax/i.test([d.publisher,d.notes,d.name].join(' ')));
   }
   function ensureOperatorDocument(){
@@ -106,7 +108,9 @@
       linkedProjectIds:A(db.projects).filter(p=>p.system==='Engine'||p.system==='Fuel'||p.system==='Cooling').map(p=>p.id),
       linkedPartIds:A(db.parts).filter(p=>p.system==='Engine').map(p=>p.id),
       linkedLogIds:[],
-      updates:[]
+      updates:[],
+      sourceKey:DOC_KEY,
+      rotaxSourceManaged:true
     };
     db.docs.push(d);
     return d;
@@ -156,6 +160,7 @@
       if(s.rotaxSourceManaged!==true){s.rotaxSourceManaged=true;changed=true}
     }
     if(doc&&doc.rotaxSourceManaged!==true){doc.rotaxSourceManaged=true;changed=true}
+    if(doc&&!doc.sourceKey){doc.sourceKey=DOC_KEY;changed=true}
 
     if(!db.settings.rotaxOperatorManualEd3Seeded){
       for(const r of refs){
