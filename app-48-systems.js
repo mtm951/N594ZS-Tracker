@@ -83,7 +83,7 @@ function banner(page,label,clear){const host=document.querySelector(`#page-${pag
 function setSystemSelect(id,name,render){const el=document.getElementById(id);if(!el)return;const value=name===UNASSIGNED?UNASSIGNED:name;if(!Array.from(el.options).some(o=>o.value===value))el.add(new Option(name===UNASSIGNED?'Unassigned':name,value));el.value=value;render()}
 window.openSystemProjectsView=n=>{openProjectsView({system:n});banner('projects',n,"openProjectsView({})")};
 window.openSystemPartsView=n=>{openPartsView({system:n});banner('parts',n,"openPartsView({})")};
-window.openSystemLogsView=n=>{openLogsView({system:n});banner('logbook',n,"openLogsView({})")};
+window.openSystemLogsView=n=>{navTo('logbook');setTimeout(()=>{setSystemSelect('logSystem',n,renderLogRows);banner('logbook',n,"openLogsView({})")},0)};
 window.openSystemEquipmentView=n=>{navTo('equipment');setTimeout(()=>{setSystemSelect('equipmentSystem',n,renderEquipmentRows);banner('equipment',n,"navTo('equipment')")},0)};
 window.openSystemPurchasesView=n=>{navTo('purchases');setTimeout(()=>{setSystemSelect('purchaseSystem',n,renderPurchaseRows);banner('purchases',n,"navTo('purchases')")},0)};
 window.openSystemSquawksView=n=>{navTo('squawks');setTimeout(()=>{setSystemSelect('squawkSystem',n,renderSquawkRows);setControl('squawkStatus','Active');banner('squawks',n,"navTo('squawks')")},0)};
