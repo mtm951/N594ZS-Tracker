@@ -50,6 +50,165 @@ let equipmentMetricFilter='all';
 function equipmentById(id){return db.equipment.find(x=>Number(x.id)===Number(id))}
 function equipmentPurchase(e){return e?.purchaseId?db.purchases.find(p=>String(p.id)===String(e.purchaseId)):null}
 function equipmentDisplayModel(e){return [e.manufacturer,e.model].filter(Boolean).join(' ')||'—'}
+
+function linkBlank(v){return v===undefined||v===null||v===''}
+function setLinkValue(obj,key,value){
+  if(!obj||value===undefined||value===null||value==='')return false;
+  if(String(obj[key]??'')===String(value))return false;
+  obj[key]=value;return true;
+}
+function setLinkValueIfBlank(obj,key,value){
+  if(!obj||!linkBlank(obj[key])||value===undefined||value===null||value==='')return false;
+  obj[key]=value;return true;
+}
+function addLinkId(obj,key,value){
+  if(!obj||value===undefined||value===null||value==='')return false;
+  obj[key]=arr(obj[key]).map(String);
+  const id=String(value);if(obj[key].includes(id))return false;
+  obj[key].push(id);return true;
+}
+function addLinkedProject(record,projectId){
+  if(!record||!projectId)return false;
+  record.linkedProjectIds=arr(record.linkedProjectIds).map(Number).filter(Boolean);
+  const id=Number(projectId);if(!id||record.linkedProjectIds.includes(id))return false;
+  record.linkedProjectIds.push(id);return true;
+}
+function purchaseInvoiceRecord(p){return p?.invoice?arr(db.invoices).find(x=>String(x.invoice||x.id||'')===String(p.invoice)):null}
+function purchasePartRecord(p){
+  if(!p)return null;
+  if(p.inventoryPartId){const hit=partById(Number(p.inventoryPartId));if(hit)return hit}
+  const byPurchase=arr(db.parts).find(x=>arr(x.purchaseIds).map(String).includes(String(p.id)));if(byPurchase)return byPurchase;
+  if(p.pn){
+    const hits=arr(db.parts).filter(x=>x.partNo&&String(x.partNo).toLowerCase()===String(p.pn).toLowerCase());
+    if(hits.length===1)return hits[0];
+  }
+  return null;
+}
+function purchaseEquipmentRecord(p){
+  if(!p)return null;
+  if(p.equipmentId){const hit=equipmentById(Number(p.equipmentId));if(hit)return hit}
+  return arr(db.equipment).find(x=>String(x.purchaseId||'')===String(p.id))||null;
+}
+function purchaseInventoryQty(p){
+  if(!p)return 0;
+  if(p.disposition==='Installed')return 0;
+  if(p.remainingQty!==''&&p.remainingQty!==null&&p.remainingQty!==undefined)return Math.max(0,num(p.remainingQty));
+  return Math.max(0,num(p.qty));
+}
+function createPartForPurchase(p){
+  const installed=p.disposition==='Installed',qty=purchaseInventoryQty(p);
+  const part={
+    id:uid(),name:p.description||p.pn||'Purchased component',partNo:p.pn||'',system:p.system||'General',unit:'ea',
+    stockQty:installed?0:qty,minQty:'',status:installed?'Installed':'On Hand',vendor:p.vendor||'',url:'',unitCost:p.unitPrice||'',
+    location:p.location||(installed?'Installed':'On hand'),purchaseDate:p.shipDate||'',
+    notes:'Linked automatically from purchase'+(p.invoice?' invoice '+p.invoice:'')+'.',
+    linkedProjectIds:p.projectId?[Number(p.projectId)]:[],updates:[],inventoryAdjustments:[],
+    partType:installed?'Installed Component':'Inventory',purchaseIds:[String(p.id)],equipmentId:null
+  };
+  db.parts.push(part);
+  p.inventoryPartId=part.id;p.inventoryApplied=true;
+  if(p.disposition==='On Hand'&&p.remainingQty==='')p.remainingQty=qty;
+  if(installed)p.remainingQty=0;
+  return part;
+}
+function createEquipmentForPurchase(p,part){
+  const status=p.disposition==='Installed'?'Installed':p.disposition==='On Hand'?'On Hand':'Verify';
+  const e={
+    id:nextNumericId(db.equipment,900),name:p.description||p.pn||'Tracked component',system:p.system||'General',category:'Component',
+    manufacturer:'',model:'',partNo:p.pn||'',serialNo:'',status,location:p.location||(status==='Installed'?'Installed':'On hand'),
+    purchaseDate:p.shipDate||'',installDate:'',vendor:p.vendor||'',purchasePrice:num(p.qty)*num(p.unitPrice),
+    purchaseId:String(p.id),inventoryPartId:part?.id||null,invoice:p.invoice||p.order||'',
+    airframeHoursAtInstall:'',engineHoursAtInstall:'',notes:'Created automatically from linked purchase history.',
+    linkedProjectIds:p.projectId?[Number(p.projectId)]:[],history:[]
+  };
+  db.equipment.push(e);
+  p.equipmentId=e.id;p.trackAsEquipment=true;
+  if(part)part.equipmentId=e.id;
+  return e;
+}
+function reconcilePurchaseLinks(p,options={}){
+  if(!p)return {changed:false,part:null,equipment:null,invoice:null};
+  let changed=false;
+  p.equipmentId=p.equipmentId||null;p.trackAsEquipment=!!(p.trackAsEquipment||p.equipmentId);
+  const inv=purchaseInvoiceRecord(p);
+  if(inv)changed=addLinkId(inv,'purchaseIds',p.id)||changed;
+
+  let part=purchasePartRecord(p);
+  const shouldCreatePart=!!(options.forceInventory||options.createPart);
+  if(!part&&shouldCreatePart){part=createPartForPurchase(p);changed=true}
+  if(part){
+    changed=setLinkValue(p,'inventoryPartId',part.id)||changed;
+    changed=addLinkId(part,'purchaseIds',p.id)||changed;
+    changed=addLinkedProject(part,p.projectId)||changed;
+    changed=setLinkValueIfBlank(part,'system',p.system)||changed;
+    changed=setLinkValueIfBlank(part,'vendor',p.vendor)||changed;
+    changed=setLinkValueIfBlank(part,'purchaseDate',p.shipDate)||changed;
+    changed=setLinkValueIfBlank(part,'location',p.location)||changed;
+    if(!p.inventoryApplied&&(options.forceInventory||options.createPart)){
+      if(p.disposition==='Installed'){p.inventoryApplied=true;p.remainingQty=0;changed=true}
+      else {
+        const qty=purchaseInventoryQty(p);
+        if(qty>0){part.stockQty=(part.stockQty===''?0:num(part.stockQty))+qty;p.inventoryApplied=true;if(p.remainingQty==='')p.remainingQty=qty;changed=true}
+      }
+    }
+  }
+
+  let eq=purchaseEquipmentRecord(p);
+  const shouldCreateEquipment=!!(options.createEquipment||p.trackAsEquipment);
+  if(!eq&&shouldCreateEquipment){eq=createEquipmentForPurchase(p,part);changed=true}
+  if(eq){
+    changed=setLinkValue(p,'equipmentId',eq.id)||changed;
+    if(!p.trackAsEquipment){p.trackAsEquipment=true;changed=true}
+    changed=setLinkValue(eq,'purchaseId',p.id)||changed;
+    if(part){
+      changed=setLinkValue(eq,'inventoryPartId',part.id)||changed;
+      changed=setLinkValue(part,'equipmentId',eq.id)||changed;
+    }
+    changed=addLinkedProject(eq,p.projectId)||changed;
+    changed=setLinkValueIfBlank(eq,'name',p.description||p.pn)||changed;
+    changed=setLinkValueIfBlank(eq,'system',p.system)||changed;
+    changed=setLinkValueIfBlank(eq,'partNo',p.pn)||changed;
+    changed=setLinkValueIfBlank(eq,'vendor',p.vendor)||changed;
+    changed=setLinkValueIfBlank(eq,'purchaseDate',p.shipDate)||changed;
+    changed=setLinkValueIfBlank(eq,'invoice',p.invoice||p.order)||changed;
+    changed=setLinkValueIfBlank(eq,'purchasePrice',num(p.qty)*num(p.unitPrice))||changed;
+    changed=setLinkValueIfBlank(eq,'location',p.location)||changed;
+  }
+  return {changed,part,equipment:eq,invoice:inv};
+}
+window.reconcilePurchaseLinks=reconcilePurchaseLinks;
+
+window.trackPurchaseAsEquipment=function(id){
+  const p=arr(db.purchases).find(x=>String(x.id)===String(id));if(!p)return;
+  p.trackAsEquipment=true;
+  const out=reconcilePurchaseLinks(p,{createPart:['On Hand','Installed'].includes(p.disposition),createEquipment:true});
+  saveDB(out.changed?'Purchase linked to equipment.':'Equipment link already current.');
+  setTimeout(()=>openPurchaseDetail(p.id),0);
+};
+
+window.reconcileTrackerRecordLinks=function(options={}){
+  let changed=false;
+  arr(db.equipment).forEach(e=>{
+    if(!e.purchaseId)return;
+    const p=arr(db.purchases).find(x=>String(x.id)===String(e.purchaseId));if(!p)return;
+    changed=setLinkValue(p,'equipmentId',e.id)||changed;
+    if(!p.trackAsEquipment){p.trackAsEquipment=true;changed=true}
+    if(e.inventoryPartId)changed=setLinkValue(p,'inventoryPartId',e.inventoryPartId)||changed;
+  });
+  arr(db.purchases).forEach(p=>{
+    const createPart=!!(p.inventoryApplied||(p.trackAsEquipment&&['On Hand','Installed'].includes(p.disposition)));
+    const out=reconcilePurchaseLinks(p,{createPart,createEquipment:!!p.trackAsEquipment});
+    changed=out.changed||changed;
+  });
+  if(changed&&options.persist){
+    try{
+      if(typeof persistBrowserData==='function')Promise.resolve(persistBrowserData(db,{quiet:true})).catch(()=>{});
+      else localStorage.setItem(DB_KEY,JSON.stringify(db));
+    }catch(_e){}
+    try{if(typeof queueCloudSave==='function')queueCloudSave()}catch(_e){}
+  }
+  return changed;
+};
 function equipmentMissingDocs(e){return !e.serialNo||!e.purchaseDate||e.purchasePrice===''||e.purchasePrice===null}
 function equipmentSortVal(e,key){
   if(key==='cost')return e.purchasePrice===''?null:Number(e.purchasePrice)||0;
