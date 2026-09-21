@@ -67,7 +67,17 @@
       const fn=window[name];
       if(typeof fn!=='function')continue;
       const started=performance.now();
-      fn();
+      try{
+        fn();
+      }catch(e){
+        console.error('[N594ZS] page render failed',page,e);
+        if(page==='ops'&&typeof renderOpsFallback==='function'){
+          try{renderOpsFallback(e)}catch(_e){}
+          return true;
+        }
+        try{toast('Could not render '+page+': '+(e?.message||e),'bad')}catch(_e){}
+        return false;
+      }
       const elapsed=performance.now()-started;
       if(elapsed>80)console.debug('[N594ZS] slow page render',page,Math.round(elapsed)+'ms');
       if(page==='systems')systemsPostRender();
@@ -111,23 +121,16 @@
 
   navTo=function(page){
     const target=page||'dashboard';
-    // Preserve navigation-history / special-page behavior installed by earlier modules.
+    // Preserve navigation history and other non-render side effects from earlier modules.
     navBase(target);
 
-    // Systems already renders in the existing Systems navigation wrapper.
-    if(target==='systems'){
-      systemsPostRender();
-      scheduleDataInitializers();
-      return;
-    }
-
-    // Access is already rendered by the core navigation function.
+    // Access retains its specialized auth-aware core flow.
     if(target==='access'){
       scheduleDataInitializers();
       return;
     }
 
-    // Render only the destination page. This is the key performance change.
+    // Render the destination exactly once through the central page registry.
     if(!callPageRenderer(target)&&target==='readiness'){
       legacyFullRender();
     }
