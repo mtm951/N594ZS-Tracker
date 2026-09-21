@@ -19,8 +19,13 @@ purchaseSystem=function(desc,pn=''){
   return 'General';
 };
 
-// Reclassify CSV-derived lines with the refined rules. Manual edits remain untouched.
-for(const p of arr(db.purchases))if(p.source==='Aircraft Spruce CSV'&&!p.systemManual)p.system=purchaseSystem(p.description,p.pn);
+// Reclassify CSV-derived lines during normalization, not during every UI render.
+const normalizeDBDataPolishBase=normalizeDB;
+normalizeDB=function(){
+  normalizeDBDataPolishBase();
+  for(const p of arr(db.purchases))if(p.source==='Aircraft Spruce CSV'&&!p.systemManual)p.system=purchaseSystem(p.description,p.pn);
+};
+normalizeDB();
 
 // Aircraft page should never imply the old 582 empty W&B is the current 912 empty condition.
 const renderAircraftWbPolishBase=renderAircraft;
@@ -90,6 +95,4 @@ function setPurchaseDisposition(id,disposition){
 }
 function skipPurchaseReconcile(id){const rows=db.purchases.filter(x=>x.disposition==='Unknown').sort((a,b)=>(b.shipDate||'').localeCompare(a.shipDate||''));const i=rows.findIndex(x=>String(x.id)===String(id)),next=rows[(i+1)%rows.length];if(!next||String(next.id)===String(id)){closeModal();return}openPurchaseReconcile(next.id)}
 
-// Ensure post-load rendering picks up the corrected historical categories and W&B annotation.
-const renderAllDataPolishBase=renderAll;
-renderAll=function(){for(const p of arr(db.purchases))if(p.source==='Aircraft Spruce CSV'&&!p.systemManual)p.system=purchaseSystem(p.description,p.pn);renderAllDataPolishBase()};
+// Historical purchase categorization is now handled by normalizeDB.
