@@ -66,9 +66,61 @@ function saveOrderPartLink(orderId){
 }
 function applyOrderReceipt(o,qty){const remaining=orderRemainingQty(o),amount=Math.min(remaining,Math.max(0,num(qty)));if(!amount)return 0;if(o.partId){const p=partById(o.partId);if(p){p.stockQty=(p.stockQty===''?0:num(p.stockQty))+amount;if(['Order','Backordered','Need'].includes(p.status)&&amount>=remaining)p.status='On Hand'}}o.receivedQty=orderReceivedQty(o)+amount;o.inventoryAppliedQty=o.receivedQty;o.inventoryApplied=o.receivedQty>=num(o.qty);if(o.inventoryApplied){o.status='Received';o.receivedDate=o.receivedDate||today()}else if(!['Ordered','Backordered','Shipped'].includes(o.status))o.status='Ordered';o.updates=arr(o.updates);o.updates.push({id:uid(),date:today(),text:`Received ${amount} ${o.unit||'ea'}${o.inventoryApplied?' (line complete)':' (partial receipt)'}.`});return amount}
 function openReceiveOrderModal(id){const o=orderById(id);if(!o)return;const remaining=orderRemainingQty(o);if(!remaining)return receiveOrder(id);openModal(`${modalHeader('Receive Order Item',o.item)}<div class="notice">${esc(orderReceivedQty(o)+' of '+o.qty+' '+(o.unit||'ea'))} already received. ${esc(remaining+' '+(o.unit||'ea'))} remaining.</div><div class="form-grid" style="margin-top:12px">${field('Quantity received now','orReceiveQty',remaining,'number',`step="any" min="0.000001" max="${remaining}"`)}${field('Received date','orReceiveDate',today(),'date')}</div><div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail(${id})">Cancel</button><button class="btn success" onclick="savePartialOrderReceipt(${id})">Receive</button></div>`)}
-function savePartialOrderReceipt(id){const o=orderById(id);if(!o)return;const qty=num(val('orReceiveQty')),remaining=orderRemainingQty(o);if(!(qty>0)||qty>remaining)return alert(`Enter a quantity from 0 to ${remaining}.`);const applied=applyOrderReceipt(o,qty);if(val('orReceiveDate'))o.receivedDate=val('orReceiveDate');closeModal();saveDB(applied&&o.partId?'Receipt saved and inventory increased.':'Receipt saved.');setTimeout(()=>openOrderDetail(id),50)}
-function receiveOrder(id){const o=orderById(id);if(!o)return;const remaining=orderRemainingQty(o);if(!remaining){o.status='Received';o.inventoryApplied=true;o.receivedDate=o.receivedDate||today();saveDB('Order marked received. Inventory had already been applied.');openOrderDetail(id);return}openReceiveOrderModal(id)}
-function receiveOrderGroup(key){const items=orderGroupItems(key).filter(o=>orderRemainingQty(o)>0&&!isClosedOrder(o));if(!items.length)return alert('This order has no remaining quantity to receive.');const label=items[0].tracking||items[0].vendor||'this order';if(!confirm(`Receive all ${items.length} remaining line item${items.length===1?'':'s'} for ${label}? Linked inventory quantities will be increased.`))return;let applied=0;items.forEach(o=>{applied+=applyOrderReceipt(o,orderRemainingQty(o))});saveDB(`${label} received. ${applied} total units were processed.`);renderOrders()}
+// v5.19.12: stage all affected order/part records together. The local batch
+// rolls back synchronous failures before saveDB(), but cloud sync remains async.
+function runOrderReceiptBatch(work,message){
+  try{return trackerStore.batch(work,{message})}
+  catch(error){
+    console.error('Order receipt failed',error);
+    alert('Receipt could not be completed. Review the order and cloud sync status before retrying: '+error.message);
+    return null;
+  }
+}
+function validateOrderReceiptPart(o){
+  if(o.partId&&!partById(o.partId))throw new Error('Linked inventory part is missing for '+o.item+'.');
+}
+function savePartialOrderReceipt(id){
+  const o=orderById(id);if(!o)return;
+  const qty=num(val('orReceiveQty')),remaining=orderRemainingQty(o);
+  if(!(qty>0)||qty>remaining)return alert(`Enter a quantity from 0 to ${remaining}.`);
+  const date=val('orReceiveDate');
+  const applied=runOrderReceiptBatch(()=>{
+    validateOrderReceiptPart(o);
+    const amount=applyOrderReceipt(o,qty);
+    if(date)o.receivedDate=date;
+    return amount;
+  },o.partId?'Receipt saved and inventory increased.':'Receipt saved.');
+  if(applied===null)return;
+  closeModal();setTimeout(()=>openOrderDetail(id),50);
+}
+function receiveOrder(id){
+  const o=orderById(id);if(!o)return;
+  const remaining=orderRemainingQty(o);
+  if(!remaining){
+    const result=runOrderReceiptBatch(()=>{
+      o.status='Received';o.inventoryApplied=true;o.receivedDate=o.receivedDate||today();
+      return true;
+    },'Order marked received. Inventory had already been applied.');
+    if(result!==null)openOrderDetail(id);
+    return;
+  }
+  openReceiveOrderModal(id);
+}
+function receiveOrderGroup(key){
+  const items=orderGroupItems(key).filter(o=>orderRemainingQty(o)>0&&!isClosedOrder(o));
+  if(!items.length)return alert('This order has no remaining quantity to receive.');
+  const label=items[0].tracking||items[0].vendor||'this order';
+  if(!confirm(`Receive all ${items.length} remaining line item${items.length===1?'':'s'} for ${label}? Linked inventory quantities will be increased.`))return;
+  const total=runOrderReceiptBatch(()=>{
+    let applied=0;
+    for(const o of items){
+      validateOrderReceiptPart(o);
+      applied+=applyOrderReceipt(o,orderRemainingQty(o));
+    }
+    return applied;
+  },`${label} received. ${items.reduce((n,o)=>n+orderRemainingQty(o),0)} total units were processed.`);
+  if(total!==null)renderOrders();
+}
 function receiveOrderGroupFor(orderId){const o=orderById(orderId);if(o)receiveOrderGroup(orderGroupKey(o))}
 function openReceiveOrderGroupModal(orderId){
   const first=orderById(orderId);if(!first)return;
@@ -79,10 +131,30 @@ function openReceiveOrderGroupModal(orderId){
 }
 function saveOrderGroupReceipt(orderId){
   const first=orderById(orderId);if(!first)return;
-  const items=orderGroupItems(orderGroupKey(first)).filter(o=>orderRemainingQty(o)>0&&!isClosedOrder(o));let total=0,lines=0;
-  for(const o of items){const input=document.getElementById(`ogr-${o.id}`),qty=num(input?.value),remaining=orderRemainingQty(o);if(qty<0||qty>remaining)return alert(`Enter a quantity from 0 to ${remaining} for ${o.item}.`);if(qty>0){total+=applyOrderReceipt(o,qty);lines++;if(val('ogrDate'))o.receivedDate=val('ogrDate')}}
-  if(!lines)return alert('Enter a received quantity for at least one item.');
-  closeModal();saveDB(`Partial receipt saved for ${first.tracking||first.vendor||'order'}: ${total} total units across ${lines} line${lines===1?'':'s'}.`);renderOrders();
+  const items=orderGroupItems(orderGroupKey(first)).filter(o=>orderRemainingQty(o)>0&&!isClosedOrder(o));
+  // Validate every row before touching inventory. Previously a bad second row
+  // could leave the first row modified in memory without saving.
+  const plan=[];
+  for(const o of items){
+    const raw=document.getElementById(`ogr-${o.id}`)?.value??'0';
+    const qty=Number(raw),remaining=orderRemainingQty(o);
+    if(!Number.isFinite(qty)||qty<0||qty>remaining)
+      return alert(`Enter a quantity from 0 to ${remaining} for ${o.item}.`);
+    if(qty>0)plan.push({o,qty});
+  }
+  if(!plan.length)return alert('Enter a received quantity for at least one item.');
+  const date=val('ogrDate');
+  const total=plan.reduce((sum,row)=>sum+row.qty,0);
+  const result=runOrderReceiptBatch(()=>{
+    for(const {o,qty} of plan){
+      validateOrderReceiptPart(o);
+      applyOrderReceipt(o,qty);
+      if(date)o.receivedDate=date;
+    }
+    return total;
+  },`Partial receipt saved for ${first.tracking||first.vendor||'order'}: ${total} total units across ${plan.length} line${plan.length===1?'':'s'}.`);
+  if(result===null)return;
+  closeModal();renderOrders();
 }
 function openOrderDetail(id){
   const o=orderById(id);if(!o)return;currentDetail={type:'order',id};
