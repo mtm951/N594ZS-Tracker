@@ -33,6 +33,9 @@ jobs:
             node --check "$file"
           done
 
+      - name: Run sync regression tests
+        run: node tests/sync-versioning.test.mjs
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
