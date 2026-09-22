@@ -1,7 +1,21 @@
 // ---------- DOCUMENTS ----------
 function openDocModal(id=null,projectId=null){const d=id?docById(id):{name:'',type:'',revision:'',issueDate:'',system:'',publisher:'',location:'',notes:'',linkedProjectIds:projectId?[projectId]:[],linkedPartIds:[],linkedLogIds:[]};openModal(`${modalHeader(id?'Edit Document':'Add Document')}<div class="form-grid"><div class="full"><label>Document name</label><input id="dcName" value="${esc(d.name)}"></div>${field('Type','dcType',d.type)}${field('Revision','dcRevision',d.revision)}${field('Issue / revision date','dcIssue',d.issueDate,'date')}<div><label>System</label><select id="dcSystem">${systemOptions(d.system)}</select></div>${field('Publisher / source','dcPublisher',d.publisher)}<div class="full"><label>URL / file-location note</label><input id="dcLocation" value="${esc(d.location)}"></div>${textareaField('Notes / applicability','dcNotes',d.notes)}</div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteDoc(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveDoc(${id||'null'},${projectId||'null'})">Save Document</button></div>`)}
-function saveDoc(id,projectId=null){const o={name:val('dcName'),type:val('dcType'),revision:val('dcRevision'),issueDate:val('dcIssue'),system:val('dcSystem'),publisher:val('dcPublisher'),location:val('dcLocation'),notes:val('dcNotes')};if(!o.name)return alert('Document name is required.');if(id)Object.assign(docById(id),o);else db.docs.push({id:uid(),...o,linkedProjectIds:projectId?[projectId]:[],linkedPartIds:[],linkedLogIds:[],updates:[]});closeModal();saveDB(id?'Document updated.':'Document added.')}
-function deleteDoc(id){if(!confirm('Delete this document record?'))return;db.docs=db.docs.filter(x=>x.id!==id);closeModal();saveDB('Document deleted.')}
+function saveDoc(id,projectId=null){
+  const o={name:val('dcName'),type:val('dcType'),revision:val('dcRevision'),issueDate:val('dcIssue'),system:val('dcSystem'),publisher:val('dcPublisher'),location:val('dcLocation'),notes:val('dcNotes')};
+  if(!o.name)return alert('Document name is required.');
+  if(id){
+    trackerStore.update('document',id,draft=>Object.assign(draft,o),{message:'Document updated.'});
+  }else{
+    const newId=uid();
+    trackerStore.write('document',newId,{id:newId,...o,linkedProjectIds:projectId?[projectId]:[],linkedPartIds:[],linkedLogIds:[],updates:[]},{message:'Document added.'});
+  }
+  closeModal();
+}
+function deleteDoc(id){
+  if(!confirm('Delete this document record?'))return;
+  trackerStore.remove('document',id,{message:'Document deleted.'});
+  closeModal();
+}
 function openDocumentDetail(id){
   const d=docById(id);if(!d)return;currentDetail={type:'document',id};
   const projects=d.linkedProjectIds.map(projectById).filter(Boolean),parts=d.linkedPartIds.map(partById).filter(Boolean),logs=d.linkedLogIds.map(logById).filter(Boolean);
