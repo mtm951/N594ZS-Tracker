@@ -15,8 +15,16 @@ function storage(seed={}){
 }
 function makeHarness(rpcResult){
   const localStorage=storage({
-    n594zs_record_snapshot_v4:JSON.stringify({'project:1':'{"id":1,"title":"Old"}'}),
-    n594zs_record_versions_v1:JSON.stringify({'project:1':7}),
+    n594zs_record_snapshot_v4:JSON.stringify({
+      'aircraft:singleton':'{"id":"singleton"}',
+      'settings:singleton':'{}',
+      'project:1':'{"id":1,"title":"Old"}'
+    }),
+    n594zs_record_versions_v1:JSON.stringify({
+      'aircraft:singleton':1,
+      'settings:singleton':1,
+      'project:1':7
+    }),
     n594zs_pending_cloud_v4:'1'
   });
   const sessionStorage=storage();
