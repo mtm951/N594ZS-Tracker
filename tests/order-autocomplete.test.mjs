@@ -68,7 +68,7 @@ assert.equal(nodes.orItem.value,'AN-5 Fuel Fitting');
 assert.equal(nodes.orPart.value,'21');
 assert.equal(nodes.orVendor.value,'Aircraft Spruce');
 assert.equal(nodes.orUnit.value,'ea');
-assert.equal(nodes.orPrice.value,'12');
+assert.equal(String(nodes.orPrice.value),'12');
 assert.equal(nodes.orUrl.value,'https://example.test/an5');
 assert.equal(nodes.orSystem.value,'Fuel');
 assert.equal(nodes.orItemSuggestions.hidden,true);
