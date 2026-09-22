@@ -13,7 +13,7 @@ function storage(seed={}){
     dump:()=>Object.fromEntries(m)
   };
 }
-function makeHarness(rpcResult){
+function makeHarness(rpcResult,{rpcError=null,online=true}={}){
   const localStorage=storage({
     n594zs_record_snapshot_v4:JSON.stringify({
       'aircraft:singleton':'{"id":"singleton"}',
@@ -28,9 +28,9 @@ function makeHarness(rpcResult){
     n594zs_pending_cloud_v4:'1'
   });
   const sessionStorage=storage();
-  const rpcCalls=[];
+  const rpcCalls=[],statuses=[],errors=[];
   const context={
-    console,
+    console:{...console,error:(...args)=>errors.push(args)},
     JSON,
     Date,
     Map,
@@ -48,7 +48,7 @@ function makeHarness(rpcResult){
     crypto:{randomUUID:()=> 'test-client'},
     sessionStorage,
     localStorage,
-    navigator:{onLine:true},
+    navigator:{onLine:online},
     addEventListener:()=>{},
     db:{
       aircraft:{id:'singleton'},
@@ -69,7 +69,7 @@ function makeHarness(rpcResult){
     cloudRole:'owner',
     currentPage:'dashboard',
     canCloudEdit:()=>true,
-    cloudStatusLabel:()=>{},
+    cloudStatusLabel:label=>statuses.push(label),
     toast:()=>{},
     persistCloudCache:()=>{},
     renderAll:()=>{},
@@ -85,7 +85,7 @@ function makeHarness(rpcResult){
       rpc:async(name,args)=>{
         assert.equal(name,'sync_tracker_records_guarded');
         rpcCalls.push(args);
-        return {data:structuredClone(rpcResult),error:null};
+        return {data:structuredClone(rpcResult),error:rpcError};
       },
       from:()=>{throw new Error('unexpected table query in this test')},
       channel:()=>({on(){return this},subscribe(){return this}}),
@@ -95,7 +95,7 @@ function makeHarness(rpcResult){
   context.window=context;
   vm.createContext(context);
   vm.runInContext(syncSource,context,{filename:'app-17-record-sync.js'});
-  return {context,localStorage,rpcCalls};
+  return {context,localStorage,rpcCalls,statuses,errors};
 }
 
 {
@@ -124,5 +124,34 @@ function makeHarness(rpcResult){
   const versions=JSON.parse(h.localStorage.getItem('n594zs_record_versions_v1'));
   assert.equal(versions['project:1'],9);
 }
+
+
+{
+  // If the guarded RPC fails, keep the current local record and the unsynced
+  // marker; do not advance the cloud snapshot or its expected row version.
+  const h=makeHarness(null,{rpcError:new Error('simulated cloud outage')});
+  const out=await h.context.saveCloudState();
+  assert.match(out.error.message,/simulated cloud outage/);
+  assert.equal(h.localStorage.getItem('n594zs_pending_cloud_v4'),'1');
+  assert.equal(h.context.db.projects[0].title,'New');
+  assert.equal(h.rpcCalls.length,1);
+  assert.ok(h.statuses.includes('Sync pending'));
+  assert.equal(h.errors.length,1);
+  const versions=JSON.parse(h.localStorage.getItem('n594zs_record_versions_v1'));
+  const snapshot=JSON.parse(h.localStorage.getItem('n594zs_record_snapshot_v4'));
+  assert.equal(versions['project:1'],7,'failed cloud save advanced expected version');
+  assert.equal(JSON.parse(snapshot['project:1']).title,'Old','failed cloud save falsified synced snapshot');
+}
+
+{
+  // Offline saves remain pending without even attempting the network.
+  const h=makeHarness(null,{online:false});
+  await h.context.saveCloudState();
+  assert.equal(h.localStorage.getItem('n594zs_pending_cloud_v4'),'1');
+  assert.equal(h.rpcCalls.length,0);
+  assert.ok(h.statuses.includes('Offline'));
+  assert.equal(h.context.db.projects[0].title,'New');
+}
+
 
 console.log('sync-versioning regression tests passed');
