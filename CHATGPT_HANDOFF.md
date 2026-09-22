@@ -14,7 +14,18 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.9.5**
+- Current release: **v5.19.10** (verify against current `index.html` on every new session)
+
+## v5.19.10 transaction reliability / local-first status
+
+- `app-17a-data-store.js` is the thin `trackerStore` interface now used by selected ordinary CRUD flows (aircraft details, dated entity updates, equipment history, checklists, documents, ordinary projects, ordinary orders).
+- `trackerStore.batch(tx => {...})` supports **synchronous in-memory grouping only**: one `saveDB()` call after the callback, full in-memory rollback if the mutator throws, and no nested batches/mid-batch commit.
+- The per-batch `tx` facade is revoked on completion or rollback. Returning a Promise is rejected; callers must not use global `window.trackerStore` or direct `db` mutation for delayed work and must not treat this API as an asynchronous/cloud transaction.
+- Record writes reject mismatched supplied IDs versus payload IDs. On a synchronous `saveDB()` exception **after staging**, the store leaves the staged state in memory rather than falsely rolling back changes that may already be queued/persisted; the caller must handle recovery/retry.
+- Regression suite: `tests/transaction-reliability.test.mjs` covers a simulated linked Order + Part + Project + Work Log batch, rollback/identity checks, async-after-batch guards, and save-failure handling. `tests/sync-versioning.test.mjs` covers server stale-write rejection, successful row-version updates, cloud-RPC failure, and offline pending flags. CI runs all `tests/*.test.mjs`.
+- **NOT YET production-atomic:** the actual order-receipt/inventory engine, multi-record delete and attachments have not been migrated. `saveDB()` queues cloud sync; it does not await durable persistence, and the guarded RPC is invoked in batches of up to 50 records. Do not promise all-or-nothing cloud behavior across batches or on network failure. Implement an explicit durable transaction/operation strategy before moving stock accounting.
+- Current safety branch: `pre-transaction-regressions-v5.19.9`. No schema or user aircraft-record changes were required for this slice.
+- `app-44-assistant-collapse.js` **is still dynamically loaded** by `app-15-init.js`. It is not listed in `index.html` directly, but it is active; do not delete based on the direct-script list alone.
 
 ## v5.9.0 Systems workspace
 
