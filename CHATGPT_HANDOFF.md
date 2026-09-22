@@ -14,7 +14,17 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.12** (verify against current `index.html` on every new session)
+- Current release: **v5.19.13** (verify against current `index.html` on every new session)
+
+## v5.19.13 atomic cloud primitive and scoped receipts
+
+- New **opt-in** Supabase migration `atomic_tracker_operations` (applied in cloud migration history as `20260922200847`); tracked SQL at `supabase/migrations/202609222003_atomic_tracker_operations.sql`.
+- `public.sync_tracker_records_atomic(target_workspace uuid, operation_id uuid, changes jsonb)` is an authenticated-only, permission-checked RPC. It takes 1–50 unique record keys, invokes the existing guarded-version RPC in a PostgreSQL exception subtransaction, and rolls back **all** writes if *any* record conflicts. It returns `applied: []` plus conflicts in that case. Identical successful retries of one `operation_id` replay the stored result rather than applying again; different payloads with the same ID are rejected.
+- Private `public.tracker_atomic_operations` table: RLS enabled, direct read/write grants revoked for `anon` and `authenticated`; only the authenticated RPC uses the ledger. Existing `sync_tracker_records_guarded` and its callers were **not** changed. Security advisor lists its intentionally policy-less ledger as an informational lint; the new RPC does **not** appear among anonymously executable SECURITY DEFINER findings.
+- SQL smoke test `supabase/tests/atomic_operations_rollback.sql` was executed inside a transaction and rolled back. It verified two-record commit, exact-op replay without version increments, reused-ID rejection, all-or-nothing rollback when the *second* row conflicts, and unauthorized rejection. Verified 0 persistent test workspaces, 0 ledger rows and the existing 913 active aircraft records after tests.
+- Production `app-08-orders.js` receipt paths now use scoped `tx.read/update` rather than mutating captured live order/part objects. Group completion toast reports the pre-operation unit count. `tests/order-receipt-transaction.test.mjs` adds captured-object immutability and toast regressions.
+- **NOT YET WIRED INTO BROWSER:** The live browser still calls the old async guarded cloud-sync RPC for its receipt records; cloud-wide atomicity and durable retry for live user operations are NOT delivered by this release. Next: durable browser-side operation ID/queue, safe before-save staging, replay on reconnection and page reload, conflict-resolution integration, and cross-device browser testing. Do not enable the atomic RPC for real receipts until these are verified.
+- Rollback branch: `pre-cloud-atomic-ops-v5.19.12`. The migration is additive, so app rollback does not require dropping its ledger/function. No user aircraft data was edited.
 
 ## v5.19.12 actual order receipt safety
 
