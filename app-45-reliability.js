@@ -33,7 +33,7 @@ const expCore=window.exportCoreData;window.exportCoreData=async function(){try{c
 const expFull=window.exportFullBackup;window.exportFullBackup=async function(){if(cloudSession&&cloudWorkspaceId&&!confirm('Cloud file binaries live in Supabase Storage and are not embedded in the JSON full backup. Structured tracker data is protected by this export and cloud snapshots. Continue?'))return;return expFull()};
 const imp=window.importBackupObject;window.importBackupObject=async function(o){const incoming=o?.db||o;if(!incoming?.aircraft||!Array.isArray(incoming?.projects))return alert('Backup validation failed: missing aircraft or projects data.');if(o?.manifest?.sha256&&crypto?.subtle&&await sha(J(incoming))!==o.manifest.sha256)return alert('Backup validation failed: checksum mismatch. The file may be incomplete or modified.');const a=audit(incoming);if((a.issues.length||a.warnings.length)&&!confirm('Backup has '+a.issues.length+' structural error(s) and '+a.warnings.length+' warning(s). Continue to the normal restore confirmation?'))return;recovery('Before backup import');return imp(o)};
 const reset=window.resetData;window.resetData=function(){recovery('Before starter-data reset');return reset()};
-async function remoteRows(){const types=typeof SYNC_RECORD_TYPES!=='undefined'?[...SYNC_RECORD_TYPES]:['aircraft','settings','project','part','order','log','document','checklist','maintenance','purchase'];const q=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_client').eq('workspace_id',cloudWorkspaceId).in('record_type',types);if(q.error)throw q.error;return q.data||[]}
+async function remoteRows(){const types=typeof SYNC_RECORD_TYPES!=='undefined'?[...SYNC_RECORD_TYPES]:['aircraft','settings','project','part','order','log','document','checklist','maintenance','purchase'];const q=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_client,record_version').eq('workspace_id',cloudWorkspaceId).in('record_type',types);if(q.error)throw q.error;return q.data||[]}
 
 let lastAutoMerges=[],conflictPayloads=new Map();
 function parseSnapshot(v){if(v===null||v===undefined)return null;try{return JSON.parse(v)}catch(_e){return null}}
@@ -140,6 +140,13 @@ async function detect(){
   if(!changed.size&&localStorage.getItem(CLOUD_PENDING_KEY)==='1'){changed=computeDirtyKeys();if(changed.size)setDirtyKeys(changed)}
   if(!changed.size)return[];
   const rm=new Map((await remoteRows()).map(r=>[K(r.record_type,r.record_id),r])),out=[];
+  if(typeof cloudRecordVersions!=='undefined'){
+    for(const k of changed){
+      const row=rm.get(k);
+      if(row)cloudRecordVersions.set(k,Number(row.record_version)||0);
+    }
+    if(typeof persistCloudRecordVersions==='function')persistCloudRecordVersions();
+  }
   let localMutated=false;
   for(const k of changed){
     const baseJSON=cloudRecordSnapshot.has(k)?cloudRecordSnapshot.get(k):null;
@@ -238,7 +245,27 @@ window.saveCloudState=async function(){
       return;
     }
     setConf([]);
-    const result=await saveBase();
+    let result=await saveBase();
+    if(result?.versionConflicts?.length){
+      // The server caught a write that became stale after our pre-save comparison.
+      // Re-read the current rows. If only metadata/version changed, retry once using
+      // the refreshed server version. If data changed, surface the normal field-aware resolver.
+      const after=await detect();
+      if(after.length){
+        setConf(after);localStorage.setItem(CLOUD_PENDING_KEY,'1');cloudStatusLabel('Conflict');
+        toast('The server blocked a stale write; review the changed field'+(after.length===1?'':'s')+'.','bad');
+        if(currentPage==='system')renderSystem();
+        return result;
+      }
+      result=await saveBase();
+      if(result?.versionConflicts?.length){
+        const finalConflicts=await detect();
+        if(finalConflicts.length)setConf(finalConflicts);
+        localStorage.setItem(CLOUD_PENDING_KEY,'1');cloudStatusLabel('Conflict');
+        toast('The server is still protecting a newer cloud version. Review the conflict before saving.','bad');
+        return result;
+      }
+    }
     if(localStorage.getItem(CLOUD_PENDING_KEY)!=='1'){
       clearDirtyKeys();
       if(merged.length)toast('Auto-merged '+merged.length+' non-overlapping cloud change'+(merged.length===1?'':'s')+'.','good');
