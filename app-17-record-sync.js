@@ -3,8 +3,10 @@ const CLOUD_CLIENT_ID=sessionStorage.getItem('n594zs_client_id')||crypto.randomU
 sessionStorage.setItem('n594zs_client_id',CLOUD_CLIENT_ID);
 const CLOUD_PENDING_KEY='n594zs_pending_cloud_v4';
 const CLOUD_SNAPSHOT_KEY='n594zs_record_snapshot_v4';
-let cloudRecordSnapshot=new Map();
+const CLOUD_VERSION_KEY='n594zs_record_versions_v1';
+let cloudRecordSnapshot=new Map(),cloudRecordVersions=new Map();
 try{const cached=JSON.parse(localStorage.getItem(CLOUD_SNAPSHOT_KEY)||'{}');cloudRecordSnapshot=new Map(Object.entries(cached));}catch(_e){}
+try{const cached=JSON.parse(localStorage.getItem(CLOUD_VERSION_KEY)||'{}');cloudRecordVersions=new Map(Object.entries(cached).map(([k,v])=>[k,Number(v)||0]));}catch(_e){}
 let cloudReloadTimer=null, cloudRemoteReloadPending=false;
 let lastCloudSyncAt=null;
 
@@ -22,8 +24,9 @@ function cloudStableJSON(x){try{return JSON.stringify(cloudCanonicalJSONValue(x)
 for(const [k,v] of cloudRecordSnapshot){
   try{cloudRecordSnapshot.set(k,cloudStableJSON(JSON.parse(v)))}catch(_e){}
 }
-persistCloudRecordSnapshot();
+persistCloudRecordSnapshot();persistCloudRecordVersions();
 function persistCloudRecordSnapshot(){try{localStorage.setItem(CLOUD_SNAPSHOT_KEY,JSON.stringify(Object.fromEntries(cloudRecordSnapshot)))}catch(_e){}}
+function persistCloudRecordVersions(){try{localStorage.setItem(CLOUD_VERSION_KEY,JSON.stringify(Object.fromEntries(cloudRecordVersions)))}catch(_e){}}
 function buildCloudRecordMap(){
   const m=new Map();
   const aircraft=clone(db.aircraft||{});
@@ -34,6 +37,20 @@ function buildCloudRecordMap(){
   return m;
 }
 function snapshotFromRows(rows){const m=new Map();for(const r of rows||[]){if(r.deleted_at||!SYNC_RECORD_TYPES.has(r.record_type))continue;m.set(cloudRecordKey(r.record_type,r.record_id),cloudStableJSON(r.data))}return m}
+function versionsFromRows(rows){const m=new Map();for(const r of rows||[]){if(!SYNC_RECORD_TYPES.has(r.record_type))continue;m.set(cloudRecordKey(r.record_type,r.record_id),Number(r.record_version)||0)}return m}
+async function refreshCloudRecordVersions(keys=null){
+  if(!supa||!cloudWorkspaceId)return cloudRecordVersions;
+  const wanted=keys?new Set([...keys]):null;
+  const {data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,record_version,deleted_at').eq('workspace_id',cloudWorkspaceId).in('record_type',[...SYNC_RECORD_TYPES]);
+  if(error)throw error;
+  for(const row of rows||[]){
+    const key=cloudRecordKey(row.record_type,row.record_id);
+    if(!wanted||wanted.has(key))cloudRecordVersions.set(key,Number(row.record_version)||0);
+  }
+  persistCloudRecordVersions();
+  return cloudRecordVersions;
+}
+window.refreshCloudRecordVersions=refreshCloudRecordVersions;
 function blankCloudDB(){return {version:4,aircraft:clone(SEED.aircraft),projects:[],parts:[],orders:[],logs:[],docs:[],checklists:[],maintenance:[],systems:[],settings:clone(SEED.settings)}}
 function assembleCloudDB(rows){
   const out=blankCloudDB();
@@ -52,6 +69,7 @@ async function upsertAllCloudRecords(){
     if(error)throw error;
   }
   cloudRecordSnapshot=new Map([...buildCloudRecordMap()].map(([k,v])=>[k,cloudStableJSON(v.data)]));persistCloudRecordSnapshot();
+  await refreshCloudRecordVersions();
 }
 
 loadCloudState=async function(silent=false){
@@ -59,7 +77,7 @@ loadCloudState=async function(silent=false){
   if(navigator.onLine&&canCloudEdit()&&localStorage.getItem(CLOUD_PENDING_KEY)==='1'&&cloudRecordSnapshot.size){await saveCloudState();}
   cloudLoading=true;
   try{
-    let {data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client').eq('workspace_id',cloudWorkspaceId).is('deleted_at',null);
+    let {data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client,record_version').eq('workspace_id',cloudWorkspaceId).is('deleted_at',null);
     if(error)throw error;
     if(!rows?.length){
       const legacy=await supa.from('app_state').select('data').eq('workspace_id',cloudWorkspaceId).maybeSingle();
@@ -69,12 +87,13 @@ loadCloudState=async function(silent=false){
       normalizeDB();
       await upsertAllCloudRecords();
       await supa.from('app_state').update({data:{migratedTo:'tracker_records',migratedAt:new Date().toISOString()},updated_by:cloudSession.user.id,updated_at:new Date().toISOString()}).eq('workspace_id',cloudWorkspaceId);
-      ({data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client').eq('workspace_id',cloudWorkspaceId).is('deleted_at',null));
+      ({data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client,record_version').eq('workspace_id',cloudWorkspaceId).is('deleted_at',null));
       if(error)throw error;
       if(!silent)toast('Shared workspace upgraded to record-level sync.','good');
     }
     db=assembleCloudDB(rows||[]);
     normalizeDB();
+    cloudRecordVersions=versionsFromRows(rows||[]);persistCloudRecordVersions();
     // Snapshot the normalized in-memory state, not the raw row JSON. Otherwise
     // harmless normalization defaults can look like unsaved local edits later.
     cloudRecordSnapshot=new Map([...buildCloudRecordMap()].map(([k,v])=>[k,cloudStableJSON(v.data)]));persistCloudRecordSnapshot();
@@ -105,21 +124,70 @@ saveCloudState=async function(){
       if(migrated)persistCloudCache();
     }
     normalizeDB();
-    const now=new Date().toISOString(),current=buildCloudRecordMap(),changed=[];
+    const now=new Date().toISOString(),current=buildCloudRecordMap(),changed=[],removed=[];
     for(const [key,r] of current){
       const js=cloudStableJSON(r.data);
-      if(cloudRecordSnapshot.get(key)!==js){changed.push({...r,workspace_id:cloudWorkspaceId,deleted_at:null,updated_at:now,updated_by:cloudSession.user.id,updated_client:CLOUD_CLIENT_ID});}
+      if(cloudRecordSnapshot.get(key)!==js)changed.push({key,...r});
     }
-    const removed=[];
     for(const key of cloudRecordSnapshot.keys())if(!current.has(key))removed.push(key);
-    if(changed.length){
-      for(let i=0;i<changed.length;i+=50){const {error}=await supa.from('tracker_records').upsert(changed.slice(i,i+50),{onConflict:'workspace_id,record_type,record_id'});if(error)throw error;}
+
+    const dirtyKeys=[...changed.map(x=>x.key),...removed];
+    if(dirtyKeys.length){
+      const missing=dirtyKeys.filter(k=>!cloudRecordVersions.has(k));
+      if(missing.length)await refreshCloudRecordVersions(missing);
+    }
+
+    const requests=[];
+    for(const r of changed){
+      requests.push({
+        record_type:r.record_type,
+        record_id:r.record_id,
+        data:r.data,
+        deleted_at:null,
+        expected_version:Number(cloudRecordVersions.get(r.key))||0,
+        updated_client:CLOUD_CLIENT_ID
+      });
     }
     for(const key of removed){
       const pos=key.indexOf(':'),type=key.slice(0,pos),id=key.slice(pos+1);
-      const {error}=await supa.from('tracker_records').update({deleted_at:now,updated_at:now,updated_by:cloudSession.user.id,updated_client:CLOUD_CLIENT_ID}).eq('workspace_id',cloudWorkspaceId).eq('record_type',type).eq('record_id',id);
-      if(error)throw error;
+      requests.push({
+        record_type:type,
+        record_id:id,
+        data:null,
+        deleted_at:now,
+        expected_version:Number(cloudRecordVersions.get(key))||0,
+        updated_client:CLOUD_CLIENT_ID
+      });
     }
+
+    const applied=[],versionConflicts=[];
+    for(let i=0;i<requests.length;i+=50){
+      const batch=requests.slice(i,i+50);
+      const {data,error}=await supa.rpc('sync_tracker_records_guarded',{target_workspace:cloudWorkspaceId,changes:batch});
+      if(error)throw error;
+      applied.push(...arr(data?.applied));
+      versionConflicts.push(...arr(data?.conflicts));
+    }
+
+    for(const a of applied){
+      const key=cloudRecordKey(a.record_type,a.record_id);
+      cloudRecordVersions.set(key,Number(a.record_version)||0);
+      if(a.deleted_at)cloudRecordSnapshot.delete(key);
+      else if(current.has(key))cloudRecordSnapshot.set(key,cloudStableJSON(current.get(key).data));
+    }
+    for(const x of versionConflicts){
+      const key=cloudRecordKey(x.record_type,x.record_id);
+      cloudRecordVersions.set(key,Number(x.actual_version)||0);
+    }
+    persistCloudRecordSnapshot();persistCloudRecordVersions();
+
+    if(versionConflicts.length){
+      localStorage.setItem(CLOUD_PENDING_KEY,'1');
+      cloudDirty=true;
+      cloudStatusLabel('Conflict');
+      return {applied,versionConflicts};
+    }
+
     cloudRecordSnapshot=new Map([...current].map(([k,v])=>[k,cloudStableJSON(v.data)]));persistCloudRecordSnapshot();
     localStorage.removeItem(CLOUD_PENDING_KEY);
     cloudDirty=false;
@@ -130,7 +198,8 @@ saveCloudState=async function(){
       setTimeout(()=>loadCloudState(true).catch(e=>{console.warn('Deferred cloud refresh failed',e);cloudStatusLabel('Reconnecting…')}),75);
     }
     if(typeof renderSystem==='function'&&currentPage==='system')renderSystem();
-  }catch(err){console.error('Record sync failed',err);cloudStatusLabel('Sync pending');toast('Saved locally; cloud sync failed: '+err.message,'bad');}
+    return {applied,versionConflicts:[]};
+  }catch(err){console.error('Record sync failed',err);cloudStatusLabel('Sync pending');toast('Saved locally; cloud sync failed: '+err.message,'bad');return {error:err};}
 }
 
 stopCloudRealtime=function(){if(cloudChannel&&supa)supa.removeChannel(cloudChannel);cloudChannel=null;clearTimeout(cloudReloadTimer)}
