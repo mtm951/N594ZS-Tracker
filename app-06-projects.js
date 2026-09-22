@@ -20,8 +20,13 @@ function saveProject(id){
     return;
   }
   if(o.status==='Done')o.percent=100;
-  if(id)Object.assign(current,o);else db.projects.push({id:uid(),...o,partsUsed:[],updates:[]});
-  closeModal();saveDB(id?'Project updated.':'Project created.');
+  closeModal();
+  if(id){
+    trackerStore.update('project',id,draft=>Object.assign(draft,o),{message:'Project updated.'});
+  }else{
+    const newId=uid();
+    trackerStore.write('project',newId,{id:newId,...o,partsUsed:[],updates:[]},{message:'Project created.'});
+  }
 }
 function deleteProject(id){if(!confirm('Delete this project? Linked parts, orders, logs and documents will remain but may show as unlinked.'))return;db.projects=db.projects.filter(x=>x.id!==id);db.orders.forEach(o=>{if(o.projectId===id)o.projectId=null});db.logs.forEach(l=>{l.projectIds=l.projectIds.filter(x=>x!==id)});db.docs.forEach(d=>{d.linkedProjectIds=d.linkedProjectIds.filter(x=>x!==id)});db.parts.forEach(p=>{p.linkedProjectIds=p.linkedProjectIds.filter(x=>x!==id)});db.checklists.forEach(c=>{if(c.projectId===id)c.projectId=null});closeModal();saveDB('Project deleted.');}
 
