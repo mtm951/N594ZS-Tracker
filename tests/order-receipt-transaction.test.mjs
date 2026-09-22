@@ -37,7 +37,7 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
     arr:v=>Array.isArray(v)?v:[],num:v=>Number(v)||0,
     uid:()=>++nextId,today:()=> '2026-09-22',
     val:key=>String(inputs[key]??''),
-    document:{getElementById:id=>Object.prototype.hasOwnProperty.call(inputs,id)?{value:String(inputs[id])}:null},
+    document:{getElementById:id=>Object.prototype.hasOwnProperty.call(inputs,id)?{value:String(inputs[id])}:null,addEventListener:()=>{}},
     saveDB:message=>{
       saves.push(message);
       if(saveMode==='before')throw new Error('save failed before effects');
