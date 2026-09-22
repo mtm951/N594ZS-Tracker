@@ -43,7 +43,10 @@ begin
     raise exception 'Replay modified records';
   end if;
   begin
-    perform public.sync_tracker_records_atomic(ws,op,'[]'::jsonb);
+    perform public.sync_tracker_records_atomic(ws,op,jsonb_build_array(
+      jsonb_build_object('record_type','part','record_id','test-part',
+        'data',jsonb_build_object('id','test-part','stockQty',999),'expected_version',0)
+    ));
   exception when others then
     reused_id_rejected := SQLERRM like '%reused with different%';
   end;
