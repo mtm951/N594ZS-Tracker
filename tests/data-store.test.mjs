@@ -87,4 +87,63 @@ function makeContext(){
   assert.deepEqual(h.saves,['Explicit commit']);
 }
 
+
+{
+  const h=makeContext();
+  h.context.trackerStore.batch(store=>{
+    store.update('project',1,draft=>{draft.title='Batch title'});
+    store.write('settings','singleton',{currency:'EUR'});
+    store.write('project',2,{title:'Second project'});
+  },{message:'Batch committed.'});
+
+  assert.equal(h.context.db.projects[0].title,'Batch title');
+  assert.equal(h.context.db.projects[1].title,'Second project');
+  assert.equal(h.context.db.settings.currency,'EUR');
+  assert.deepEqual(h.saves,['Batch committed.'],'batch persisted more than once');
+}
+
+{
+  const h=makeContext();
+  const before=structuredClone(h.context.db);
+  assert.throws(()=>{
+    h.context.trackerStore.batch(store=>{
+      store.update('project',1,draft=>{draft.title='Should roll back'});
+      store.write('settings','singleton',{currency:'JPY'});
+      throw new Error('simulated workflow failure');
+    },{message:'Should never commit'});
+  },/simulated workflow failure/);
+
+  assert.deepEqual(h.context.db,before,'failed batch left partial mutations behind');
+  assert.equal(h.saves.length,0,'failed batch persisted partial state');
+}
+
+{
+  const h=makeContext();
+  assert.throws(()=>{
+    h.context.trackerStore.batch(store=>{
+      store.commit('illegal mid-batch commit');
+    });
+  },/Cannot commit while a trackerStore batch is active/);
+  assert.equal(h.saves.length,0);
+}
+
+{
+  const h=makeContext();
+  assert.throws(()=>{
+    h.context.trackerStore.batch(store=>{
+      store.batch(()=>{});
+    });
+  },/Nested trackerStore batches are not supported/);
+  assert.equal(h.saves.length,0);
+}
+
+{
+  const h=makeContext();
+  assert.throws(()=>{
+    h.context.trackerStore.batch(()=>Promise.resolve());
+  },/Async trackerStore batches are not supported yet/);
+  assert.equal(h.saves.length,0);
+}
+
+
 console.log('tracker data store regression tests passed');
