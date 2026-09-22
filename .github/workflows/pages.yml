@@ -33,8 +33,14 @@ jobs:
             node --check "$file"
           done
 
-      - name: Run sync regression tests
-        run: node tests/sync-versioning.test.mjs
+      - name: Run regression tests
+        shell: bash
+        run: |
+          set -e
+          for file in tests/*.test.mjs; do
+            echo "Running $file"
+            node "$file"
+          done
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
