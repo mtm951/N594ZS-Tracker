@@ -14,7 +14,15 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.13** (verify against current `index.html` on every new session)
+- Current release: **v5.19.14** (verify against current `index.html` on every new session)
+
+## v5.19.14 order form autocomplete and receipt popup stability
+
+- New Order `Item / order description` now offers live, keyboard-accessible suggestions from existing `db.parts`, matching name, part number, vendor or system. Selecting a suggestion fills the full name, links the existing `orPart` inventory record and prefills available unit/vendor/price/URL/system metadata. Freeform descriptions remain allowed; editing an auto-selected name clears its automatically assigned part ID to avoid incorrect inventory credit. An explicitly selected link on an existing order is not silently cleared. Styling is scoped in `styles.css`.
+- Investigated a **plausible cause** of the receipt modal disappearing immediately after creating an order: `app-35-navigation-ux.js` invoked `history.back()` from a delayed modal-close timer; the resulting asynchronous `popstate` could arrive *after* the next popup opened and close the newer receipt form. Its modal-open serial now detects this race and restores the new popup's history entry instead of dismissing it.
+- `tests/order-autocomplete.test.mjs` exercises name/part-number matching, selection and automatic existing-inventory linkage, clearing only auto links after editing, and keyboard ArrowDown/Enter/Escape. `tests/order-modal-navigation.test.mjs` reproduces the late-`popstate` popup-close race, verifies new receipt form survival and normal Back/close behavior. Existing store/receipt tests continue to pass.
+- Rollback branch `pre-order-autocomplete-receipt-modal-v5.19.13`. Code-only change; no aircraft records or Supabase schema were edited. **User device test still required** to confirm the specific receipt popup disappearance is resolved. If it persists, obtain steps/browser and inspect other async modal or viewport causes before broad changes.
+- Cloud atomic RPC is still additive but not yet connected to the live receipt workflow; see the v5.19.13 section below.
 
 ## v5.19.13 atomic cloud primitive and scoped receipts
 
