@@ -1,8 +1,8 @@
 :root{
-  --nav:#0d355e;--nav2:#154c7b;--blue:#2d7fd1;--blue2:#eaf4ff;--bg:#f3f6f9;--card:#fff;
-  --line:#dbe4eb;--text:#17324c;--muted:#6e7f8e;--green:#2d9960;--greenbg:#dff5e8;
+  --nav:#0d355e;--nav2:#154c7b;--blue:#2d7fd1;--blue2:#eaf4ff;--bg:#eaf0f5;--card:#fcfdff;
+  --line:#ccd9e4;--text:#17324c;--muted:#6e7f8e;--green:#2d9960;--greenbg:#dff5e8;
   --yellow:#bd8116;--yellowbg:#fff0c7;--red:#b74a45;--redbg:#fde4e2;--graybg:#edf1f4;
-  --shadow:0 4px 18px rgba(23,50,76,.08);--radius:11px;
+  --shadow:0 4px 16px rgba(23,50,76,.11),0 1px 3px rgba(23,50,76,.04);--radius:11px;
 }
 *{box-sizing:border-box}
 html{background:var(--bg)}
