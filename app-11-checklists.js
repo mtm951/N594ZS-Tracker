@@ -68,13 +68,18 @@ function saveChecklist(id){
   const o={name:val('ckName'),purpose:val('ckPurpose'),system:val('ckSystem'),trigger:val('ckTrigger'),projectId:selectedNumber('ckProject'),notes:val('ckNotes')};
   if(!o.name)return alert('Checklist name is required.');
   const existing=id!==null&&id!==undefined&&id!==''?checklistById(id):null;
-  if(existing)Object.assign(existing,o);else db.checklists.push({id:uid(),...o,items:[]});
-  closeModal();saveDB(existing?'Checklist updated.':'Checklist created.');
+  if(existing){
+    trackerStore.update('checklist',id,draft=>Object.assign(draft,o),{message:'Checklist updated.'});
+  }else{
+    const newId=uid();
+    trackerStore.write('checklist',newId,{id:newId,...o,items:[]},{message:'Checklist created.'});
+  }
+  closeModal();
 }
 function deleteChecklist(id){
   if(!confirm('Delete this checklist?'))return;
-  db.checklists=db.checklists.filter(x=>String(x.id)!==String(id));
-  closeModal();saveDB('Checklist deleted.');
+  trackerStore.remove('checklist',id,{message:'Checklist deleted.'});
+  closeModal();
 }
 
 function openChecklistDetail(id){
@@ -134,17 +139,27 @@ function editChecklistItem(cid,iid){
 function saveChecklistItem(cid,iid){
   const c=checklistById(cid);if(!c)return;
   const text=val('ckiText'),note=val('ckiNote');if(!text)return alert('Item text is required.');
-  const item=iid!==null&&iid!==undefined&&iid!==''?checklistItemById(c,iid):null;
-  if(item)Object.assign(item,{text,note});else c.items.push({id:uid(),text,note,done:false});
-  saveDB('Checklist item saved.');openChecklistDetail(c.id);
+  const hasItem=iid!==null&&iid!==undefined&&iid!==''&&!!checklistItemById(c,iid);
+  const newItemId=hasItem?null:uid();
+  trackerStore.update('checklist',cid,draft=>{
+    draft.items=arr(draft.items);
+    const item=hasItem?checklistItemById(draft,iid):null;
+    if(item)Object.assign(item,{text,note});
+    else draft.items.push({id:newItemId,text,note,done:false});
+  },{message:'Checklist item saved.'});
+  openChecklistDetail(cid);
 }
 function toggleChecklistItem(cid,iid,done){
   const c=checklistById(cid),i=checklistItemById(c,iid);if(!i)return;
-  i.done=!!done;saveDB();
-  if(currentDetail?.type==='checklist'&&String(currentDetail.id)===String(c.id))openChecklistDetail(c.id);
+  trackerStore.update('checklist',cid,draft=>{
+    const item=checklistItemById(draft,iid);if(item)item.done=!!done;
+  });
+  if(currentDetail?.type==='checklist'&&String(currentDetail.id)===String(cid))openChecklistDetail(cid);
 }
 function deleteChecklistItem(cid,iid){
   const c=checklistById(cid);if(!c||!confirm('Delete this checklist item?'))return;
-  c.items=c.items.filter(x=>String(x.id)!==String(iid));
-  saveDB('Checklist item deleted.');openChecklistDetail(c.id);
+  trackerStore.update('checklist',cid,draft=>{
+    draft.items=arr(draft.items).filter(x=>String(x.id)!==String(iid));
+  },{message:'Checklist item deleted.'});
+  openChecklistDetail(cid);
 }
