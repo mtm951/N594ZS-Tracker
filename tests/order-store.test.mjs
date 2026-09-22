@@ -56,7 +56,7 @@ function makeHarness(values={}){
     console,JSON,Object,Array,String,Number,Boolean,Map,Set,Error,Date,Math,Promise,
     structuredClone,
     window:null,
-    document:{getElementById:()=>null},
+    document:{getElementById:()=>null,addEventListener:()=>{}},
     RECORD_ARRAYS:{order:'orders'},
     db,
     arr:v=>Array.isArray(v)?v:[],
