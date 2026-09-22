@@ -1,6 +1,6 @@
 'use strict';
-// ---------- V5.19.1 TRACKER DATA STORE / LOCAL-FIRST BOUNDARY ----------
-// First safe slice toward offline-first storage.
+// ---------- V5.19.9 TRACKER DATA STORE / LOCAL-FIRST BOUNDARY ----------
+// Thin storage boundary plus first transaction-safe batch primitive.
 //
 // This module deliberately does NOT replace the current persistence or cloud-sync
 // engines yet. It gives feature code one small API for record reads/writes, then
@@ -10,6 +10,8 @@
 
 (function(){
   if(window.trackerStore)return;
+
+  let batchDepth=0;
 
   function copy(value){
     if(value===undefined)return undefined;
@@ -46,9 +48,41 @@
     return copy(db[info.key]);
   }
 
-  function commit(message=''){
+  function persistNow(message=''){
     if(typeof saveDB!=='function')throw new Error('Tracker persistence is not ready.');
     saveDB(message);
+  }
+
+  function commit(message=''){
+    if(batchDepth>0)throw new Error('Cannot commit while a trackerStore batch is active.');
+    persistNow(message);
+  }
+
+  function shouldPersist(options){
+    return batchDepth===0&&options.persist!==false;
+  }
+
+  function restoreSnapshot(snapshot){
+    Object.keys(db).forEach(key=>delete db[key]);
+    Object.assign(db,copy(snapshot));
+  }
+
+  function batch(mutator,options={}){
+    if(typeof mutator!=='function')throw new Error('Batch mutator must be a function.');
+    if(batchDepth>0)throw new Error('Nested trackerStore batches are not supported.');
+    const snapshot=copy(db);
+    batchDepth=1;
+    try{
+      const result=mutator(window.trackerStore);
+      if(result&&typeof result.then==='function')throw new Error('Async trackerStore batches are not supported yet.');
+      batchDepth=0;
+      if(options.persist!==false)persistNow(options.message||'');
+      return result;
+    }catch(error){
+      batchDepth=0;
+      restoreSnapshot(snapshot);
+      throw error;
+    }
   }
 
   function write(type,id,value,options={}){
@@ -57,7 +91,7 @@
 
     if(info.kind==='singleton'){
       db[info.key]=next;
-      if(options.persist!==false)commit(options.message||'');
+      if(shouldPersist(options))commit(options.message||'');
       return copy(next);
     }
 
@@ -67,7 +101,7 @@
 
     const rows=db[info.key],index=rows.findIndex(row=>sameId(row?.id,recordId));
     if(index>=0)rows[index]=next;else rows.push(next);
-    if(options.persist!==false)commit(options.message||'');
+    if(shouldPersist(options))commit(options.message||'');
     return copy(next);
   }
 
@@ -87,7 +121,7 @@
     const rows=db[info.key],index=rows.findIndex(row=>sameId(row?.id,id));
     if(index<0)return false;
     rows.splice(index,1);
-    if(options.persist!==false)commit(options.message||'');
+    if(shouldPersist(options))commit(options.message||'');
     return true;
   }
 
@@ -97,6 +131,7 @@
     write,
     update,
     remove,
+    batch,
     commit
   });
 })();
