@@ -1,9 +1,19 @@
 // ---------- AIRCRAFT ----------
 function editAircraft(){const a=db.aircraft;openModal(`${modalHeader('Edit Aircraft')}<div class="form-grid">${field('Registration','acTail',a.tail)}${field('Model','acModel',a.model)}${field('Serial / builder reference','acSerial',a.serial)}${field('Base airport','acBase',a.base)}${field('Engine','acEngine',a.engine)}${field('Rated HP','acHp',a.hp,'number','step="any"')}${field('Max gross (lb)','acGross',a.gross,'number','step="any"')}${field('Empty weight','acEmpty',a.emptyWeight,'number','step="any"')}${field('Empty CG','acCg',a.emptyCg,'number','step="any"')}${field('Airframe hours','acAirframe',a.airframeHours,'number','step="0.1"')}${field('Engine hours','acEngineHours',a.engineHours,'number','step="0.1"')}${field('Annual / condition inspection date','acAnnual',a.annualDate,'date')}<div class="full"><label>Tracker status</label><input id="acStatus" value="${esc(a.status)}"></div>${textareaField('Aircraft / configuration notes','acNotes',a.notes)}</div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveAircraft()">Save Aircraft</button></div>`)}
-function saveAircraft(){Object.assign(db.aircraft,{tail:val('acTail'),model:val('acModel'),serial:val('acSerial'),base:val('acBase'),engine:val('acEngine'),hp:val('acHp'),gross:val('acGross'),emptyWeight:val('acEmpty'),emptyCg:val('acCg'),airframeHours:val('acAirframe'),engineHours:val('acEngineHours'),annualDate:val('acAnnual'),status:val('acStatus'),notes:val('acNotes')});closeModal();saveDB('Aircraft details updated.')}
+function saveAircraft(){
+  const changes={tail:val('acTail'),model:val('acModel'),serial:val('acSerial'),base:val('acBase'),engine:val('acEngine'),hp:val('acHp'),gross:val('acGross'),emptyWeight:val('acEmpty'),emptyCg:val('acCg'),airframeHours:val('acAirframe'),engineHours:val('acEngineHours'),annualDate:val('acAnnual'),status:val('acStatus'),notes:val('acNotes')};
+  closeModal();
+  trackerStore.update('aircraft','singleton',draft=>Object.assign(draft,changes),{message:'Aircraft details updated.'});
+}
 
 // ---------- ENTITY UPDATES ----------
 function getEntity(type,id){if(type==='project')return projectById(id);if(type==='part')return partById(id);if(type==='order')return orderById(id);if(type==='document')return docById(id);return null}
 function addEntityUpdate(type,id){const x=getEntity(type,id);if(!x)return;openModal(`${modalHeader('Add Update')}<div class="form-grid">${field('Date','upDate',today(),'date')}${textareaField('Update / note','upText','')}</div><div class="modal-actions"><button class="btn secondary" onclick="reopenDetail('${type}',${id})">Cancel</button><button class="btn primary" onclick="saveEntityUpdate('${type}',${id})">Add Update</button></div>`)}
-function saveEntityUpdate(type,id){const x=getEntity(type,id);if(!x)return;const text=val('upText');if(!text)return alert('Update text is required.');x.updates=arr(x.updates);x.updates.push({id:uid(),date:val('upDate')||today(),text});saveDB('Update added.');reopenDetail(type,id)}
+function saveEntityUpdate(type,id){
+  if(!getEntity(type,id))return;
+  const text=val('upText');if(!text)return alert('Update text is required.');
+  const entry={id:uid(),date:val('upDate')||today(),text};
+  trackerStore.update(type,id,draft=>{draft.updates=arr(draft.updates);draft.updates.push(entry)},{message:'Update added.'});
+  reopenDetail(type,id);
+}
 function reopenDetail(type,id){if(type==='project')openProjectDetail(id);else if(type==='part')openPartDetail(id);else if(type==='order')openOrderDetail(id);else if(type==='log')openLogDetail(id);else if(type==='document')openDocumentDetail(id);else if(type==='checklist')openChecklistDetail(id)}
