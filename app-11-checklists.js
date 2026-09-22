@@ -151,10 +151,22 @@ function saveChecklistItem(cid,iid){
 }
 function toggleChecklistItem(cid,iid,done){
   const c=checklistById(cid),i=checklistItemById(c,iid);if(!i)return;
+  const modalBox=document.getElementById('modalBox');
+  const priorScrollTop=modalBox?.scrollTop||0;
+
   trackerStore.update('checklist',cid,draft=>{
     const item=checklistItemById(draft,iid);if(item)item.done=!!done;
   });
-  if(currentDetail?.type==='checklist'&&String(currentDetail.id)===String(cid))openChecklistDetail(cid);
+
+  if(currentDetail?.type==='checklist'&&String(currentDetail.id)===String(cid)){
+    openChecklistDetail(cid);
+    const restoreScroll=()=>{
+      const refreshedBox=document.getElementById('modalBox');
+      if(refreshedBox)refreshedBox.scrollTop=priorScrollTop;
+    };
+    if(typeof requestAnimationFrame==='function')requestAnimationFrame(restoreScroll);
+    else setTimeout(restoreScroll,0);
+  }
 }
 function deleteChecklistItem(cid,iid){
   const c=checklistById(cid);if(!c||!confirm('Delete this checklist item?'))return;
