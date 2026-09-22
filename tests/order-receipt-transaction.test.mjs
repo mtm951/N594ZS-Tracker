@@ -72,7 +72,12 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
 // together, preserves unrelated metadata, and saves their final state once.
 {
   const h=harness({inputs:{orReceiveQty:'2',orReceiveDate:'2026-09-22'}});
+  const priorOrder=h.db.orders[0],priorPart=h.db.parts[0];
   h.ctx.savePartialOrderReceipt(501);
+  assert.equal(priorOrder.receivedQty,2,'receipt unexpectedly mutated a captured live order');
+  assert.equal(priorPart.stockQty,2,'receipt unexpectedly mutated a captured live part');
+  assert.notEqual(h.db.orders[0],priorOrder,'receipt did not replace the order via the store');
+  assert.notEqual(h.db.parts[0],priorPart,'receipt did not replace the part via the store');
   assert.equal(h.db.orders[0].receivedQty,4);
   assert.equal(h.db.orders[0].inventoryAppliedQty,4);
   assert.equal(h.db.orders[0].status,'Ordered');
@@ -115,6 +120,7 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   assert.equal(h.db.orders[0].status,'Received');
   assert.equal(h.db.orders[1].status,'Received');
   assert.equal(h.saves.length,1);
+  assert.match(h.saves[0],/7 total units/,'group receipt message reported zero after mutation');
   assert.deepEqual(h.snapshots,[structuredClone(h.db)]);
   assert.equal(h.ui.render,1);
   h.ctx.receiveOrderGroup('ref:group-1');
