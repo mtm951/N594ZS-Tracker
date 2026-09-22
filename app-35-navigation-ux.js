@@ -54,6 +54,8 @@
   const pageHistory=[];
   let historyHandling=false;
   let closeHistoryTimer=null;
+  let modalOpenSerial=0;
+  let pendingProgrammaticBackSerial=null;
   let depth=Number(history.state?.n594zsDepth||0);
   const navToBase=navTo;
   const openModalBase=openModal;
@@ -91,6 +93,7 @@
   openModal=function(html,wide=false){
     clearTimeout(closeHistoryTimer);
     openModalBase(html,wide);
+    modalOpenSerial++;
     if(!historyHandling&&!stateIsModal())history.pushState(trackerState('modal',currentPage,depth),'');
     updateControls();
   };
@@ -102,7 +105,12 @@
     // only remove the modal history state if the popup genuinely stayed closed.
     clearTimeout(closeHistoryTimer);
     closeHistoryTimer=setTimeout(()=>{
-      if(!historyHandling&&!popupOpen()&&stateIsModal())history.back();
+      if(!historyHandling&&!popupOpen()&&stateIsModal()){
+        // history.back() dispatches popstate asynchronously. A newer popup
+        // can open before that event arrives; never close that newer popup.
+        pendingProgrammaticBackSerial=modalOpenSerial;
+        history.back();
+      }
     },0);
   };
 
@@ -138,6 +146,16 @@
   window.addEventListener('popstate',e=>{
     clearTimeout(closeHistoryTimer);
     const st=e.state;
+    const programmaticBackSerial=pendingProgrammaticBackSerial;
+    pendingProgrammaticBackSerial=null;
+    if(popupOpen()&&programmaticBackSerial!==null&&modalOpenSerial>programmaticBackSerial){
+      // A popup opened while the previous popup's delayed history.back() was
+      // in flight (commonly: save a new order, then immediately receive it).
+      // The popstate belongs to the old popup, not the current receipt form.
+      if(!stateIsModal())history.pushState(trackerState('modal',currentPage,depth),'');
+      updateControls();
+      return;
+    }
     if(popupOpen()){
       closeFromHistory();
       if(st?.n594zs)depth=Number(st.n594zsDepth||0);
