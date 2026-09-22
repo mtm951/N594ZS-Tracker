@@ -14,7 +14,16 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.10** (verify against current `index.html` on every new session)
+- Current release: **v5.19.12** (verify against current `index.html` on every new session)
+
+## v5.19.12 actual order receipt safety
+
+- The REAL `app-08-orders.js` entry points (`savePartialOrderReceipt`, `receiveOrderGroup`, `saveOrderGroupReceipt`, and the fully-applied `receiveOrder` path) now use `trackerStore.batch()` for single in-memory rollback/one `saveDB()` call. The legacy `applyOrderReceipt` function still directly mutates records *inside that guarded callback*; it has **not** yet been fully refactored to the `tx` API.
+- Selected grouped receipt inputs are validated **all at once before mutation**, fixing a prior case where a bad second quantity could leave the first row incremented in memory without any save. A broken linked Part now blocks the receipt instead of acknowledging an order without inventory credit. No automatic Project or Work Log entry is created by a receipt (preserve existing behavior).
+- `tests/order-receipt-transaction.test.mjs` runs the real production receipt paths against fixture-only DBs. Covers partial/final, full/selected group, no double-credit on repeat, invalid second line, missing part, injected second-part failure with rollback, cancel, and synchronous persistence errors. CI executes this file with all other tests.
+- The batch rolls back **only** synchronous errors during mutation. If `saveDB()` throws after local side effects, staged memory is retained and the user is told to inspect order and sync status before retrying. Cloud sync is asynchronous and `sync_tracker_records_guarded` isn't made atomic across all records by this change.
+- Rollback branch `pre-order-receipt-atomicity-v5.19.11`; no production aircraft records or Supabase schema were changed. Cache-bust `app-08-orders.js` to v5.19.12 in `index.html`.
+- Next priority: durable cloud transaction protocol or operation identifiers for exactly-once order receipt, plus browser-level test of real UI on multiple devices.
 
 ## v5.19.10 transaction reliability / local-first status
 
@@ -23,7 +32,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - The per-batch `tx` facade is revoked on completion or rollback. Returning a Promise is rejected; callers must not use global `window.trackerStore` or direct `db` mutation for delayed work and must not treat this API as an asynchronous/cloud transaction.
 - Record writes reject mismatched supplied IDs versus payload IDs. On a synchronous `saveDB()` exception **after staging**, the store leaves the staged state in memory rather than falsely rolling back changes that may already be queued/persisted; the caller must handle recovery/retry.
 - Regression suite: `tests/transaction-reliability.test.mjs` covers a simulated linked Order + Part + Project + Work Log batch, rollback/identity checks, async-after-batch guards, and save-failure handling. `tests/sync-versioning.test.mjs` covers server stale-write rejection, successful row-version updates, cloud-RPC failure, and offline pending flags. CI runs all `tests/*.test.mjs`.
-- **NOT YET production-atomic:** the actual order-receipt/inventory engine, multi-record delete and attachments have not been migrated. `saveDB()` queues cloud sync; it does not await durable persistence, and the guarded RPC is invoked in batches of up to 50 records. Do not promise all-or-nothing cloud behavior across batches or on network failure. Implement an explicit durable transaction/operation strategy before moving stock accounting.
+- **Cloud durability is still not atomic:** `saveDB()` queues cloud sync; it does not await durable persistence, and the guarded RPC is invoked in batches of up to 50 records. Do not promise all-or-nothing cloud behavior across batches or on network failure. Multi-record delete, attachment flows, and some remaining inventory/purchase paths still bypass `trackerStore`. Build an explicit durable operation/transaction layer before claiming cross-device atomicity.
 - Current safety branch: `pre-transaction-regressions-v5.19.9`. No schema or user aircraft-record changes were required for this slice.
 - `app-44-assistant-collapse.js` **is still dynamically loaded** by `app-15-init.js`. It is not listed in `index.html` directly, but it is active; do not delete based on the direct-script list alone.
 
