@@ -1,0 +1,144 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+const pwaSource=fs.readFileSync(new URL('../app-19-pwa.js',import.meta.url),'utf8');
+
+function makeStorage(initial={}){
+  const map=new Map(Object.entries(initial));
+  return {
+    getItem:key=>map.has(key)?map.get(key):null,
+    setItem:(key,value)=>map.set(key,String(value)),
+    removeItem:key=>map.delete(key),
+    dump:()=>Object.fromEntries(map)
+  };
+}
+
+function makeHarness({online=true,pending=false,confirmResult=true,saveClears=true,fetchOk=true}={}){
+  const listeners={};
+  const unregisterCalls=[],deletedCaches=[],fetchCalls=[],replacements=[],alerts=[],toasts=[];
+  const localStorage=makeStorage({
+    n594zs_pending_cloud_v4:pending?'1':'0',
+    n594zs_v3:'KEEP-TRACKER-DATA',
+    other_key:'KEEP-ME'
+  });
+
+  const serviceWorker={
+    async getRegistrations(){
+      return [
+        {scope:'https://mtm951.github.io/N594ZS-Tracker/',unregister:async()=>{unregisterCalls.push('tracker');return true}},
+        {scope:'https://example.test/other-app/',unregister:async()=>{unregisterCalls.push('other');return true}}
+      ];
+    }
+  };
+
+  const context={
+    console,Promise,Date,Map,Set,Object,Array,String,Number,Boolean,Error,URL,
+    localStorage,
+    navigator:{onLine:online,serviceWorker},
+    caches:{
+      async keys(){return ['n594zs-old-shell','other-app-cache','n594zs-temp']},
+      async delete(key){deletedCaches.push(key);return true}
+    },
+    fetch:async(url,opts)=>{
+      fetchCalls.push({url:String(url),opts});
+      return {ok:fetchOk,status:fetchOk?200:503};
+    },
+    confirm:()=>confirmResult,
+    alert:message=>alerts.push(String(message)),
+    toast:(message,type)=>toasts.push({message,type}),
+    currentPage:'settings',
+    renderSystem:()=>{},
+    document:{
+      getElementById:()=>null,
+      body:{appendChild(){}},
+      createElement:()=>({remove(){},className:'',id:'',textContent:''})
+    },
+    location:{
+      href:'https://mtm951.github.io/N594ZS-Tracker/?old=1#settings',
+      replace:url=>replacements.push(String(url))
+    },
+    saveCloudState:async()=>{
+      if(saveClears)localStorage.removeItem('n594zs_pending_cloud_v4');
+    }
+  };
+  context.window=context;
+  context.window.location=context.location;
+  context.window.addEventListener=(name,fn)=>{listeners[name]=fn};
+  vm.createContext(context);
+  vm.runInContext(pwaSource,context,{filename:'app-19-pwa.js'});
+
+  return {context,localStorage,listeners,unregisterCalls,deletedCaches,fetchCalls,replacements,alerts,toasts};
+}
+
+// A successful force-update keeps tracker data, checks the network without cache,
+// clears only N594ZS app caches/service workers, and reloads with a cache-busting URL.
+{
+  const h=makeHarness();
+  const before=h.localStorage.dump();
+  const result=await h.context.forceLatestAppVersion();
+
+  assert.equal(result,true);
+  assert.equal(h.fetchCalls.length,1);
+  assert.equal(h.fetchCalls[0].opts.cache,'no-store');
+  assert.equal(h.fetchCalls[0].opts.credentials,'same-origin');
+  assert.match(h.fetchCalls[0].url,/forceUpdate=/);
+  assert.equal(h.replacements.length,1);
+  assert.match(h.replacements[0],/forceUpdate=/);
+  assert.equal(h.replacements[0].includes('#settings'),false,'force update preserved stale hash');
+  assert.deepEqual(h.unregisterCalls,['tracker']);
+  assert.deepEqual(h.deletedCaches.sort(),['n594zs-old-shell','n594zs-temp'].sort());
+  assert.equal(h.localStorage.getItem('n594zs_v3'),before.n594zs_v3);
+  assert.equal(h.localStorage.getItem('other_key'),before.other_key);
+}
+
+// Pending cloud changes are flushed before the version reload.
+{
+  const h=makeHarness({pending:true,saveClears:true});
+  let saveCalls=0;
+  h.context.saveCloudState=async()=>{
+    saveCalls++;
+    h.localStorage.removeItem('n594zs_pending_cloud_v4');
+  };
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,true);
+  assert.equal(saveCalls,1);
+  assert.equal(h.fetchCalls.length,1);
+  assert.equal(h.replacements.length,1);
+}
+
+// If pending changes remain after a save attempt, updating is cancelled instead of risking a reload.
+{
+  const h=makeHarness({pending:true,saveClears:false});
+  let saveCalls=0;
+  h.context.saveCloudState=async()=>{saveCalls++};
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,false);
+  assert.equal(saveCalls,1);
+  assert.equal(h.fetchCalls.length,0);
+  assert.equal(h.replacements.length,0);
+  assert.equal(h.deletedCaches.length,0);
+  assert.ok(h.alerts.some(x=>/unsynced changes/i.test(x)));
+}
+
+// Offline devices do not throw away their current app shell in a futile update attempt.
+{
+  const h=makeHarness({online:false});
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,false);
+  assert.equal(h.fetchCalls.length,0);
+  assert.equal(h.replacements.length,0);
+  assert.equal(h.deletedCaches.length,0);
+  assert.ok(h.alerts.some(x=>/network connection/i.test(x)));
+}
+
+// Cancelling the confirmation is a no-op.
+{
+  const h=makeHarness({confirmResult:false});
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,false);
+  assert.equal(h.fetchCalls.length,0);
+  assert.equal(h.replacements.length,0);
+}
+
+console.log('force latest app version regression tests passed');
