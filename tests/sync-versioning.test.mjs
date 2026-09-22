@@ -41,7 +41,7 @@ function makeHarness(rpcResult){
     sessionStorage,
     localStorage,
     navigator:{onLine:true},
-    window:{addEventListener:()=>{}},
+    addEventListener:()=>{},
     db:{
       aircraft:{id:'singleton'},
       settings:{},
