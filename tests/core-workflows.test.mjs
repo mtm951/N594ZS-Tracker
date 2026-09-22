@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
+const dataStoreSource=fs.readFileSync(new URL('../app-17a-data-store.js',import.meta.url),'utf8');
 const equipmentSource=fs.readFileSync(new URL('../app-29-equipment.js',import.meta.url),'utf8');
 const inventorySource=fs.readFileSync(new URL('../app-42-inventory-workflow.js',import.meta.url),'utf8');
 const purchaseDeleteSource=fs.readFileSync(new URL('../app-32-purchase-delete.js',import.meta.url),'utf8');
@@ -77,9 +78,13 @@ function commonContext(db){
 }
 
 function load(source,context,name){
-  vm.createContext(context);
+  if(!vm.isContext(context))vm.createContext(context);
   vm.runInContext(source,context,{filename:name});
   return context;
+}
+function loadEquipment(context){
+  load(dataStoreSource,context,'app-17a-data-store.js');
+  return load(equipmentSource,context,'app-29-equipment.js');
 }
 
 // 1) Passive relationship reconciliation must NEVER invent Part/Equipment IDs.
@@ -91,7 +96,7 @@ function load(source,context,name){
     inventoryPartId:null,inventoryApplied:false,equipmentId:null,trackAsEquipment:false
   };
   const db={equipment:[],parts:[],purchases:[purchase],invoices:[],projects:[],maintenance:[],settings:{showCosts:true}};
-  const h=load(equipmentSource,commonContext(db),'app-29-equipment.js');
+  const h=loadEquipment(commonContext(db));
 
   const changed=h.reconcileTrackerRecordLinks();
   assert.equal(db.parts.length,0,'passive reconciliation created an inventory part');
@@ -110,7 +115,7 @@ function load(source,context,name){
   };
   const invoice={id:'INV-44',invoice:'INV-44',purchaseIds:[]};
   const db={equipment:[],parts:[],purchases:[purchase],invoices:[invoice],projects:[{id:44,title:'Install test component'}],maintenance:[],settings:{showCosts:true}};
-  const h=load(equipmentSource,commonContext(db),'app-29-equipment.js');
+  const h=loadEquipment(commonContext(db));
 
   const first=h.reconcilePurchaseLinks(purchase,{createPart:true,createEquipment:true});
   assert.equal(first.changed,true);
@@ -134,7 +139,26 @@ function load(source,context,name){
   assert.equal(part.stockQty,1,'reconcile double-counted inventory');
 }
 
-// 3) Deleting a purchase unlinks provenance without deleting the physical part/equipment or changing stock.
+// 3) The first migrated workflow uses the store boundary without changing equipment-history behavior.
+{
+  const equipment={id:901,name:'EarthX ETX680',system:'Electrical',history:[],linkedProjectIds:[]};
+  const db={equipment:[equipment],parts:[],purchases:[],invoices:[],projects:[],maintenance:[],logs:[],settings:{showCosts:true}};
+  const h=commonContext(db),saves=[];
+  const values={eqHistDate:'2026-09-21',eqHistAction:'Installed',eqHistHours:'1930.7',eqHistNotes:'Regression test'};
+  h.val=id=>values[id]??'';
+  h.saveDB=message=>saves.push(message);
+  h.setTimeout=()=>0;
+  loadEquipment(h);
+
+  h.saveEquipmentHistory(901);
+  assert.equal(db.equipment[0].history.length,1);
+  assert.equal(db.equipment[0].history[0].action,'Installed');
+  assert.equal(db.equipment[0].history[0].hours,'1930.7');
+  assert.equal(db.equipment[0].history[0].notes,'Regression test');
+  assert.deepEqual(saves,['Equipment history updated.']);
+}
+
+// 4) Deleting a purchase unlinks provenance without deleting the physical part/equipment or changing stock.
 {
   const purchase={id:'p-delete',description:'Prop bolt',vendor:'Aircraft Spruce',invoice:'INV-D',inventoryPartId:10};
   const part={id:10,name:'Prop bolt',stockQty:6,purchaseIds:['p-delete'],linkedProjectIds:[]};
@@ -187,7 +211,7 @@ function inventoryHarness(db,values={}){
   return h;
 }
 
-// 4) Reservation is NOT consumption; Reserve -> Use creates one work-log outflow and releases reservation.
+// 5) Reservation is NOT consumption; Reserve -> Use creates one work-log outflow and releases reservation.
 {
   const part={id:10,name:'AN bolt',partNo:'AN3',system:'Hardware',unit:'ea',stockQty:6,unitCost:2,linkedProjectIds:[1],inventoryAdjustments:[]};
   const project={id:1,title:'Test project',system:'Hardware',status:'In Progress',nextStep:'',plannedParts:[{id:301,partId:10,name:'AN bolt',qty:2,unit:'ea',notes:''}],partsUsed:[]};
@@ -208,7 +232,7 @@ function inventoryHarness(db,values={}){
   assert.equal(project.partsUsed[0].logId,db.logs[0].id);
 }
 
-// 5) Installed-purchase provenance can be materialized before use so historical installs do not make inventory negative.
+// 6) Installed-purchase provenance can be materialized before use so historical installs do not make inventory negative.
 {
   const part={id:20,name:'Installed component',partNo:'COMP-1',unit:'ea',stockQty:0,linkedProjectIds:[2],purchaseIds:['p-installed'],inventoryAdjustments:[]};
   const purchase={id:'p-installed',pn:'COMP-1',qty:2,disposition:'Installed',inventoryPartId:20,inventoryApplied:true,inventoryReceiptMaterializedQty:0};
