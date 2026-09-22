@@ -5,15 +5,16 @@ import vm from 'node:vm';
 const storeSource=fs.readFileSync(new URL('../app-17a-data-store.js',import.meta.url),'utf8');
 const checklistSource=fs.readFileSync(new URL('../app-11-checklists.js',import.meta.url),'utf8');
 
-function fakeDocument(){
+function fakeDocument(modalBox){
   return {
-    getElementById:()=>null,
+    getElementById:id=>id==='modalBox'?modalBox:null,
     querySelectorAll:()=>[]
   };
 }
 function makeHarness(values={}){
   let nextId=700;
   const saves=[],opened=[],alerts=[];
+  const modalBox={scrollTop:0};
   const db={
     checklists:[
       {
@@ -38,7 +39,7 @@ function makeHarness(values={}){
     console,JSON,Object,Array,String,Number,Boolean,Map,Set,Error,Date,Math,Promise,
     structuredClone,
     window:null,
-    document:fakeDocument(),
+    document:fakeDocument(modalBox),
     RECORD_ARRAYS:{checklist:'checklists'},
     db,
     arr:v=>Array.isArray(v)?v:[],
@@ -59,14 +60,16 @@ function makeHarness(values={}){
     projectById:()=>null,docById:()=>null,
     chooseAttachments:()=>{},handleEntityDrop:()=>{},renderAttachments:()=>Promise.resolve(),
     toast:()=>{},pill:x=>String(x??''),
-    currentDetail:null
+    currentDetail:null,
+    requestAnimationFrame:fn=>{fn();return 1},
+    setTimeout:fn=>{fn();return 1}
   };
   context.window=context;
   vm.createContext(context);
   vm.runInContext(storeSource,context,{filename:'app-17a-data-store.js'});
   vm.runInContext(checklistSource,context,{filename:'app-11-checklists.js'});
-  context.openChecklistDetail=id=>opened.push(String(id));
-  return {context,db,saves,opened,alerts};
+  context.openChecklistDetail=id=>{opened.push(String(id));modalBox.scrollTop=0};
+  return {context,db,saves,opened,alerts,modalBox};
 }
 
 // Edit the checklist shell through trackerStore and preserve specialized/source metadata and nested items.
@@ -137,10 +140,12 @@ function makeHarness(values={}){
   assert.deepEqual(h.saves,['Checklist item saved.']);
 }
 
-// Toggle only the intended nested item and persist once.
+// Toggle only the intended nested item, persist once, and keep the checklist
+// at the same scroll position after the detail modal re-renders.
 {
   const h=makeHarness();
   h.context.currentDetail={type:'checklist',id:'uuid-check-1'};
+  h.modalBox.scrollTop=842;
   h.context.toggleChecklistItem('uuid-check-1','item-a',true);
 
   const c=h.db.checklists[0];
@@ -150,6 +155,7 @@ function makeHarness(values={}){
   assert.equal(h.saves.length,1);
   assert.equal(h.saves[0],'');
   assert.deepEqual(h.opened,['uuid-check-1']);
+  assert.equal(h.modalBox.scrollTop,842,'checking an item jumped the checklist back to the top');
 }
 
 // Delete one nested item without deleting the checklist.
