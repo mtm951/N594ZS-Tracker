@@ -134,7 +134,7 @@ function reconcilePurchaseLinks(p,options={}){
   if(inv)changed=addLinkId(inv,'purchaseIds',p.id)||changed;
 
   let part=purchasePartRecord(p);
-  const shouldCreatePart=!!(options.forceInventory||options.createPart);
+  const shouldCreatePart=!options.suppressCreate&&!!(options.forceInventory||options.createPart);
   if(!part&&shouldCreatePart){part=createPartForPurchase(p);changed=true}
   if(part){
     changed=setLinkValue(p,'inventoryPartId',part.id)||changed;
@@ -154,7 +154,7 @@ function reconcilePurchaseLinks(p,options={}){
   }
 
   let eq=purchaseEquipmentRecord(p);
-  const shouldCreateEquipment=!!(options.createEquipment||p.trackAsEquipment);
+  const shouldCreateEquipment=!options.suppressCreate&&!!(options.createEquipment||p.trackAsEquipment);
   if(!eq&&shouldCreateEquipment){eq=createEquipmentForPurchase(p,part);changed=true}
   if(eq){
     changed=setLinkValue(p,'equipmentId',eq.id)||changed;
@@ -196,8 +196,11 @@ window.reconcileTrackerRecordLinks=function(options={}){
     if(e.inventoryPartId)changed=setLinkValue(p,'inventoryPartId',e.inventoryPartId)||changed;
   });
   arr(db.purchases).forEach(p=>{
-    const createPart=!!(p.inventoryApplied||['On Hand','Installed'].includes(p.disposition));
-    const out=reconcilePurchaseLinks(p,{createPart,createEquipment:!!p.trackAsEquipment});
+    // Passive startup/cloud reconciliation must never invent new IDs. Otherwise two
+    // open devices can both backfill the same purchase with different random part/
+    // equipment IDs and create a huge but meaningless cloud conflict. New records
+    // are created only from explicit purchase/equipment workflows.
+    const out=reconcilePurchaseLinks(p,{suppressCreate:true});
     changed=out.changed||changed;
   });
   if(changed&&options.persist){
