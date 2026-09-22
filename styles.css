@@ -52,3 +52,18 @@ input,select,textarea{width:100%;border:1px solid #c8d5df;border-radius:7px;back
 .group-receipt-row{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px;align-items:center;border:1px solid #dfe7ed;border-radius:8px;padding:10px;background:#fbfdff}
 .group-receipt-row label{display:block;margin-bottom:4px}.group-receipt-row input{display:inline-block;width:110px}.group-receipt-row small{margin-left:5px;color:var(--muted)}
 @media(max-width:600px){.group-receipt-row{grid-template-columns:1fr}.group-receipt-row input{width:calc(100% - 40px)}}
+
+
+/* Order description autocomplete: suggestions stay inside the open modal. */
+.order-item-autocomplete{position:relative;min-width:0}
+.order-item-autocomplete input[type="search"]{width:100%}
+.order-item-help{display:block;margin-top:5px;color:var(--muted);font-size:11px}
+.order-item-suggestions{position:absolute;top:calc(100% - 17px);left:0;right:0;z-index:65;max-height:270px;overflow-y:auto;background:var(--card);border:1px solid #9dbed7;border-radius:9px;box-shadow:0 12px 28px rgba(23,50,76,.2)}
+.order-item-suggestions[hidden]{display:none}
+.order-item-suggestion{display:block;width:100%;padding:10px 12px;border:0;border-bottom:1px solid #e6edf3;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.order-item-suggestion:last-child{border-bottom:0}
+.order-item-suggestion b,.order-item-suggestion small{display:block}
+.order-item-suggestion b{font-size:13px}
+.order-item-suggestion small{margin-top:3px;font-size:11px;color:var(--muted)}
+.order-item-suggestion:hover,.order-item-suggestion.active,.order-item-suggestion:focus-visible{background:#eaf4ff;outline:none}
+.order-item-no-match{padding:11px 12px;color:var(--muted);font-size:12px}
