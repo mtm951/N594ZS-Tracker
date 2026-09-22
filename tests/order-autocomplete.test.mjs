@@ -92,11 +92,13 @@ assert.equal(nodes.orPart.value,'22');
 // Native keyboard paths must work as well as tapping suggestions.
 nodes.orItem.value='AN-5';
 ctx.renderOrderItemSuggestions();
+const secondMatch=ctx.orderItemMatches('AN-5')[1];
+assert.ok(secondMatch,'expected two inventory suggestions');
 let prevented=0,stopped=0;
 ctx.orderItemSuggestionKeys({key:'ArrowDown',preventDefault(){prevented++},stopPropagation(){stopped++}});
 ctx.orderItemSuggestionKeys({key:'Enter',preventDefault(){prevented++},stopPropagation(){stopped++}});
-assert.equal(nodes.orPart.value,'22');
-assert.equal(nodes.orItem.value,'AN-5 Elbow');
+assert.equal(nodes.orPart.value,String(secondMatch.id));
+assert.equal(nodes.orItem.value,secondMatch.name);
 assert.equal(prevented,2);
 nodes.orItem.value='AN-5';
 ctx.renderOrderItemSuggestions();
