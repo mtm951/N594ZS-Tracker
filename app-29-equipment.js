@@ -431,7 +431,13 @@ function openEquipmentHistoryModal(id){
   const e=equipmentById(id);if(!e)return;
   openModal(`${modalHeader('Add Equipment History',e.name)}<div class="form-grid">${field('Date','eqHistDate',today(),'date')}<div><label>Action</label><select id="eqHistAction">${['Installed','Serviced','Inspected','Removed','Reinstalled','Replaced','Repaired','Note'].map(s=>`<option>${s}</option>`).join('')}</select></div>${field('Hours','eqHistHours','','number','min="0" step="0.1"')}${textareaField('Notes','eqHistNotes','')}</div><div class="modal-actions"><button class="secondary" onclick="openEquipmentDetail(${e.id})">Cancel</button><button class="primary" onclick="saveEquipmentHistory(${e.id})">Add Entry</button></div>`,true);
 }
-function saveEquipmentHistory(id){const e=equipmentById(id);if(!e)return;e.history.push({id:uid(),date:val('eqHistDate'),action:val('eqHistAction')||'Note',hours:val('eqHistHours'),notes:val('eqHistNotes')});closeModal();saveDB('Equipment history updated.');setTimeout(()=>openEquipmentDetail(id),50)}
+function saveEquipmentHistory(id){
+  const e=equipmentById(id);if(!e)return;
+  const entry={id:uid(),date:val('eqHistDate'),action:val('eqHistAction')||'Note',hours:val('eqHistHours'),notes:val('eqHistNotes')};
+  closeModal();
+  trackerStore.update('equipment',id,draft=>{draft.history=arr(draft.history);draft.history.push(entry)},{message:'Equipment history updated.'});
+  setTimeout(()=>openEquipmentDetail(id),50);
+}
 
 
 if(!document.getElementById('equipmentPolishStyle')){
