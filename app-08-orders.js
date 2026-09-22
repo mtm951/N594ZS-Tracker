@@ -10,7 +10,25 @@ function openOrderModal(id=null,projectId=null,partId=null){
   openModal(`${modalHeader(id?'Edit Order':'New Order')}<div class="form-grid"><div class="full"><label>Item / order description</label><input id="orItem" value="${esc(o.item)}"></div><div><label>Linked project</label><select id="orProject">${projectOptions(o.projectId)}</select></div><div><label>Linked inventory part</label><select id="orPart" onchange="prefillOrderFromPart()">${partOptions(o.partId)}</select></div><div><label>System</label><select id="orSystem">${systemOptions(o.system||inherited)}</select><small>${o.system?'Directly assigned':inherited?`Currently inherited from linked record: ${esc(inherited)}`:'Assign directly or link a project/part'}</small></div>${field('Quantity','orQty',o.qty,'number','step="any" min="0"')}${field('Unit','orUnit',o.unit||'ea')}${field('Vendor','orVendor',o.vendor)}${field('Unit price','orPrice',o.unitPrice,'number','step="0.01" min="0"')}${field('Shipping','orShipping',o.shipping,'number','step="0.01" min="0"')}${field('Tax','orTax',o.tax,'number','step="0.01" min="0"')}<div><label>Status</label><select id="orStatus">${['Need to Order','Quoted','Ordered','Backordered','Received','Cancelled'].map(x=>`<option ${o.status===x?'selected':''}>${x}</option>`).join('')}</select></div>${field('Ordered date','orOrdered',o.orderedDate,'date')}${field('ETA','orEta',o.eta,'date')}${field('Received date','orReceived',o.receivedDate,'date')}${field('Tracking / reference','orTracking',o.tracking)}<div class="full"><label>Vendor / product URL</label><input id="orUrl" value="${esc(o.url)}"></div>${textareaField('Blocker / why this order matters','orBlocker',o.blockerReason)}${textareaField('Order notes','orNotes',o.notes)}</div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteOrder(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveOrder(${id||'null'})">Save Order</button></div>`);
 }
 function prefillOrderFromPart(){const p=partById(selectedNumber('orPart'));if(!p)return;if(!val('orItem'))document.getElementById('orItem').value=p.name;document.getElementById('orUnit').value=p.unit||'ea';if(!val('orVendor'))document.getElementById('orVendor').value=p.vendor||'';if(!val('orPrice'))document.getElementById('orPrice').value=p.unitCost??'';if(!val('orUrl'))document.getElementById('orUrl').value=p.url||'';if(!val('orSystem'))document.getElementById('orSystem').value=p.system||''}
-function saveOrder(id){const old=id?orderById(id):null;const o={item:val('orItem'),projectId:selectedNumber('orProject'),partId:selectedNumber('orPart'),system:val('orSystem'),qty:num(val('orQty'))||1,unit:val('orUnit')||'ea',vendor:val('orVendor'),url:val('orUrl'),unitPrice:val('orPrice'),shipping:val('orShipping'),tax:val('orTax'),status:val('orStatus'),orderedDate:val('orOrdered'),eta:val('orEta'),receivedDate:val('orReceived'),tracking:val('orTracking'),blockerReason:val('orBlocker'),notes:val('orNotes')};if(!o.item)return alert('Order item is required.');if(id)Object.assign(old,o);else db.orders.push({id:uid(),...o,updates:[],inventoryApplied:false});if(o.partId&&o.projectId){const p=partById(o.partId);if(p&&!p.linkedProjectIds.includes(o.projectId))p.linkedProjectIds.push(o.projectId)}closeModal();saveDB(id?'Order updated.':'Order added.')}
+function saveOrder(id){
+  const o={item:val('orItem'),projectId:selectedNumber('orProject'),partId:selectedNumber('orPart'),system:val('orSystem'),qty:num(val('orQty'))||1,unit:val('orUnit')||'ea',vendor:val('orVendor'),url:val('orUrl'),unitPrice:val('orPrice'),shipping:val('orShipping'),tax:val('orTax'),status:val('orStatus'),orderedDate:val('orOrdered'),eta:val('orEta'),receivedDate:val('orReceived'),tracking:val('orTracking'),blockerReason:val('orBlocker'),notes:val('orNotes')};
+  if(!o.item)return alert('Order item is required.');
+
+  if(id){
+    trackerStore.update('order',id,draft=>Object.assign(draft,o),{persist:false});
+  }else{
+    const newId=uid();
+    trackerStore.write('order',newId,{id:newId,...o,updates:[],inventoryApplied:false},{persist:false});
+  }
+
+  if(o.partId&&o.projectId){
+    const p=partById(o.partId);
+    if(p&&!p.linkedProjectIds.includes(o.projectId))p.linkedProjectIds.push(o.projectId);
+  }
+
+  closeModal();
+  trackerStore.commit(id?'Order updated.':'Order added.');
+}
 function deleteOrder(id){if(!confirm('Delete this order record?'))return;db.orders=db.orders.filter(x=>x.id!==id);closeModal();saveDB('Order deleted.')}
 function openCreatePartFromOrder(orderId){
   const o=orderById(orderId);if(!o)return;
