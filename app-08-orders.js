@@ -7,9 +7,90 @@ function openOrderModal(id=null,projectId=null,partId=null){
   const draft=id?orderById(id):{item:partId?partName(partId):'',partId:partId||null,projectId:projectId||null,system:'',qty:1,unit:partId?(partById(partId)?.unit||'ea'):'ea',vendor:partId?(partById(partId)?.vendor||''):'',url:partId?(partById(partId)?.url||''):'',unitPrice:partId?(partById(partId)?.unitCost||''):'',shipping:'',tax:'',status:'Need to Order',orderedDate:'',eta:'',receivedDate:'',tracking:'',blockerReason:'',notes:''};
   const inherited=typeof inferredOrderSystem==='function'?inferredOrderSystem(draft):'';
   const o=draft;
-  openModal(`${modalHeader(id?'Edit Order':'New Order')}<div class="form-grid"><div class="full"><label>Item / order description</label><input id="orItem" value="${esc(o.item)}"></div><div><label>Linked project</label><select id="orProject">${projectOptions(o.projectId)}</select></div><div><label>Linked inventory part</label><select id="orPart" onchange="prefillOrderFromPart()">${partOptions(o.partId)}</select></div><div><label>System</label><select id="orSystem">${systemOptions(o.system||inherited)}</select><small>${o.system?'Directly assigned':inherited?`Currently inherited from linked record: ${esc(inherited)}`:'Assign directly or link a project/part'}</small></div>${field('Quantity','orQty',o.qty,'number','step="any" min="0"')}${field('Unit','orUnit',o.unit||'ea')}${field('Vendor','orVendor',o.vendor)}${field('Unit price','orPrice',o.unitPrice,'number','step="0.01" min="0"')}${field('Shipping','orShipping',o.shipping,'number','step="0.01" min="0"')}${field('Tax','orTax',o.tax,'number','step="0.01" min="0"')}<div><label>Status</label><select id="orStatus">${['Need to Order','Quoted','Ordered','Backordered','Received','Cancelled'].map(x=>`<option ${o.status===x?'selected':''}>${x}</option>`).join('')}</select></div>${field('Ordered date','orOrdered',o.orderedDate,'date')}${field('ETA','orEta',o.eta,'date')}${field('Received date','orReceived',o.receivedDate,'date')}${field('Tracking / reference','orTracking',o.tracking)}<div class="full"><label>Vendor / product URL</label><input id="orUrl" value="${esc(o.url)}"></div>${textareaField('Blocker / why this order matters','orBlocker',o.blockerReason)}${textareaField('Order notes','orNotes',o.notes)}</div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteOrder(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveOrder(${id||'null'})">Save Order</button></div>`);
+  openModal(`${modalHeader(id?'Edit Order':'New Order')}<div class="form-grid"><div class="full order-item-autocomplete"><label for="orItem">Item / order description</label><input id="orItem" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="orItemSuggestions" placeholder="Type to search existing inventory or enter a new item…" value="${esc(o.item)}" onfocus="renderOrderItemSuggestions()" oninput="orderItemTyped()" onkeydown="orderItemSuggestionKeys(event)"><div id="orItemSuggestions" class="order-item-suggestions" role="listbox" hidden></div><small class="order-item-help">Select an existing part to link its inventory record automatically, or enter a custom description.</small></div><div><label>Linked project</label><select id="orProject">${projectOptions(o.projectId)}</select></div><div><label>Linked inventory part</label><select id="orPart" onchange="prefillOrderFromPart();hideOrderItemSuggestions()">${partOptions(o.partId)}</select></div><div><label>System</label><select id="orSystem">${systemOptions(o.system||inherited)}</select><small>${o.system?'Directly assigned':inherited?`Currently inherited from linked record: ${esc(inherited)}`:'Assign directly or link a project/part'}</small></div>${field('Quantity','orQty',o.qty,'number','step="any" min="0"')}${field('Unit','orUnit',o.unit||'ea')}${field('Vendor','orVendor',o.vendor)}${field('Unit price','orPrice',o.unitPrice,'number','step="0.01" min="0"')}${field('Shipping','orShipping',o.shipping,'number','step="0.01" min="0"')}${field('Tax','orTax',o.tax,'number','step="0.01" min="0"')}<div><label>Status</label><select id="orStatus">${['Need to Order','Quoted','Ordered','Backordered','Received','Cancelled'].map(x=>`<option ${o.status===x?'selected':''}>${x}</option>`).join('')}</select></div>${field('Ordered date','orOrdered',o.orderedDate,'date')}${field('ETA','orEta',o.eta,'date')}${field('Received date','orReceived',o.receivedDate,'date')}${field('Tracking / reference','orTracking',o.tracking)}<div class="full"><label>Vendor / product URL</label><input id="orUrl" value="${esc(o.url)}"></div>${textareaField('Blocker / why this order matters','orBlocker',o.blockerReason)}${textareaField('Order notes','orNotes',o.notes)}</div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteOrder(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveOrder(${id||'null'})">Save Order</button></div>`);
 }
 function prefillOrderFromPart(){const p=partById(selectedNumber('orPart'));if(!p)return;if(!val('orItem'))document.getElementById('orItem').value=p.name;document.getElementById('orUnit').value=p.unit||'ea';if(!val('orVendor'))document.getElementById('orVendor').value=p.vendor||'';if(!val('orPrice'))document.getElementById('orPrice').value=p.unitCost??'';if(!val('orUrl'))document.getElementById('orUrl').value=p.url||'';if(!val('orSystem'))document.getElementById('orSystem').value=p.system||''}
+// Autocomplete deliberately leaves the description editable. Selecting a hit
+// links its EXISTING inventory part; typing freeform creates no inventory record.
+let orderItemSuggestionActive=0;
+function orderItemMatches(q){
+  if(!q)return [];
+  const text=String(q).toLowerCase();
+  const rank=p=>{
+    const name=String(p.name||'').toLowerCase(),pn=String(p.partNo||'').toLowerCase();
+    return name.startsWith(text)?0:pn.startsWith(text)?1:name.includes(text)?2:3;
+  };
+  return arr(db.parts).filter(p=>[p.name,p.partNo,p.vendor,p.system]
+    .some(v=>String(v||'').toLowerCase().includes(text)))
+    .sort((a,b)=>rank(a)-rank(b)||String(a.name||'').localeCompare(String(b.name||'')))
+    .slice(0,8);
+}
+function hideOrderItemSuggestions(){
+  const box=document.getElementById('orItemSuggestions'),input=document.getElementById('orItem');
+  if(box){box.hidden=true;box.innerHTML=''}
+  if(input){input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant')}
+}
+function renderOrderItemSuggestions(){
+  const input=document.getElementById('orItem'),box=document.getElementById('orItemSuggestions');
+  if(!input||!box)return;
+  const q=input.value.trim(),matches=orderItemMatches(q);
+  if(!q){hideOrderItemSuggestions();return}
+  if(!matches.length){
+    box.innerHTML='<div class="order-item-no-match">No matching part. You can enter a new item.</div>';
+    box.hidden=q.length<2;input.setAttribute('aria-expanded',String(!box.hidden));
+    input.removeAttribute('aria-activedescendant');
+    return;
+  }
+  orderItemSuggestionActive=0;
+  box.innerHTML=matches.map((p,i)=>
+    `<button type="button" role="option" aria-selected="${i===0}" class="order-item-suggestion${i===0?' active':''}" id="order-suggest-${p.id}" data-part-id="${esc(p.id)}" onclick="chooseOrderItemSuggestion(${Number(p.id)})"><b>${esc(p.name)}${p.partNo?' • '+esc(p.partNo):''}</b><small>${esc(p.system||'General')}${p.vendor?' • '+esc(p.vendor):''} • Link existing inventory</small></button>`
+  ).join('');
+  box.hidden=false;input.setAttribute('aria-expanded','true');
+  input.setAttribute('aria-activedescendant','order-suggest-'+matches[0].id);
+}
+function orderItemTyped(){
+  const input=document.getElementById('orItem'),linked=document.getElementById('orPart');
+  if(input?.dataset.autoPartId&&input.value.trim()!==input.dataset.autoPartName){
+    if(linked&&linked.value===input.dataset.autoPartId)linked.value='';
+    delete input.dataset.autoPartId;
+    delete input.dataset.autoPartName;
+  }
+  renderOrderItemSuggestions();
+}
+function chooseOrderItemSuggestion(id){
+  const p=partById(Number(id)),input=document.getElementById('orItem'),linked=document.getElementById('orPart');
+  if(!p||!input||!linked)return;
+  input.value=p.name;
+  input.dataset.autoPartId=String(p.id);
+  input.dataset.autoPartName=p.name;
+  linked.value=String(p.id);
+  prefillOrderFromPart();
+  hideOrderItemSuggestions();
+}
+function orderItemSuggestionKeys(event){
+  const box=document.getElementById('orItemSuggestions'),input=document.getElementById('orItem');
+  if(!box||box.hidden)return;
+  const buttons=[...box.querySelectorAll('[data-part-id]')];
+  if(event.key==='Escape'){
+    event.preventDefault();event.stopPropagation();hideOrderItemSuggestions();return;
+  }
+  if(!buttons.length)return;
+  if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+    event.preventDefault();
+    orderItemSuggestionActive=(orderItemSuggestionActive+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;
+    buttons.forEach((b,i)=>{b.classList.toggle('active',i===orderItemSuggestionActive);b.setAttribute('aria-selected',String(i===orderItemSuggestionActive))});
+    input?.setAttribute('aria-activedescendant',buttons[orderItemSuggestionActive].id);
+    return;
+  }
+  if(event.key==='Enter'){
+    event.preventDefault();chooseOrderItemSuggestion(Number(buttons[orderItemSuggestionActive].dataset.partId));
+  }
+}
+document.addEventListener('click',e=>{
+  const box=document.getElementById('orItemSuggestions');
+  if(box&&!e.target.closest?.('.order-item-autocomplete'))hideOrderItemSuggestions();
+});
+
 function saveOrder(id){
   const o={item:val('orItem'),projectId:selectedNumber('orProject'),partId:selectedNumber('orPart'),system:val('orSystem'),qty:num(val('orQty'))||1,unit:val('orUnit')||'ea',vendor:val('orVendor'),url:val('orUrl'),unitPrice:val('orPrice'),shipping:val('orShipping'),tax:val('orTax'),status:val('orStatus'),orderedDate:val('orOrdered'),eta:val('orEta'),receivedDate:val('orReceived'),tracking:val('orTracking'),blockerReason:val('orBlocker'),notes:val('orNotes')};
   if(!o.item)return alert('Order item is required.');
