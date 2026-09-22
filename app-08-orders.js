@@ -64,10 +64,33 @@ function saveOrderPartLink(orderId){
   if(partId&&o.projectId){const p=partById(partId);if(p&&!p.linkedProjectIds.includes(o.projectId))p.linkedProjectIds.push(o.projectId)}
   closeModal();saveDB(partId?'Order linked to inventory part.':'Inventory part link removed.');setTimeout(()=>openOrderDetail(orderId),50);
 }
-function applyOrderReceipt(o,qty){const remaining=orderRemainingQty(o),amount=Math.min(remaining,Math.max(0,num(qty)));if(!amount)return 0;if(o.partId){const p=partById(o.partId);if(p){p.stockQty=(p.stockQty===''?0:num(p.stockQty))+amount;if(['Order','Backordered','Need'].includes(p.status)&&amount>=remaining)p.status='On Hand'}}o.receivedQty=orderReceivedQty(o)+amount;o.inventoryAppliedQty=o.receivedQty;o.inventoryApplied=o.receivedQty>=num(o.qty);if(o.inventoryApplied){o.status='Received';o.receivedDate=o.receivedDate||today()}else if(!['Ordered','Backordered','Shipped'].includes(o.status))o.status='Ordered';o.updates=arr(o.updates);o.updates.push({id:uid(),date:today(),text:`Received ${amount} ${o.unit||'ea'}${o.inventoryApplied?' (line complete)':' (partial receipt)'}.`});return amount}
+function applyOrderReceipt(tx,orderId,qty,receiptDate=''){
+  const o=tx.read('order',orderId);
+  if(!o)throw new Error('Order is no longer available.');
+  const remaining=orderRemainingQty(o),amount=Math.min(remaining,Math.max(0,num(qty)));
+  if(!amount)return 0;
+  if(o.partId){
+    tx.update('part',o.partId,p=>{
+      p.stockQty=(p.stockQty===''?0:num(p.stockQty))+amount;
+      if(['Order','Backordered','Need'].includes(p.status)&&amount>=remaining)p.status='On Hand';
+    });
+  }
+  tx.update('order',orderId,draft=>{
+    draft.receivedQty=orderReceivedQty(draft)+amount;
+    draft.inventoryAppliedQty=draft.receivedQty;
+    draft.inventoryApplied=draft.receivedQty>=num(draft.qty);
+    if(draft.inventoryApplied){draft.status='Received';draft.receivedDate=draft.receivedDate||today()}
+    else if(!['Ordered','Backordered','Shipped'].includes(draft.status))draft.status='Ordered';
+    if(receiptDate)draft.receivedDate=receiptDate;
+    draft.updates=arr(draft.updates);
+    draft.updates.push({id:uid(),date:today(),text:`Received ${amount} ${draft.unit||'ea'}${draft.inventoryApplied?' (line complete)':' (partial receipt)'}.`});
+  });
+  return amount;
+}
 function openReceiveOrderModal(id){const o=orderById(id);if(!o)return;const remaining=orderRemainingQty(o);if(!remaining)return receiveOrder(id);openModal(`${modalHeader('Receive Order Item',o.item)}<div class="notice">${esc(orderReceivedQty(o)+' of '+o.qty+' '+(o.unit||'ea'))} already received. ${esc(remaining+' '+(o.unit||'ea'))} remaining.</div><div class="form-grid" style="margin-top:12px">${field('Quantity received now','orReceiveQty',remaining,'number',`step="any" min="0.000001" max="${remaining}"`)}${field('Received date','orReceiveDate',today(),'date')}</div><div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail(${id})">Cancel</button><button class="btn success" onclick="savePartialOrderReceipt(${id})">Receive</button></div>`)}
-// v5.19.12: stage all affected order/part records together. The local batch
-// rolls back synchronous failures before saveDB(), but cloud sync remains async.
+// v5.19.13: receipt updates use the scoped trackerStore transaction, not
+// captured live db rows. Cloud sync remains async until the new atomic RPC
+// is integrated with a durable browser-side operation queue.
 function runOrderReceiptBatch(work,message){
   try{return trackerStore.batch(work,{message})}
   catch(error){
@@ -84,11 +107,9 @@ function savePartialOrderReceipt(id){
   const qty=num(val('orReceiveQty')),remaining=orderRemainingQty(o);
   if(!(qty>0)||qty>remaining)return alert(`Enter a quantity from 0 to ${remaining}.`);
   const date=val('orReceiveDate');
-  const applied=runOrderReceiptBatch(()=>{
+  const applied=runOrderReceiptBatch(tx=>{
     validateOrderReceiptPart(o);
-    const amount=applyOrderReceipt(o,qty);
-    if(date)o.receivedDate=date;
-    return amount;
+    return applyOrderReceipt(tx,id,qty,date);
   },o.partId?'Receipt saved and inventory increased.':'Receipt saved.');
   if(applied===null)return;
   closeModal();setTimeout(()=>openOrderDetail(id),50);
@@ -97,8 +118,10 @@ function receiveOrder(id){
   const o=orderById(id);if(!o)return;
   const remaining=orderRemainingQty(o);
   if(!remaining){
-    const result=runOrderReceiptBatch(()=>{
-      o.status='Received';o.inventoryApplied=true;o.receivedDate=o.receivedDate||today();
+    const result=runOrderReceiptBatch(tx=>{
+      tx.update('order',id,draft=>{
+        draft.status='Received';draft.inventoryApplied=true;draft.receivedDate=draft.receivedDate||today();
+      });
       return true;
     },'Order marked received. Inventory had already been applied.');
     if(result!==null)openOrderDetail(id);
@@ -111,14 +134,15 @@ function receiveOrderGroup(key){
   if(!items.length)return alert('This order has no remaining quantity to receive.');
   const label=items[0].tracking||items[0].vendor||'this order';
   if(!confirm(`Receive all ${items.length} remaining line item${items.length===1?'':'s'} for ${label}? Linked inventory quantities will be increased.`))return;
-  const total=runOrderReceiptBatch(()=>{
+  const expectedTotal=items.reduce((n,o)=>n+orderRemainingQty(o),0);
+  const total=runOrderReceiptBatch(tx=>{
     let applied=0;
     for(const o of items){
       validateOrderReceiptPart(o);
-      applied+=applyOrderReceipt(o,orderRemainingQty(o));
+      applied+=applyOrderReceipt(tx,o.id,orderRemainingQty(o));
     }
     return applied;
-  },`${label} received. ${items.reduce((n,o)=>n+orderRemainingQty(o),0)} total units were processed.`);
+  },`${label} received. ${expectedTotal} total units were processed.`);
   if(total!==null)renderOrders();
 }
 function receiveOrderGroupFor(orderId){const o=orderById(orderId);if(o)receiveOrderGroup(orderGroupKey(o))}
@@ -145,11 +169,10 @@ function saveOrderGroupReceipt(orderId){
   if(!plan.length)return alert('Enter a received quantity for at least one item.');
   const date=val('ogrDate');
   const total=plan.reduce((sum,row)=>sum+row.qty,0);
-  const result=runOrderReceiptBatch(()=>{
+  const result=runOrderReceiptBatch(tx=>{
     for(const {o,qty} of plan){
       validateOrderReceiptPart(o);
-      applyOrderReceipt(o,qty);
-      if(date)o.receivedDate=date;
+      applyOrderReceipt(tx,o.id,qty,date);
     }
     return total;
   },`Partial receipt saved for ${first.tracking||first.vendor||'order'}: ${total} total units across ${plan.length} line${plan.length===1?'':'s'}.`);
