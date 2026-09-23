@@ -33,7 +33,8 @@
   function pending(){return !!localStorage.getItem(KEY)}
   function enabled(){return localStorage.getItem(OPT)==='1'}
   function shouldHandle(){
-    return enabled()&&!!supa&&!!cloudSession&&!!cloudWorkspaceId;
+    // Opting out must never let a new receipt bypass an older queued one.
+    return pending()||(enabled()&&!!supa&&!!cloudSession&&!!cloudWorkspaceId);
   }
   function snapshot(){
     const out=new Map();
