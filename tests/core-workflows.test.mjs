@@ -328,4 +328,32 @@ function inventoryHarness(db,values={},includeSmartMovement=false){
   assert.equal(h.partMovementRows(part).filter(x=>x.kind==='RECEIPT').length,1);
 }
 
+// 8) New Parts often have no purchase provenance. Their whole stockQty
+// formerly rendered as BASE even after recorded receipts; do not display
+// the same +4 as BASE +4 and RECEIPT +4.
+{
+  const part={
+    id:77,name:'Test part — opening zero',stockQty:4,unit:'ea',
+    inventoryAdjustments:[],receiptHistory:[
+      {id:1,orderUpdateId:1,orderId:100,date:'2026-09-22',qty:2,item:'Test part',unit:'ea'},
+      {id:2,orderUpdateId:2,orderId:100,date:'2026-09-23',qty:2,item:'Test part',unit:'ea'}
+    ]
+  };
+  const db={parts:[part],orders:[],purchases:[],projects:[],logs:[],equipment:[],invoices:[],maintenance:[],settings:{}};
+  const h=inventoryHarness(db,{},true);
+  let entries=h.partMovementRows(part);
+  assert.equal(entries.filter(x=>x.kind==='RECEIPT').length,2);
+  assert.equal(entries.filter(x=>x.kind==='BASE').length,0,
+    'a new zero-opening Part displayed its receipts a second time as BASE');
+  assert.equal(entries.filter(x=>x.kind==='RECEIPT').reduce((s,x)=>s+x.qty,0),4);
+  assert.equal(h.partAvailable(part),4);
+
+  // Existing opening stock still has an explicit residual baseline.
+  part.stockQty=7; // 3 opening plus two receipts of 2.
+  entries=h.partMovementRows(part);
+  assert.equal(entries.find(x=>x.kind==='BASE')?.qty,3);
+  assert.equal(entries.filter(x=>['BASE','RECEIPT'].includes(x.kind))
+    .reduce((s,x)=>s+x.qty,0),7);
+}
+
 console.log('core workflow regression tests passed');
