@@ -183,7 +183,12 @@ function openReceiveOrderModal(id){const o=orderById(id);if(!o)return;const rema
 // captured live db rows. Cloud sync remains async until the new atomic RPC
 // is integrated with a durable browser-side operation queue.
 function runOrderReceiptBatch(work,message){
-  try{return trackerStore.batch(work,{message})}
+  try{
+    // Explicit per-device opt-in. All ordinary receipts continue through the
+    // existing tested local batch until atomic receipt testing is enabled.
+    if(window.atomicReceiptOutbox?.shouldHandle())return window.atomicReceiptOutbox.stage(work,message);
+    return trackerStore.batch(work,{message});
+  }
   catch(error){
     console.error('Order receipt failed',error);
     alert('Receipt could not be completed. Review the order and cloud sync status before retrying: '+error.message);
