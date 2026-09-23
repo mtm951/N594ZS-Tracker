@@ -14,7 +14,15 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.17** (verify against current `index.html` on every new session)
+- Current release: **v5.19.18** (verify against current `index.html` on every new session)
+
+## v5.19.18 receipt modal editing guard (phone)
+
+- User reported: **the receive-items popup disappears while changing its default quantity from four to two**, despite the previous v5.19.14 navigation race fix. Root cause remains unconfirmed without a device event trace; the code had no quantity-input handler that intentionally closes it.
+- Scoped UI hardening: `app-08-orders.js` marks both single- and grouped-receipt forms with `data-receipt-editor`; single quantity uses `inputmode="decimal"`. `app-35-navigation-ux.js` prevents backdrop clicks from dismissing an active receipt form (they blur the focused editor), makes Escape from a focused receipt input blur it instead of closing, and ignores unsolicited `popstate` during an active/recent edit (restoring the modal history entry). **Explicit in-app X/Back and Cancel still work.** Normal non-receipt modals retain backdrop and Back dismissal.
+- New regression cases in `tests/order-modal-navigation.test.mjs` simulate backdrop, Escape, recent input/unsolicited popstate, explicit Back and non-receipt normal backdrop; `tests/order-receipt-transaction.test.mjs` verifies the REAL single and group receipt markup enables those guards. Tests passed in Actions before version bump. No Supabase schema or production records changed.
+- Rollback branch `pre-receipt-form-dismiss-guard-v5.19.17`. User phone test **still required** to confirm the specific disappearing-popup report. If it persists, get device/browser and whether it happens while typing, when dismissing the keyboard, or at an incoming cloud reload; use focused event tracing rather than piling on general modal patches.
+- Experimental atomic receipt outbox remains **opt-in OFF by default**; do not encourage real-aircraft stock tests. If user reports a popup vanished *after* tapping Receive, verify order and inventory before retrying to avoid a duplicate credit.
 
 ## v5.19.17 opt-in atomic receipt outbox (v5.19.16 prototype hardened)
 
