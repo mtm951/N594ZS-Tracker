@@ -3,6 +3,15 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const pwaSource=fs.readFileSync(new URL('../app-19-pwa.js',import.meta.url),'utf8');
+const reliabilitySource=fs.readFileSync(new URL('../app-45-reliability.js',import.meta.url),'utf8');
+// Backup labels must reflect the installed build; a stale static label once
+// made valid Sep 23 core exports claim app version 5.6.0.
+const declaration=reliabilitySource.match(/const VER=([^,]+),REC=/);
+assert.ok(declaration,'the reliability module lost its backup version expression');
+const displayedVersion=vm.runInNewContext(declaration[1],{APP_VERSION:'5.19.21'});
+assert.equal(displayedVersion,'5.19.21','backup manifest version did not follow the active build');
+assert.match(reliabilitySource,/manifest=\{format:'N594ZS_BACKUP_MANIFEST_V1',appVersion:VER/);
+
 
 function makeStorage(initial={}){
   const map=new Map(Object.entries(initial));
