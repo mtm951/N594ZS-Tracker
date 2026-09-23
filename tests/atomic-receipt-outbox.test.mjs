@@ -235,4 +235,27 @@ function receiptWork(tx){
   assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle(),false);
   assert.equal(h.ctx.atomicReceiptOutbox.hasPending(),false);
 }
+{
+  // Two triggers (the save timer and a reconnect) must not send the same
+  // operation twice or race the legacy sync while waiting on the server.
+  let release;
+  const h=makeHarness({onRpc:async(_name,args)=>new Promise(resolve=>{
+    release=()=>resolve({data:{
+      applied:args.changes.map(r=>({
+        record_type:r.record_type,record_id:r.record_id,record_version:r.expected_version+1
+      })),
+      conflicts:[],replayed:false
+    },error:null});
+  })});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Concurrent save fixture');
+  const a=h.ctx.saveCloudState();
+  const b=h.ctx.saveCloudState();
+  assert.equal(h.rpcCalls.length,1);
+  release();
+  await Promise.all([a,b]);
+  assert.equal(h.rpcCalls.length,1);
+  assert.equal(h.oldSaveCount(),1);
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+}
+
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
