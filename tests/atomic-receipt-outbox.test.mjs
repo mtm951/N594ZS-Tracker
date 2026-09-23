@@ -42,7 +42,7 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
   const initial=seed?.storage||{[OPT]:enabled?'1':'0',[SNAP]:JSON.stringify(base),[VERS]:JSON.stringify(versions)};
   const localStorage=storage(initial,failKey);
   const rpcCalls=[],saved=[],statuses=[],alerts=[];
-  let oldSaveCount=0,oldLoadCount=0;
+  let oldSaveCount=0,oldLoadCount=0,signOutCount=0;
   const ctx={
     console:{...console,warn:()=>{}},JSON,Date,Map,Set,Array,Object,String,Number,Boolean,Math,Promise,Error,
     structuredClone,
@@ -89,14 +89,14 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
     loadCloudState:async()=>{oldLoadCount++},
     forceCloudReload:async()=>{oldLoadCount++},
     openCloudAccount:()=>{},
-    cloudSignOut:async()=>{},
+    cloudSignOut:async()=>{signOutCount++},
   };
   ctx.window=ctx;
   vm.createContext(ctx);
   vm.runInContext(storeCode,ctx,{filename:'app-17a-data-store.js'});
   vm.runInContext(outboxCode,ctx,{filename:'app-66-atomic-receipt-outbox.js'});
   return {ctx,db,localStorage,rpcCalls,saved,statuses,alerts,
-    oldSaveCount:()=>oldSaveCount,oldLoadCount:()=>oldLoadCount};
+    oldSaveCount:()=>oldSaveCount,oldLoadCount:()=>oldLoadCount,signOutCount:()=>signOutCount};
 }
 function receiptWork(tx){
   tx.update('part',21,p=>{p.stockQty+=2;p.status='On Hand';
@@ -285,6 +285,22 @@ function receiptWork(tx){
   assert.equal(second.rpcCalls.length,1);
   assert.equal(second.oldSaveCount(),1);
   assert.equal(second.localStorage.getItem(OUTBOX),null);
+}
+
+{
+  // Switching accounts is necessary to return to the owner of an abandoned
+  // browser journal. The owner cannot sign out with a receipt pending, but a
+  // different account can leave without erasing the journal.
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Identity switch fixture');
+  const journal=h.localStorage.getItem(OUTBOX);
+  await h.ctx.cloudSignOut();
+  assert.equal(h.signOutCount(),0);
+  assert.match(h.alerts[0],/Sync it before signing out/);
+  h.ctx.cloudSession={user:{id:'different-user'}};
+  await h.ctx.cloudSignOut();
+  assert.equal(h.signOutCount(),1);
+  assert.equal(h.localStorage.getItem(OUTBOX),journal);
 }
 
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
