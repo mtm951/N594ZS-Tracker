@@ -259,4 +259,18 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   assert.equal(h.saves.length,1);
 }
 
+// No linked Part is a legitimate order-only purchase, but the receive
+// editor must make it explicit that this action will NOT credit inventory.
+{
+  const linked=harness();
+  linked.ctx.openReceiveOrderModal(501);
+  assert.doesNotMatch(linked.ui.lastModal,/No linked inventory Part/);
+  const unlinked=harness();
+  unlinked.db.orders[0].partId=null;
+  unlinked.ctx.openReceiveOrderModal(501);
+  assert.match(unlinked.ui.lastModal,/No linked inventory Part/);
+  assert.match(unlinked.ui.lastModal,/Linking afterward does not credit earlier receipts/);
+  assert.equal(unlinked.saves.length,0,'opening a warning edited the order');
+}
+
 console.log('real order-receiving rollback and idempotency regression tests passed');
