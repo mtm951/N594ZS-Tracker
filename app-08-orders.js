@@ -150,10 +150,20 @@ function applyOrderReceipt(tx,orderId,qty,receiptDate=''){
   if(!o)throw new Error('Order is no longer available.');
   const remaining=orderRemainingQty(o),amount=Math.min(remaining,Math.max(0,num(qty)));
   if(!amount)return 0;
+  // Keep an immutable receipt event on the affected Part, not only on the
+  // Order: the inventory audit survives changing or deleting that order.
+  // The shared ID links it to the existing Order Updates timeline.
+  const updateId=uid(),date=receiptDate||today(),receivedAt=new Date().toISOString();
   if(o.partId){
     tx.update('part',o.partId,p=>{
       p.stockQty=(p.stockQty===''?0:num(p.stockQty))+amount;
       if(['Order','Backordered','Need'].includes(p.status)&&amount>=remaining)p.status='On Hand';
+      p.receiptHistory=arr(p.receiptHistory);
+      p.receiptHistory.push({
+        id:updateId,orderUpdateId:updateId,orderId:o.id,date,receivedAt,
+        qty:amount,unit:o.unit||p.unit||'ea',item:o.item||p.name||'',
+        vendor:o.vendor||'',tracking:o.tracking||''
+      });
     });
   }
   tx.update('order',orderId,draft=>{
@@ -164,7 +174,7 @@ function applyOrderReceipt(tx,orderId,qty,receiptDate=''){
     else if(!['Ordered','Backordered','Shipped'].includes(draft.status))draft.status='Ordered';
     if(receiptDate)draft.receivedDate=receiptDate;
     draft.updates=arr(draft.updates);
-    draft.updates.push({id:uid(),date:today(),text:`Received ${amount} ${draft.unit||'ea'}${draft.inventoryApplied?' (line complete)':' (partial receipt)'}.`});
+    draft.updates.push({id:updateId,date,text:`Received ${amount} ${draft.unit||'ea'}${draft.inventoryApplied?' (line complete)':' (partial receipt)'}.`});
   });
   return amount;
 }
