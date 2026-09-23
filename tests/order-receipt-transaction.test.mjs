@@ -82,6 +82,11 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   assert.equal(h.db.orders[0].inventoryAppliedQty,4);
   assert.equal(h.db.orders[0].status,'Ordered');
   assert.equal(h.db.parts[0].stockQty,4);
+  assert.equal(h.db.parts[0].receiptHistory.length,1,'receipt not recorded on Part');
+  assert.equal(h.db.parts[0].receiptHistory[0].qty,2);
+  assert.equal(h.db.parts[0].receiptHistory[0].date,'2026-09-22');
+  assert.equal(h.db.parts[0].receiptHistory[0].orderId,501);
+  assert.equal(h.db.parts[0].receiptHistory[0].orderUpdateId,h.db.orders[0].updates.at(-1).id);
   assert.equal(h.db.orders[0].receivedDate,'2026-09-22');
   assert.equal(h.db.orders[0].otherField,'preserve');
   assert.equal(h.db.orders[0].updates.length,2);
@@ -104,6 +109,7 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   assert.equal(h.db.parts[0].status,'On Hand');
   h.ctx.savePartialOrderReceipt(501);
   assert.equal(h.db.parts[0].stockQty,5,'duplicate receipt credited stock twice');
+  assert.equal(h.db.parts[0].receiptHistory.length,1,'duplicate receipt added a second audit entry');
   assert.equal(h.saves.length,1);
   assert.ok(h.alerts.some(x=>x.includes('Enter a quantity')));
 }
@@ -117,6 +123,10 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   assert.equal(h.db.orders[1].receivedQty,4);
   assert.equal(h.db.parts[0].stockQty,5);
   assert.equal(h.db.parts[1].stockQty,4);
+  assert.equal(h.db.parts[0].receiptHistory.length,1);
+  assert.equal(h.db.parts[1].receiptHistory.length,1);
+  assert.equal(h.db.parts[0].receiptHistory[0].qty,3);
+  assert.equal(h.db.parts[1].receiptHistory[0].qty,4);
   assert.equal(h.db.orders[0].status,'Received');
   assert.equal(h.db.orders[1].status,'Received');
   assert.equal(h.saves.length,1);
@@ -137,6 +147,8 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   assert.equal(h.db.orders[1].receivedQty,1);
   assert.equal(h.db.parts[0].stockQty,4);
   assert.equal(h.db.parts[1].stockQty,1);
+  assert.equal(h.db.parts[0].receiptHistory[0].qty,2);
+  assert.equal(h.db.parts[1].receiptHistory[0].qty,1);
   assert.equal(h.db.orders[0].status,'Ordered');
   assert.equal(h.db.orders[1].status,'Ordered');
   assert.equal(h.saves.length,1);
@@ -208,6 +220,7 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   h.ctx.savePartialOrderReceipt(501);
   assert.equal(h.db.orders[0].receivedQty,3);
   assert.equal(h.db.parts[0].stockQty,3);
+  assert.equal(h.db.parts[0].receiptHistory[0].qty,1,'saveDB error lost staged receipt history');
   assert.equal(h.saves.length,1);
   assert.equal(h.ui.close,0);
   assert.ok(h.alerts.some(x=>/review the order and cloud sync status/i.test(x)));
