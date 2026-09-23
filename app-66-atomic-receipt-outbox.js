@@ -9,6 +9,7 @@
   const OPT='n594zs_atomic_receipts_opt_in_v1';
   const SNAP='n594zs_record_snapshot_v4';
   const VERS='n594zs_record_versions_v1';
+  const RESOLVED='n594zs_atomic_receipt_resolutions_v1';
   const PENDING='n594zs_pending_cloud_v4';
   let inFlight=null, syncInFlight=null;
 
@@ -212,19 +213,117 @@
     return inFlight;
   }
 
+  // Read-only review for an older blocked journal. Some pre-v5.19.19
+  // experimental journals contained only an Order, and an ordinary cloud
+  // sync or second device may have already saved their exact payload.
+  // Never overwrite the server or clear the journal merely because its
+  // quantity looks right: every staged field must match exactly.
+  async function reviewConflict(){
+    let e;
+    try{
+      e=read();
+      if(!e)return alert('There is no pending receipt to review.');
+      validateIdentity(e);
+      if(!e.blocked)return alert('This receipt is not version-blocked. Use Retry Pending Receipt only for nonconflict network failures.');
+      if(!supa||!cloudSession||!cloudWorkspaceId||!navigator.onLine)
+        return alert('Reconnect to the original workspace before comparing the pending receipt.');
+      const ids=[...new Set(e.changes.map(r=>String(r.record_id)))];
+      const {data,error}=await supa.from('tracker_records')
+        .select('record_type,record_id,data,deleted_at,record_version')
+        .eq('workspace_id',e.workspaceId).in('record_id',ids);
+      if(error)throw error;
+      const serverRows=new Map(arr(data).map(r=>[key(r.record_type,r.record_id),r]));
+      const differing=e.changes.filter(r=>{
+        const row=serverRows.get(key(r.record_type,r.record_id));
+        return !row||!!row.deleted_at||!(Number(row.record_version)>0)||
+          stable(row.data)!==stable(r.data);
+      });
+      if(differing.length){
+        alert('The cloud differs from the pending receipt for '+differing.map(r=>r.record_type+' '+r.record_id).join(', ')+
+          '. Nothing was changed or discarded. Keep this browser’s saved data and request a supervised conflict review; do not re-receive the order.');
+        return {matched:false,differing:differing.map(r=>key(r.record_type,r.record_id))};
+      }
+      // The remote state is already EXACTLY the desired journal payload.
+      // Offer a separate, explicit local acknowledgement, not a retry RPC.
+      const unlinked=e.changes.some(r=>r.record_type==='order'&&
+        (!r.data?.partId||!e.changes.some(p=>p.record_type==='part'&&
+          String(p.record_id)===String(r.data.partId))));
+      const prompt='The cloud ALREADY contains every field from this pending receipt. '+
+        'No cloud records need to be written. '+
+        (unlinked?'WARNING: This older receipt has no linked Part update and did NOT credit inventory. ':
+          'Linked Part and Order changes both match the cloud. ')+
+        'Archive and acknowledge this local journal? This does NOT receive anything again.';
+      if(!confirm(prompt))return {matched:true,resolved:false};
+      // If a different tab altered the journal during the async fetch,
+      // never reconcile a different operation using stale server results.
+      const current=read();
+      if(!current||current.operationId!==e.operationId||
+         stable(current.changes)!==stable(e.changes))
+        throw new Error('Pending receipt changed during review. Reopen Atomic Receipt Testing.');
+      await recoverLocal();
+      // An on-device recovery trail must exist before clearing the live
+      // journal. Refuse to acknowledge if storage cannot retain the archive.
+      let archived=[];
+      const existing=localStorage.getItem(RESOLVED);
+      if(existing){
+        archived=JSON.parse(existing);
+        if(!Array.isArray(archived))throw new Error('Stored receipt recovery archive is invalid.');
+      }
+      archived=archived.filter(x=>x.operationId!==e.operationId);
+      archived.push({operationId:e.operationId,resolvedAt:new Date().toISOString(),
+        reason:'cloud-identical',journal:current});
+      const archiveJSON=JSON.stringify(archived.slice(-3));
+      localStorage.setItem(RESOLVED,archiveJSON);
+      if(localStorage.getItem(RESOLVED)!==archiveJSON)
+        throw new Error('Could not verify the local receipt recovery archive.');
+      for(const r of e.changes){
+        const k=key(r.record_type,r.record_id),server=serverRows.get(k);
+        cloudRecordSnapshot.set(k,stable(server.data));
+        cloudRecordVersions.set(k,Number(server.record_version));
+      }
+      const snapshots=JSON.stringify(Object.fromEntries(cloudRecordSnapshot));
+      const versions=JSON.stringify(Object.fromEntries(cloudRecordVersions));
+      localStorage.setItem(SNAP,snapshots);localStorage.setItem(VERS,versions);
+      if(localStorage.getItem(SNAP)!==snapshots||localStorage.getItem(VERS)!==versions)
+        throw new Error('Could not safely update the cloud baseline; original journal was retained.');
+      localStorage.removeItem(KEY);
+      if(localStorage.getItem(KEY))
+        throw new Error('Could not safely clear the acknowledged journal.');
+      // Normal guarded sync still protects any OTHER edits on this device.
+      const outcome=await window.saveCloudState();
+      if(localStorage.getItem(PENDING)==='1'||outcome?.pending){
+        cloudStatusLabel('Sync pending');
+        alert('The identical receipt journal was archived and cleared. Other local changes still need normal cloud synchronization; review the cloud status.');
+      }else{
+        toast('Pending receipt confirmed in cloud and safely acknowledged.','good');
+      }
+      openSettings();
+      return {matched:true,resolved:true};
+    }catch(err){
+      alert('Pending receipt was not automatically cleared: '+(err?.message||String(err))+
+        '. Keep the saved browser data and request a supervised review.');
+      return {matched:false,error:err?.message||String(err)};
+    }
+  }
   function openSettings(){
     let e=null,corrupt='';
     try{e=read()}catch(err){corrupt=err.message}
+    const legacyUnlinked=e?.changes.some(r=>r.record_type==='order'&&
+      (!r.data?.partId||!e.changes.some(p=>p.record_type==='part'&&
+        String(p.record_id)===String(r.data.partId))));
     const detail=e?'<div class="notice"><b>Pending receipt</b><br>Operation '+esc(e.operationId)+
       '<br>Created '+esc(e.createdAt)+(e.blocked?'<br><b>Version conflict — no automatic retry.</b>':'')+
-      '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>':'';
+      '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
+      (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
     openModal(modalHeader('Atomic receipt testing','One pending receipt per device; experimental')+
       '<div class="notice">When enabled on this device, Orders-tab receipts are journaled locally before cloud sync. The server applies linked Order and Part changes together. Other tracker records continue using normal sync.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
       '<div class="detail-section"><b>Status: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending receipts cannot be discarded by reloading cloud data.</div></div>'+
       '<div class="modal-actions">'+
       '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable on This Device')+'</button>'+
-      (e?'<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Receipt</button>':'')+
+      (e?(e.blocked?
+        '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
+        '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Receipt</button>'):'')+
       '<button class="secondary" onclick="openCloudAccount()">Back to Cloud Account</button></div>');
   }
   function toggle(){
@@ -302,6 +401,6 @@
   };
   window.atomicReceiptOutbox=Object.freeze({
     enabled,shouldHandle,hasPending:pending,stage,flush,recoverLocal,
-    openSettings,toggle,retryFromUI
+    openSettings,toggle,retryFromUI,reviewConflict
   });
 })();
