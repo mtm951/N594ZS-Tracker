@@ -14,7 +14,16 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.19** (verify against current `index.html` on every new session)
+- Current release: **v5.19.20** (verify against current `index.html` on every new session)
+
+## v5.19.20 safe recovery of an older blocked atomic receipt
+
+- User screenshot showed an experimental **OFF** toggle but a **blocked, pending legacy order-only** atomic journal. Verified actual cloud Order `1790180527578` ("Numb") is now version 3, `qty=4`, `receivedQty=2`, `partId=null`, `status='Ordered'`. The screenshot's journal operation ID does **not** appear in `tracker_atomic_operations`. The original browser journal cannot be read remotely, so do NOT claim the precise staged payload matches cloud. This older test cannot prove linked inventory credit.
+- `app-66-atomic-receipt-outbox.js` now replaces the futile Retry button on **blocked journals only** with `Compare with Cloud Safely`. It performs a **read-only** authenticated query of canonical `tracker_records` for every staged record key and requires EXACT stable JSON equality with the staged data, present/nondeleted rows and positive versions. Similar quantity alone does not suffice. Missing/mismatched fields leave the original journal untouched and instruct user to seek supervised review. No write RPC is called during comparison.
+- On complete exact match, it asks **separate explicit confirmation**, warns when an older journal lacks a linked Part, validates same journal is still current, recovers the staged local cache if necessary, archives full journal locally (verified under `n594zs_atomic_receipt_resolutions_v1`), refreshes the local cloud snapshot/version baseline from authoritative server data, then clears the old pending journal and runs normal guarded sync for other changes. A quota/identity/offline failure, user cancellation or cloud divergence leaves the journal intact. Server data is never overwritten as part of this recovery.
+- Tests in `tests/atomic-receipt-outbox.test.mjs` cover matching linked Part+Order without replay, matching older order-only incident without stock credit, cloud-different Part, declined confirmation, archive-storage error, offline review, and blocked UI labels, alongside existing crash/retry/outbox tests. GitHub Actions validates the release.
+- The new UI requires loading **v5.19.20 on the SAME DEVICE/BROWSER containing the pending journal**. Browser/PWA code updates should retain localStorage; do not clear site data, delete/recreate the PWA or use a different browser. `Force Latest Version` currently refuses updates while pending; try ordinary page refresh first (the PWA's cache cleanup can require a second load). If refresh still shows an old release, investigate an explicitly safe code-only update path rather than clearing the journal.
+- Existing user aircraft records and Supabase schema were NOT changed. Rollback branch: `pre-atomic-conflict-review-v5.19.19`. The opt-in experiment remains off by default. After resolving the old order-only journal, redo a NEW disposable linked Part + Order test from zero; keep genuine inventory outside the experiment until the device test passes.
 
 ## v5.19.19 guard unlinked experimental atomic receipts
 
