@@ -1,7 +1,7 @@
 // ---------- V5.5 RELIABILITY / RECOVERY ----------
 (function(){
 if(window.__n594zsReliabilityInstalled)return;window.__n594zsReliabilityInstalled=true;
-const VER='5.6.0',REC='n594zs_local_recovery_v1',CF='n594zs_cloud_conflicts_v1',DIRTY='n594zs_dirty_record_keys_v1',LEGACY_FIX='n594zs_conflict_migration_v554';let conflicts=[];
+const VER=(typeof APP_VERSION==='string'&&APP_VERSION?APP_VERSION:'5.6.0'),REC='n594zs_local_recovery_v1',CF='n594zs_cloud_conflicts_v1',DIRTY='n594zs_dirty_record_keys_v1',LEGACY_FIX='n594zs_conflict_migration_v554';let conflicts=[];
 try{conflicts=JSON.parse(localStorage.getItem(CF)||'[]')||[]}catch(_e){}
 const A=v=>Array.isArray(v)?v:[],J=v=>{try{return JSON.stringify(v)}catch(_e){return''}},C=v=>{try{return structuredClone(v)}catch(_e){return JSON.parse(JSON.stringify(v))}},N=v=>{const n=Number(v);return Number.isFinite(n)?n:0},K=(t,id)=>t+':'+String(id);
 function recovery(reason){
