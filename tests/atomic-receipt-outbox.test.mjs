@@ -258,4 +258,16 @@ function receiptWork(tx){
   assert.equal(h.localStorage.getItem(OUTBOX),null);
 }
 
+{
+  // Disabling the experiment must not route a second receipt through the
+  // legacy sender while the first atomic receipt is still offline.
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Pending before opt-out');
+  h.localStorage.setItem(OPT,'0');
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),false);
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle(),true,
+    'an existing queued receipt must keep the protective receipt gate active');
+  assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(receiptWork,'Second receipt'),/earlier receipt is still pending/);
+}
+
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
