@@ -104,6 +104,41 @@ function receiptWork(tx){
   tx.update('order',31,o=>{o.receivedQty+=2;o.updates.push({id:71,date:'2026-09-23',text:'Received 2 ea (partial receipt).'})});
 }
 
+// The real incident: an Order can say 2 received with no linked Part.
+// This must NOT count as an atomic Order+Part test. Reject the staged
+// order-only receipt and restore the original data before any local save.
+{
+  const source={
+    parts:[{id:21,name:'TEST PART',stockQty:0,status:'On Hand',unit:'ea'}],
+    orders:[{id:31,item:'TEST ITEM',partId:null,qty:4,receivedQty:0,inventoryApplied:false,status:'Ordered',updates:[]}],
+    projects:[],settings:{showCosts:true},logs:[],docs:[],checklists:[]
+  };
+  const h=makeHarness({seed:{db:source}});
+  const before=structuredClone(h.db);
+  const orderOnly=tx=>tx.update('order',31,o=>{
+    o.receivedQty=2;o.updates.push({id:71,date:'2026-09-23',text:'Received 2 ea (partial receipt).'});
+  });
+  assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(orderOnly,'Unlinked test receipt'),
+    /requires every received Order to have a linked Part/);
+  assert.deepEqual(h.db,before,'unlinked receipt mutated local records despite rejection');
+  assert.equal(h.saved.length,0,'unlinked receipt reached persistence');
+  assert.equal(h.rpcCalls.length,0,'unlinked receipt reached atomic RPC');
+  assert.equal(h.localStorage.getItem(OUTBOX),null,'unlinked receipt created a pending journal');
+  assert.equal(h.localStorage.getItem(PENDING),null,'unlinked receipt set the pending cloud flag');
+}
+
+// A part must not merely exist somewhere in inventory: the Order's linked
+// Part must be one of the records actually updated by this receipt.
+{
+  const h=makeHarness();
+  const before=structuredClone(h.db);
+  const orderOnly=tx=>tx.update('order',31,o=>{o.receivedQty=2});
+  assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(orderOnly,'Missing stock update'),
+    /requires every received Order to have a linked Part/);
+  assert.deepEqual(h.db,before);
+  assert.equal(h.saved.length,0);
+}
+
 {
   const h=makeHarness();
   assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true);
