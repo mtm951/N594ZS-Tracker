@@ -14,7 +14,16 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.18** (verify against current `index.html` on every new session)
+- Current release: **v5.19.19** (verify against current `index.html` on every new session)
+
+## v5.19.19 guard unlinked experimental atomic receipts
+
+- Verified latest cloud sample on Sep 23: disposable-looking Order "Numb" (record 1790180527578) had qty=4, receivedQty=2, status=Ordered and **partId=null**. No Part named Numb was present. This is a legitimate *order-only* receipt; it did NOT credit inventory. A newly linked Part would NOT automatically be credited the earlier two units. Cloud atomic ledger had two earlier successful operations, neither at the time of the Numb order's most recent update; do not infer the Numb receipt exercised the atomic Order+Part operation.
+- Opt-in atomic outbox `app-66-atomic-receipt-outbox.js` now checks that **each changed Order has a linked Part that was changed by the very same receipt**. If not, it aborts before creating the durable journal or calling saveDB and restores staged local data. This prevents accidentally "passing" a supposed atomic inventory test with only an Order change. Existing standard non-atomic order-only receipts remain possible.
+- `app-08-orders.js` single-order receipt form explicitly warns when no Part is linked. It notes that receiving only updates the Order; linking a Part later will not retroactively credit earlier receipts. Does not silently repair historical inventory.
+- `tests/atomic-receipt-outbox.test.mjs` adds unlinked Order and no-part-update rollback fixtures. `tests/order-receipt-transaction.test.mjs` confirms warning markup and no side effects on opening the form. All tests and Pages deploy passed before publishing.
+- A clean opt-in end-to-end test must use a NEW disposable Part (zero on hand) and NEW linked Order (four ordered, zero received) with synced baseline before receiving two. Do not re-receive the existing Numb order's earlier two or reuse actual aircraft Parts; its earlier unlinked receipt cannot prove inventory credit. Require user confirmation before altering or deleting existing user test records.
+- No Supabase schema or production aircraft record changes in this release. Rollback branch: `pre-atomic-linked-receipt-guard-v5.19.18`. Atomic receipt mode remains **OFF by default** and limited to one pending operation per device. Next: user device end-to-end linked receipt test, offline/reconnect test and UX review.
 
 ## v5.19.18 receipt modal editing guard (phone)
 
