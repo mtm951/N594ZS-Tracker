@@ -112,6 +112,8 @@
   async function recoverLocal(){
     const e=read();
     if(!e)return false;
+    if(!cloudSession||!cloudWorkspaceId)throw new Error('Connect to the workspace before recovering a receipt.');
+    validateIdentity(e);
     let changed=false;
     const current=snapshot();
     for(const r of e.changes){
