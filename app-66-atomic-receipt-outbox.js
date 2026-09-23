@@ -10,7 +10,7 @@
   const SNAP='n594zs_record_snapshot_v4';
   const VERS='n594zs_record_versions_v1';
   const PENDING='n594zs_pending_cloud_v4';
-  let inFlight=null;
+  let inFlight=null, syncInFlight=null;
 
   function copy(x){return typeof structuredClone==='function'?structuredClone(x):JSON.parse(JSON.stringify(x))}
   function stable(x){return cloudStableJSON(x)}
@@ -225,12 +225,17 @@
     openSettings();toast('Pending receipt synchronized.','good');
   }
   const previousSave=window.saveCloudState;
-  window.saveCloudState=async function(){
-    if(pending()){
-      const outcome=await flush();
-      if(!outcome.success)return outcome;
-    }
-    return previousSave();
+  window.saveCloudState=function(){
+    if(syncInFlight)return syncInFlight;
+    const work=async()=>{
+      if(pending()){
+        const outcome=await flush();
+        if(!outcome.success)return outcome;
+      }
+      return previousSave();
+    };
+    syncInFlight=work().finally(()=>{syncInFlight=null});
+    return syncInFlight;
   };
   const previousLoad=window.loadCloudState;
   window.loadCloudState=async function(silent=false){
