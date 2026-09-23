@@ -250,6 +250,7 @@ function receiptWork(tx){
   h.ctx.atomicReceiptOutbox.stage(receiptWork,'Concurrent save fixture');
   const a=h.ctx.saveCloudState();
   const b=h.ctx.saveCloudState();
+  await new Promise(resolve=>setImmediate(resolve)); // recovery runs before RPC
   assert.equal(h.rpcCalls.length,1);
   release();
   await Promise.all([a,b]);
