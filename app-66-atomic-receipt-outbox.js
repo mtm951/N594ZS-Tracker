@@ -235,18 +235,11 @@
   const previousLoad=window.loadCloudState;
   window.loadCloudState=async function(silent=false){
     if(pending()){
+      await recoverLocal();
       const outcome=await flush();
       if(!outcome.success)throw new Error('A receipt is awaiting atomic cloud sync. Local data was preserved.');
     }
     return previousLoad(silent);
-  };
-  const previousInit=window.initCloud;
-  window.initCloud=async function(){
-    if(pending()){
-      try{await recoverLocal()}
-      catch(err){cloudStatusLabel('Receipt needs review');alert(err.message);return}
-    }
-    return previousInit();
   };
   const previousReload=window.forceCloudReload;
   window.forceCloudReload=async function(){
