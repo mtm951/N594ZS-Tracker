@@ -305,6 +305,38 @@
       return {matched:false,error:err?.message||String(err)};
     }
   }
+  // A core tracker backup intentionally contains db records, not localStorage.
+  // Export the *actual pending journal* before any manual conflict review so
+  // crashes, browser resets or app reinstalls cannot silently erase the only
+  // evidence of a partially acknowledged receipt. This never modifies state.
+  function exportPendingJournal(){
+    const raw=localStorage.getItem(KEY);
+    if(!raw){alert('No pending atomic receipt journal exists on this device.');return false;}
+    let e=null,validationError='';
+    try{e=read()}catch(err){validationError=err.message||String(err);}
+    const keys=e?[...new Set(e.changes.map(r=>key(r.record_type,r.record_id)))]:[];
+    const current=snapshot(),localRecords=[],baseline={},versions={};
+    for(const k of keys){
+      if(current.has(k))localRecords.push(current.get(k));
+      if(cloudRecordSnapshot.has(k))baseline[k]=cloudRecordSnapshot.get(k);
+      if(cloudRecordVersions.has(k))versions[k]=cloudRecordVersions.get(k);
+    }
+    const record={
+      format:'N594ZS_ATOMIC_RECEIPT_SAFETY_EXPORT_V1',
+      exportedAt:new Date().toISOString(),
+      appVersion:typeof APP_VERSION==='string'?APP_VERSION:'unknown',
+      status:e?.blocked?'blocked':e?'pending':'unreadable',
+      validationError,
+      journal:e,
+      rawJournal:e?null:raw,
+      localRecords,cloudBaseline:baseline,cloudVersions:versions,
+      cloudPending:localStorage.getItem(PENDING)==='1'
+    };
+    if(typeof downloadJSON!=='function')throw new Error('Download support is unavailable. Keep this browser data intact.');
+    downloadJSON(record,'N594ZS_Atomic_Receipt_Safety_'+today()+'.json');
+    toast('Pending atomic receipt safety download started. Keep the file separate from your core backup.','good');
+    return record;
+  }
   function openSettings(){
     let e=null,corrupt='';
     try{e=read()}catch(err){corrupt=err.message}
@@ -320,6 +352,7 @@
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
       '<div class="detail-section"><b>Status: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending receipts cannot be discarded by reloading cloud data.</div></div>'+
       '<div class="modal-actions">'+
+      (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">Download Pending Receipt Safety Copy</button>':'')+
       '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable on This Device')+'</button>'+
       (e?(e.blocked?
         '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
@@ -401,6 +434,6 @@
   };
   window.atomicReceiptOutbox=Object.freeze({
     enabled,shouldHandle,hasPending:pending,stage,flush,recoverLocal,
-    openSettings,toggle,retryFromUI,reviewConflict
+    openSettings,toggle,retryFromUI,reviewConflict,exportPendingJournal
   });
 })();
