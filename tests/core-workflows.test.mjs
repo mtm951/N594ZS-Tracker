@@ -5,6 +5,11 @@ import vm from 'node:vm';
 const dataStoreSource=fs.readFileSync(new URL('../app-17a-data-store.js',import.meta.url),'utf8');
 const equipmentSource=fs.readFileSync(new URL('../app-29-equipment.js',import.meta.url),'utf8');
 const inventorySource=fs.readFileSync(new URL('../app-42-inventory-workflow.js',import.meta.url),'utf8');
+const smartSource=fs.readFileSync(new URL('../app-38-smart-workflow.js',import.meta.url),'utf8');
+const smartMovementStart=smartSource.indexOf('function partMovementRows(part){');
+const smartMovementEnd=smartSource.indexOf('const smartOpenPartDetailBase=openPartDetail;',smartMovementStart);
+assert.ok(smartMovementStart>=0&&smartMovementEnd>smartMovementStart,'production inventory movement functions missing');
+const smartMovementSource=smartSource.slice(smartMovementStart,smartMovementEnd);
 const purchaseDeleteSource=fs.readFileSync(new URL('../app-32-purchase-delete.js',import.meta.url),'utf8');
 
 function fakeElement(){
@@ -180,7 +185,7 @@ function loadEquipment(context){
 }
 
 // Inventory workflow harness. It runs the real app-42 code but replaces the browser UI with tiny stubs.
-function inventoryHarness(db,values={}){
+function inventoryHarness(db,values={},includeSmartMovement=false){
   const h=commonContext(db);
   h.partConsumedQty=partId=>db.logs.reduce((sum,l)=>sum+(l.consumedParts||[])
     .filter(x=>Number(x.partId)===Number(partId))
@@ -207,6 +212,10 @@ function inventoryHarness(db,values={}){
   h.chooseAttachments=()=>{};
   h.searchablePartPicker=undefined;
   h.partPickerId=undefined;
+  if(includeSmartMovement){
+    h.partReservationProjects=()=>[];
+    load(smartMovementSource,h,'app-38-smart-workflow.js (movement UI)');
+  }
   load(inventorySource,h,'app-42-inventory-workflow.js');
   return h;
 }
@@ -250,6 +259,73 @@ function inventoryHarness(db,values={}){
   assert.equal(h.partAvailable(part),0,'installed purchase + matching use should net to zero on-hand');
   const second=h.preparePartForPhysicalUse(part,1);
   assert.equal(second.credited,0,'installed purchase provenance was materialized twice');
+}
+
+// 7) Reproduce the actual RED RING T... discrepancy from the user screenshot:
+// original purchase +4, manual adjustment -1, tracked order receipt +1,
+// resulting in 4 on hand. An older order update has no structured Part event.
+{
+  const part={
+    id:10,name:'RED RING T...',partNo:'M1292',stockQty:5,unit:'ea',
+    purchaseIds:['purchase-4'],linkedProjectIds:[],
+    inventoryAdjustments:[{id:501,date:'2026-09-18',delta:-1,reason:'Count correction'}]
+  };
+  const purchase={
+    id:'purchase-4',inventoryPartId:10,qty:4,remainingQty:4,
+    vendor:'Advanced Powerplant Solutions',order:'0065504',
+    invoice:'0070652',shipDate:'2025-01-29',disposition:'On Hand'
+  };
+  const order={
+    id:900,partId:10,item:'RED RING T...',qty:1,receivedQty:1,
+    vendor:'Advanced Powerplant Solutions',status:'Received',
+    updates:[{id:701,date:'2026-09-23',text:'Received 1 ea (line complete).'}]
+  };
+  const db={parts:[part],orders:[order],purchases:[purchase],projects:[],logs:[],equipment:[],invoices:[],maintenance:[],settings:{}};
+  const h=inventoryHarness(db,{},true);
+  assert.equal(h.partAvailable(part),4,'received order quantity not included in physical on-hand');
+  const entries=h.partMovementRows(part);
+  assert.equal(entries.find(x=>x.kind==='IN')?.qty,4);
+  assert.equal(entries.find(x=>x.kind==='ADJUST')?.qty,-1);
+  assert.equal(entries.find(x=>x.kind==='RECEIPT')?.qty,1,'existing order receipt missing from history');
+  assert.match(entries.find(x=>x.kind==='RECEIPT').desc,/Historical part link inferred/);
+  assert.equal(entries[0].kind,'RECEIPT','latest receipt should appear first');
+  assert.equal(entries.filter(x=>['IN','ADJUST','RECEIPT'].includes(x.kind))
+    .reduce((sum,x)=>sum+x.qty,0),4,'receipt history does not reconcile to on-hand');
+
+  // Verify the real injected Part details UI displays a green positive receipt
+  // rather than hiding the movement or showing an unsigned increment.
+  const left={html:'',insertAdjacentHTML(_position,html){this.html=html}};
+  const box={querySelector(sel){
+    if(sel==='#smartPartInventory')return null;
+    if(sel==='.detail-grid > div:first-child')return left;
+    return null;
+  }};
+  h.document.getElementById=id=>id==='modalBox'?box:null;
+  h.partPhysicalOnHand=p=>h.partAvailable(p);
+  h.partReservedQty=()=>0;
+  h.partReservationProjects=()=>[];
+  h.injectPartSmartCards(10);
+  assert.match(left.html,/RECEIPT<\/span>/,'receipt missing from Part history HTML');
+  assert.match(left.html,/movement-in[^"]*"[^>]*>RECEIPT<\/span>/,'receipt missing green inflow style');
+  assert.match(left.html,/\+1 ea/,'receipt missing positive quantity');
+
+  // Structured events, introduced by this release, take precedence over
+  // matching older Order Updates and survive deleting the Order.
+  part.receiptHistory=[{
+    id:701,orderUpdateId:701,orderId:900,date:'2026-09-23',qty:1,
+    item:order.item,vendor:order.vendor,unit:'ea'
+  }];
+  assert.equal(h.partMovementRows(part).filter(x=>x.kind==='RECEIPT').length,1,
+    'structured event and Order Update double-counted one receipt');
+  db.orders=[];
+  assert.equal(h.partMovementRows(part).filter(x=>x.kind==='RECEIPT').length,1,
+    'deleting the Order erased the immutable Part receipt');
+  const otherPart={id:11,name:'Unrelated terminal',stockQty:0,unit:'ea',inventoryAdjustments:[]};
+  db.parts.push(otherPart);
+  order.partId=11;db.orders.push(order);
+  assert.equal(h.partMovementRows(otherPart).filter(x=>x.kind==='RECEIPT').length,0,
+    're-linking the Order displayed the old receipt on a second Part');
+  assert.equal(h.partMovementRows(part).filter(x=>x.kind==='RECEIPT').length,1);
 }
 
 console.log('core workflow regression tests passed');
