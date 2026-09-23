@@ -14,7 +14,17 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.20** (verify against current `index.html` on every new session)
+- Current release: **v5.19.21** (verify against current `index.html` on every new session)
+
+## v5.19.21 pending receipt safety export and backup label
+
+- Added a **read-only** `Download Pending Receipt Safety Copy` button in Cloud Account → Atomic Receipt Testing, visible whenever that browser/device has a pending journal, including blocked or malformed journals while atomic opt-in is OFF. `atomicReceiptOutbox.exportPendingJournal()` exports the exact journal (or unreadable raw value), the affected local Order/Part rows, their saved cloud baselines/versions and the pending flag into a separate `N594ZS_ATOMIC_RECEIPT_SAFETY_EXPORT_V1` JSON file. It never calls an RPC, reloads cloud data, clears a pending operation or changes inventory. Browser file download cannot be independently confirmed by the app; user should verify the file was saved.
+- Extended `tests/atomic-receipt-outbox.test.mjs`: blocked/offline journal export with opt-in OFF, corrupt journal raw export, no pending alert, no sync/RPC/cache deletion. All tests run in GitHub Actions. Rollback branch `pre-atomic-safety-export-v5.19.20`.
+- The user's uploaded `N594ZS_Core_Backup_2026-09-23.json` was inspected read-only: exported 2026-09-23T20:53:52Z, 833 manifest-counted core records; SHA-256 and count BOTH match the contained `db` JSON. **Core backup does not include the browser-local pending atomic journal. Do not assume restoring the backup will resolve a blocked atomic receipt. Never clear the originating browser's site data while its journal is pending.** Core-only record count cannot be directly compared to cloud's extra record types. User backup was NOT imported or changed.
+- Fixed `app-45-reliability.js`'s old hardcoded `VER='5.6.0'` used for backup manifests and Data Integrity badge: now reads global `APP_VERSION`, falling back only when run in isolation. A valid core backup can have a stale *reported appVersion* without a bad checksum; existing uploaded backup shows this historical label bug. Added regression check in `tests/app-update.test.mjs`.
+- Before any fresh atomic test: inspect the original device/browser for pending journal. If present, use the new button to preserve it, then `Compare with Cloud Safely` for BLOCKED journals; only exact full-payload equality and separate explicit confirmation permit archival/acknowledgement, otherwise request supervised conflict review. Do not re-receive the existing unlinked `Numb` test order (received 2/4, no inventory credit). Cloud Numb row was version 4 at 2026-09-23 20:06:54 UTC, but we do not know whether its local journal exists or matches current cloud. If no pending journal remains, create a NEW disposable linked Part and Order for opt-in testing, verify Synced baseline, then test 2/4 partial receipt, offline retry and phone/desktop reflection.
+- App upgrade on a device with pending changes: ordinary refresh is normally safe and preserves localStorage, sometimes requires a second load after PWA cache cleanup. `Force Latest Version` currently refuses while pending. Do not clear browser/site data, uninstall/reinstall a PWA or switch browsers to attempt recovery.
+- No production Supabase record or schema changes for this release; this is an export-only safety tool and accurate display/version label. The underlying atomic RPC/outbox is unchanged.
 
 ## v5.19.20 safe recovery of an older blocked atomic receipt
 
