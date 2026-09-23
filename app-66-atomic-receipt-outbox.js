@@ -153,6 +153,11 @@
       catch(error){return retain(error.message,'Receipt needs review')}
       if(!supa||!cloudSession||!cloudWorkspaceId)return retain('Not signed in');
       if(!navigator.onLine)return retain('Offline');
+      // This journal is shared between tabs. A second tab can receive the
+      // save event with stale in-memory records: reconcile its local cache
+      // before the RPC so normal sync cannot undo the acknowledged receipt.
+      try{await recoverLocal()}
+      catch(err){return retain(err.message,'Receipt needs review')}
       if(e.blocked)return retain('Receipt has a version conflict; review before retrying.','Receipt conflict');
       let data,error;
       try{
