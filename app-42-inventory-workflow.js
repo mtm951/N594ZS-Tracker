@@ -86,6 +86,27 @@
         rows.push({date:u.date||o.receivedDate||'',kind:'RECEIPT',desc,qty,unit:match[2]||part.unit||'ea'});
       });
     });
+    // The legacy smart panel uses today's entire stockQty as a generic
+    // "BASE" row when it cannot find purchases. Separate recorded receipts
+    // from that fallback so a new Part with 0 opening stock and two partial
+    // receipts of 2 does not misleadingly display BASE 4 + RECEIPT 2 + 2.
+    var receiptTotal=rows.filter(function(r){return r.kind==='RECEIPT'})
+      .reduce(function(sum,r){return sum+num(r.qty)},0);
+    var hasLinkedPurchase=rows.some(function(r){return r.kind==='IN'||r.kind==='PURCHASE'});
+    if(receiptTotal>0&&!hasLinkedPurchase){
+      var openingQty=num(part.stockQty)-receiptTotal;
+      var baseIndex=rows.findIndex(function(r){return r.kind==='BASE'});
+      if(Math.abs(openingQty)<0.000001){
+        if(baseIndex>=0)rows.splice(baseIndex,1);
+      }else if(baseIndex>=0){
+        rows[baseIndex].qty=openingQty;
+        rows[baseIndex].desc='Opening / unitemized stock (excludes order receipts)';
+      }else{
+        rows.push({date:part.purchaseDate||'',kind:'BASE',
+          desc:'Opening / unitemized stock (excludes order receipts)',
+          qty:openingQty,unit:part.unit||'ea'});
+      }
+    }
     return rows.sort(function(a,b){return (b.date||'9999').localeCompare(a.date||'9999')});
   };
 
