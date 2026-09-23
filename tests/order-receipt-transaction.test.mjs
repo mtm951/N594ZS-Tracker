@@ -227,4 +227,24 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   assert.deepEqual(h.snapshots,[structuredClone(h.db)]);
 }
 
+// The production receipt entry point hands the SAME mutation callback to the
+// opt-in durable journal when enabled. This test doesn't touch the network.
+{
+  const h=harness({inputs:{orReceiveQty:'2',orReceiveDate:'2026-09-23'}});
+  const calls=[];
+  h.ctx.atomicReceiptOutbox={
+    shouldHandle:()=>true,
+    stage:(work,message)=>{
+      calls.push(message);
+      return h.ctx.trackerStore.batch(work,{message});
+    }
+  };
+  h.ctx.savePartialOrderReceipt(501);
+  assert.equal(calls.length,1,'actual receipt bypassed the opted-in atomic queue');
+  assert.equal(h.db.parts[0].stockQty,4);
+  assert.equal(h.db.orders[0].receivedQty,4);
+  assert.equal(h.db.parts[0].receiptHistory[0].qty,2);
+  assert.equal(h.saves.length,1);
+}
+
 console.log('real order-receiving rollback and idempotency regression tests passed');
