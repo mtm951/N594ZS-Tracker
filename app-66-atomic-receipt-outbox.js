@@ -257,7 +257,7 @@
     if(pending())return alert('A receipt is awaiting atomic sync. Review it in Cloud Account before reloading shared data.');
     return previousReload();
   };
-  for(const action of ['reliabilityUseCloud','reliabilityKeepLocal','reliabilityApplyFieldMerge','cloudSignOut']){
+  for(const action of ['reliabilityUseCloud','reliabilityKeepLocal','reliabilityApplyFieldMerge']){
     const prev=window[action];
     if(typeof prev!=='function')continue;
     window[action]=function(...args){
@@ -265,6 +265,18 @@
       return prev(...args);
     };
   }
+  const signOutBase=window.cloudSignOut;
+  window.cloudSignOut=function(...args){
+    if(pending()){
+      let e;
+      try{e=read()}catch(error){return alert(error.message)}
+      if(e.userId===cloudSession?.user?.id)
+        return alert('An unsynced receipt belongs to this account. Sync it before signing out.');
+      // Another account must be allowed to leave and sign into the owner of
+      // the journal. The workspace-bound operation itself remains untouched.
+    }
+    return signOutBase(...args);
+  };
   const previousAccount=window.openCloudAccount;
   window.openCloudAccount=function(){
     previousAccount();
