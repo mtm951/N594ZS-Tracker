@@ -56,6 +56,8 @@
   let closeHistoryTimer=null;
   let modalOpenSerial=0;
   let pendingProgrammaticBackSerial=null;
+  let explicitModalBackRequested=false;
+  let receiptLastEditAt=0;
   let depth=Number(history.state?.n594zsDepth||0);
   const navToBase=navTo;
   const openModalBase=openModal;
@@ -65,6 +67,13 @@
   function popupOpen(){return !!modal?.classList.contains('open')}
   function trackerState(kind,page=currentPage,d=depth){return {n594zs:true,n594zsKind:kind,n594zsPage:page,n594zsDepth:d}}
   function stateIsModal(){return history.state?.n594zs===true&&history.state?.n594zsKind==='modal'}
+  function receiptOpen(){return popupOpen()&&!!modal.querySelector('[data-receipt-editor]')}
+  function receiptInput(t){
+    return receiptOpen()&&!!t&&modal.contains(t)&&/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName||'');
+  }
+  function receiptEditing(){
+    return receiptInput(document.activeElement)||receiptOpen()&&receiptLastEditAt>0&&Date.now()-receiptLastEditAt<3000;
+  }
   function updateControls(){
     const popup=popupOpen();
     floatingClose.classList.toggle('visible',popup);
@@ -93,6 +102,7 @@
   openModal=function(html,wide=false){
     clearTimeout(closeHistoryTimer);
     openModalBase(html,wide);
+    receiptLastEditAt=0;
     modalOpenSerial++;
     if(!historyHandling&&!stateIsModal())history.pushState(trackerState('modal',currentPage,depth),'');
     updateControls();
@@ -121,7 +131,10 @@
 
   window.trackerBack=function(){
     if(popupOpen()){
-      if(stateIsModal())history.back();else closeModal();
+      if(stateIsModal()){
+        explicitModalBackRequested=true;
+        history.back();
+      }else closeModal();
       return;
     }
     if(Number(history.state?.n594zsDepth||0)>0){history.back();return;}
@@ -135,6 +148,28 @@
   back.onclick=window.trackerBack;
   floatingClose.onclick=()=>window.trackerBack();
 
+  // A mobile keyboard can move the backdrop under the user's finger while
+  // editing a receiving quantity. A backdrop tap should dismiss the keyboard,
+  // not the unsaved receipt form. The form still has explicit Cancel and X.
+  document.addEventListener('click',e=>{
+    if(e.target!==modal||!receiptOpen())return;
+    e.preventDefault();e.stopImmediatePropagation();
+    if(receiptInput(document.activeElement))document.activeElement.blur?.();
+  },true);
+  document.addEventListener('focusin',e=>{
+    if(receiptInput(e.target))receiptLastEditAt=Date.now();
+  },true);
+  document.addEventListener('input',e=>{
+    if(receiptInput(e.target))receiptLastEditAt=Date.now();
+  },true);
+  // Escape from an active number/date editor dismisses that editor first.
+  // The duplicate legacy Escape handlers must not discard an in-progress form.
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape'||!receiptInput(document.activeElement))return;
+    e.preventDefault();e.stopImmediatePropagation();
+    document.activeElement.blur?.();
+  },true);
+
   // Intercept the small X buttons inside modal headers too, so all close buttons use the same history behavior.
   document.addEventListener('click',e=>{
     const btn=e.target.closest?.('[data-modal-close]');
@@ -146,6 +181,8 @@
   window.addEventListener('popstate',e=>{
     clearTimeout(closeHistoryTimer);
     const st=e.state;
+    const explicitBack=explicitModalBackRequested;
+    explicitModalBackRequested=false;
     const programmaticBackSerial=pendingProgrammaticBackSerial;
     pendingProgrammaticBackSerial=null;
     if(popupOpen()&&programmaticBackSerial!==null&&modalOpenSerial>programmaticBackSerial){
@@ -157,6 +194,14 @@
       return;
     }
     if(popupOpen()){
+      // Only a deliberate Back should dismiss a receipt that is being edited.
+      // Unsolicited popstate (including a phone keyboard/browser interaction)
+      // must not throw away the entered quantity. Restore one modal state.
+      if(!explicitBack&&receiptEditing()){
+        if(!stateIsModal())history.pushState(trackerState('modal',currentPage,depth),'');
+        updateControls();
+        return;
+      }
       closeFromHistory();
       if(st?.n594zs)depth=Number(st.n594zsDepth||0);
       return;
