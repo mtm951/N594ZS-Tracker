@@ -270,4 +270,20 @@ function receiptWork(tx){
   assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(receiptWork,'Second receipt'),/earlier receipt is still pending/);
 }
 
+{
+  // Two tabs on the same device share the journal but not their in-memory DB.
+  // A stale second tab must restore the staged receipt BEFORE it acknowledges
+  // the cloud RPC; otherwise its normal sync could undo the received stock.
+  const sender=makeHarness({online:false});
+  const stale=structuredClone(sender.db);
+  sender.ctx.atomicReceiptOutbox.stage(receiptWork,'Cross-tab fixture');
+  const second=makeHarness({seed:{db:stale,storage:sender.localStorage.dump()}});
+  await second.ctx.saveCloudState();
+  assert.equal(second.db.parts[0].stockQty,2);
+  assert.equal(second.db.orders[0].receivedQty,2);
+  assert.equal(second.rpcCalls.length,1);
+  assert.equal(second.oldSaveCount(),1);
+  assert.equal(second.localStorage.getItem(OUTBOX),null);
+}
+
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
