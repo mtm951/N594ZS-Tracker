@@ -42,7 +42,7 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
   const versions={'part:21':seed?.baseline?.partVersion||2,'order:31':seed?.baseline?.orderVersion||3};
   const initial=seed?.storage||{[OPT]:enabled?'1':'0',[SNAP]:JSON.stringify(base),[VERS]:JSON.stringify(versions)};
   const localStorage=storage(initial,failKey);
-  const rpcCalls=[],cloudReads=[],saved=[],statuses=[],alerts=[];
+  const rpcCalls=[],cloudReads=[],saved=[],statuses=[],alerts=[],safetyExports=[];
   let lastModal='';
   let oldSaveCount=0,oldLoadCount=0,signOutCount=0;
   const ctx={
@@ -93,6 +93,8 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
     alert:x=>alerts.push(String(x)),
     confirm:()=>confirmResult,
     modalHeader:()=>'',openModal:html=>{lastModal=html},esc:String,
+    APP_VERSION:'5.19.21',today:()=> '2026-09-23',
+    downloadJSON:(data,filename)=>safetyExports.push({data:structuredClone(data),filename}),
     document:{querySelector:()=>null},
     saveCloudState:async()=>{
       oldSaveCount++;
@@ -108,7 +110,7 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
   vm.createContext(ctx);
   vm.runInContext(storeCode,ctx,{filename:'app-17a-data-store.js'});
   vm.runInContext(outboxCode,ctx,{filename:'app-66-atomic-receipt-outbox.js'});
-  return {ctx,db,localStorage,rpcCalls,cloudReads,saved,statuses,alerts,lastModal:()=>lastModal,
+  return {ctx,db,localStorage,rpcCalls,cloudReads,saved,statuses,alerts,safetyExports,lastModal:()=>lastModal,
     oldSaveCount:()=>oldSaveCount,oldLoadCount:()=>oldLoadCount,signOutCount:()=>signOutCount};
 }
 function receiptWork(tx){
@@ -462,6 +464,57 @@ function receiptWork(tx){
   await h.ctx.atomicReceiptOutbox.reviewConflict();
   assert.equal(h.cloudReads.length,0);
   assert.ok(h.localStorage.getItem(OUTBOX));
+}
+
+
+// The regular Core Backup (db only) cannot preserve a pending browser-only
+// journal. Download a separate immutable diagnostic/safety copy BEFORE any
+// conflict resolution, even when the device is offline and atomic mode is off.
+{
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Archive fixture');
+  const raw=h.localStorage.getItem(OUTBOX);
+  const e=JSON.parse(raw);
+  h.localStorage.setItem(OUTBOX,JSON.stringify({...e,blocked:true}));
+  h.localStorage.setItem(OPT,'0');
+  h.ctx.atomicReceiptOutbox.openSettings();
+  assert.match(h.lastModal(),/Download Pending Receipt Safety Copy/);
+  const exported=h.ctx.atomicReceiptOutbox.exportPendingJournal();
+  assert.equal(h.safetyExports.length,1);
+  assert.match(h.safetyExports[0].filename,/N594ZS_Atomic_Receipt_Safety_/);
+  assert.equal(exported.status,'blocked');
+  assert.equal(exported.journal.operationId,e.operationId);
+  assert.equal(exported.journal.changes.length,2);
+  assert.equal(exported.journal.before.length,2);
+  assert.equal(exported.localRecords.find(x=>x.record_type==='part').data.stockQty,2);
+  assert.equal(exported.cloudVersions['part:21'],2);
+  assert.equal(exported.cloudVersions['order:31'],3);
+  assert.equal(exported.cloudPending,true);
+  assert.equal(h.localStorage.getItem(OUTBOX),JSON.stringify({...e,blocked:true}));
+  assert.equal(h.rpcCalls.length,0,'safety export submitted a receipt');
+  assert.equal(h.oldSaveCount(),0,'safety export triggered legacy sync');
+  assert.equal(h.oldLoadCount(),0,'safety export reloaded shared data');
+}
+{
+  // Even malformed browser storage must be exportable for supervised review,
+  // rather than hiding the safety button due to journal validation failure.
+  const bad='{broken-pending-json';
+  const h=makeHarness({seed:{storage:{[OUTBOX]:bad,[PENDING]:'1',[OPT]:'0'}}});
+  h.ctx.atomicReceiptOutbox.openSettings();
+  assert.match(h.lastModal(),/Download Pending Receipt Safety Copy/);
+  const exported=h.ctx.atomicReceiptOutbox.exportPendingJournal();
+  assert.equal(exported.status,'unreadable');
+  assert.equal(exported.rawJournal,bad);
+  assert.ok(exported.validationError);
+  assert.equal(h.localStorage.getItem(OUTBOX),bad);
+  assert.equal(h.safetyExports.length,1);
+  assert.equal(h.rpcCalls.length,0);
+}
+{
+  const h=makeHarness();
+  assert.equal(h.ctx.atomicReceiptOutbox.exportPendingJournal(),false);
+  assert.equal(h.safetyExports.length,0);
+  assert.match(h.alerts.at(-1),/No pending atomic receipt/);
 }
 
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
