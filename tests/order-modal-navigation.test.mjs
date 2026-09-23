@@ -144,6 +144,7 @@ function createHarness(){
 
   // The legacy Escape handlers should not close the receipt when the numeric
   // input is focused (e.g., the phone keyboard dismisses the editor).
+  h.ctx.document.activeElement=input;
   h.ctx.document.addEventListener('keydown',e=>{if(e.key==='Escape')h.ctx.closeModal()});
   const escape=h.dispatchDocument('keydown',input,{key:'Escape'});
   assert.equal(escape.stopped,true);
