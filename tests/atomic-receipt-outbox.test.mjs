@@ -9,6 +9,7 @@ const OPT='n594zs_atomic_receipts_opt_in_v1';
 const PENDING='n594zs_pending_cloud_v4';
 const SNAP='n594zs_record_snapshot_v4';
 const VERS='n594zs_record_versions_v1';
+const RESOLVED='n594zs_atomic_receipt_resolutions_v1';
 
 function storage(seed={},denyKey=null){
   const m=new Map(Object.entries(seed));
@@ -28,7 +29,7 @@ function canonical(value){
   return value;
 }
 function stable(x){return JSON.stringify(canonical(x))}
-function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null,receiptSaveError=null}={}){
+function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null,onCloudRead=null,confirmResult=true,receiptSaveError=null}={}){
   const before=seed?.db||{
     parts:[{id:21,name:'TEST WASHER',stockQty:0,status:'Order',unit:'ea'}],
     orders:[{id:31,item:'TEST WASHER',partId:21,qty:4,receivedQty:0,inventoryApplied:false,status:'Ordered',updates:[]}],
@@ -41,7 +42,8 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
   const versions={'part:21':seed?.baseline?.partVersion||2,'order:31':seed?.baseline?.orderVersion||3};
   const initial=seed?.storage||{[OPT]:enabled?'1':'0',[SNAP]:JSON.stringify(base),[VERS]:JSON.stringify(versions)};
   const localStorage=storage(initial,failKey);
-  const rpcCalls=[],saved=[],statuses=[],alerts=[];
+  const rpcCalls=[],cloudReads=[],saved=[],statuses=[],alerts=[];
+  let lastModal='';
   let oldSaveCount=0,oldLoadCount=0,signOutCount=0;
   const ctx={
     console:{...console,warn:()=>{}},JSON,Date,Map,Set,Array,Object,String,Number,Boolean,Math,Promise,Error,
@@ -61,6 +63,17 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
         applied:args.changes.map((r,i)=>({record_type:r.record_type,record_id:r.record_id,record_version:r.expected_version+1})),
         conflicts:[],replayed:false
       },error:null};
+    },from:table=>{
+      assert.equal(table,'tracker_records');
+      return {select:()=>({eq:(_field,_value)=>({in:async(_field,ids)=>{
+        cloudReads.push(ids);
+        const journal=JSON.parse(localStorage.getItem(OUTBOX));
+        if(onCloudRead)return onCloudRead(journal,ids);
+        return {data:journal.changes.map(r=>({
+          record_type:r.record_type,record_id:r.record_id,data:structuredClone(r.data),
+          deleted_at:null,record_version:r.expected_version+1
+        })),error:null};
+      }})})};
     }},
     crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},
     cloudRecordKey:(type,id)=>type+':'+String(id),cloudStableJSON:stable,
@@ -78,8 +91,8 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
     },
     renderAll:()=>{},
     alert:x=>alerts.push(String(x)),
-    confirm:()=>true,
-    modalHeader:()=>'',openModal:()=>{},esc:String,
+    confirm:()=>confirmResult,
+    modalHeader:()=>'',openModal:html=>{lastModal=html},esc:String,
     document:{querySelector:()=>null},
     saveCloudState:async()=>{
       oldSaveCount++;
@@ -95,7 +108,7 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
   vm.createContext(ctx);
   vm.runInContext(storeCode,ctx,{filename:'app-17a-data-store.js'});
   vm.runInContext(outboxCode,ctx,{filename:'app-66-atomic-receipt-outbox.js'});
-  return {ctx,db,localStorage,rpcCalls,saved,statuses,alerts,
+  return {ctx,db,localStorage,rpcCalls,cloudReads,saved,statuses,alerts,lastModal:()=>lastModal,
     oldSaveCount:()=>oldSaveCount,oldLoadCount:()=>oldLoadCount,signOutCount:()=>signOutCount};
 }
 function receiptWork(tx){
@@ -336,6 +349,119 @@ function receiptWork(tx){
   await h.ctx.cloudSignOut();
   assert.equal(h.signOutCount(),1);
   assert.equal(h.localStorage.getItem(OUTBOX),journal);
+}
+
+
+// Blocked receipts can be read-only compared against the cloud. Only an
+// EXACT data match, after explicit user confirmation, may acknowledge a
+// stale journal without writing a second receipt to Supabase.
+{
+  const h=makeHarness();
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Matching journal');
+  const journal=JSON.parse(h.localStorage.getItem(OUTBOX));
+  h.localStorage.setItem(OUTBOX,JSON.stringify({...journal,blocked:true}));
+  h.ctx.atomicReceiptOutbox.openSettings();
+  assert.match(h.lastModal(),/Compare with Cloud Safely/);
+  assert.doesNotMatch(h.lastModal(),/Retry Pending Receipt/);
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.matched,true);
+  assert.equal(result.resolved,true);
+  assert.equal(h.cloudReads.length,1);
+  assert.equal(h.rpcCalls.length,0,'read-only cloud match tried to resend a receipt');
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+  assert.equal(h.oldSaveCount(),1,'remaining ordinary changes were not checked');
+  const archive=JSON.parse(h.localStorage.getItem(RESOLVED));
+  assert.equal(archive.length,1);
+  assert.equal(archive[0].operationId,journal.operationId);
+  assert.equal(archive[0].journal.blocked,true);
+  assert.equal(JSON.parse(h.localStorage.getItem(VERS))['part:21'],3);
+  assert.equal(JSON.parse(h.localStorage.getItem(VERS))['order:31'],4);
+}
+{
+  // The very incident behind the blocked UI: a legacy order-only receipt
+  // with NO linked Part. Reconciliation clears only its journal after an
+  // exact cloud match; it never credits inventory or calls the atomic RPC.
+  const order={id:31,item:'Numb',partId:null,qty:4,receivedQty:2,
+    status:'Ordered',updates:[{id:71,date:'2026-09-23',
+      text:'Received 2 ea (partial receipt).'}]};
+  const prior={...structuredClone(order),receivedQty:0,updates:[]};
+  const operation={
+    format:'N594ZS_ATOMIC_RECEIPT_V1',operationId:'legacy-order-only',
+    workspaceId:'workspace-1',userId:'user-1',createdAt:'2026-09-23T16:22:50Z',
+    blocked:true,changes:[{record_type:'order',record_id:'31',data:order,
+      deleted_at:null,expected_version:3,updated_client:'client-1'}],
+    before:[{key:'order:31',data:prior}]
+  };
+  const h=makeHarness({enabled:false,seed:{
+    db:{parts:[{id:21,name:'UNLINKED TEST PART',stockQty:0,unit:'ea'}],
+      orders:[order],projects:[],settings:{},logs:[],docs:[],checklists:[]},
+    storage:{[OPT]:'0',[OUTBOX]:JSON.stringify(operation),[PENDING]:'1'}
+  }});
+  h.ctx.atomicReceiptOutbox.openSettings();
+  assert.match(h.lastModal(),/no linked Part update/);
+  assert.match(h.lastModal(),/Compare with Cloud Safely/);
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.resolved,true);
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),false);
+  assert.equal(h.db.parts[0].stockQty,0,'legacy order-only recovery credited inventory');
+  assert.equal(h.db.orders[0].receivedQty,2,'legacy order-only recovery lost receipt quantity');
+  assert.equal(h.rpcCalls.length,0);
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+}
+{
+  // Matching just the received QUANTITY is not enough. Another device
+  // could have changed the Part or an unrelated Order field.
+  const h=makeHarness({onCloudRead:journal=>({
+    data:journal.changes.map(r=>({
+      record_type:r.record_type,record_id:r.record_id,deleted_at:null,
+      record_version:r.expected_version+1,
+      data:r.record_type==='part'?{...r.data,stockQty:99}:r.data
+    })),error:null
+  })});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Divergent cloud');
+  const journal=JSON.parse(h.localStorage.getItem(OUTBOX));
+  h.localStorage.setItem(OUTBOX,JSON.stringify({...journal,blocked:true}));
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.matched,false);
+  assert.equal(result.differing.length,1);
+  assert.equal(h.rpcCalls.length,0);
+  assert.ok(h.localStorage.getItem(OUTBOX),'divergent cloud cleared the pending receipt');
+  assert.equal(h.localStorage.getItem(RESOLVED),null);
+  assert.equal(h.oldSaveCount(),0);
+  assert.match(h.alerts.at(-1),/Nothing was changed or discarded/);
+}
+{
+  const h=makeHarness({confirmResult:false});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Consent required');
+  const e=JSON.parse(h.localStorage.getItem(OUTBOX));
+  h.localStorage.setItem(OUTBOX,JSON.stringify({...e,blocked:true}));
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.matched,true);
+  assert.equal(result.resolved,false);
+  assert.ok(h.localStorage.getItem(OUTBOX),'journal cleared without explicit confirmation');
+  assert.equal(h.oldSaveCount(),0);
+}
+{
+  // Storage failure must retain the ONLY live journal rather than claiming
+  // a matched receipt has been safely acknowledged.
+  const h=makeHarness({failKey:RESOLVED});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Archive fails');
+  const e=JSON.parse(h.localStorage.getItem(OUTBOX));
+  h.localStorage.setItem(OUTBOX,JSON.stringify({...e,blocked:true}));
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.matched,false);
+  assert.match(result.error,/Storage quota exhausted/);
+  assert.ok(h.localStorage.getItem(OUTBOX));
+  assert.equal(h.oldSaveCount(),0);
+}
+{
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'No network');
+  const e=JSON.parse(h.localStorage.getItem(OUTBOX));
+  h.localStorage.setItem(OUTBOX,JSON.stringify({...e,blocked:true}));
+  await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(h.cloudReads.length,0);
+  assert.ok(h.localStorage.getItem(OUTBOX));
 }
 
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
