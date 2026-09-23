@@ -151,10 +151,12 @@ function receiptWork(tx){
   const storageAfterCrash=h1.localStorage.dump();
   const h2=makeHarness({seed:{db:original,storage:storageAfterCrash}});
   assert.equal(h2.db.parts[0].stockQty,0);
-  await h2.ctx.atomicReceiptOutbox.recoverLocal();
+  await h2.ctx.loadCloudState(true);
+  assert.equal(h2.oldLoadCount(),1,'pending journal prevented normal cloud loading after successful replay');
   assert.equal(h2.db.parts[0].stockQty,2);
   assert.equal(h2.db.orders[0].receivedQty,2);
-  const outcome=await h2.ctx.atomicReceiptOutbox.flush();
+  assert.equal(h2.rpcCalls.length,1);
+  const outcome={success:h2.localStorage.getItem(OUTBOX)===null};
   assert.equal(outcome.success,true);
   assert.equal(h2.rpcCalls[0].operation_id,JSON.parse(storageAfterCrash[OUTBOX]).operationId);
   assert.equal(h2.localStorage.getItem(OUTBOX),null);
