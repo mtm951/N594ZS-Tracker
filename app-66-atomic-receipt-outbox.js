@@ -82,6 +82,17 @@
       }
       if(!changes.length||!changes.some(r=>r.record_type==='order'))
         throw new Error('Receipt did not produce a changed Order record.');
+      // This opt-in path is specifically for an Order + Part transaction.
+      // A receipt without a linked Part can update only its Order and would
+      // give a misleading atomic-inventory test result. Check BEFORE writing
+      // the durable journal; the catch below restores the staged local DB.
+      for(const order of changes.filter(r=>r.record_type==='order')){
+        const linkedId=order.data?.partId;
+        const partIncluded=linkedId&&changes.some(r=>r.record_type==='part'&&
+          String(r.record_id)===String(linkedId));
+        if(!partIncluded)
+          throw new Error('Atomic inventory testing requires every received Order to have a linked Part updated by this receipt. Link or create a test Part BEFORE receiving. Linking it afterward does not credit an earlier receipt.');
+      }
       if(changes.length>50)throw new Error('A receipt can change at most 50 records.');
       const afterKeys=new Set(changes.map(r=>key(r.record_type,r.record_id)));
       for(const k of before.keys())if(!after.has(k))
