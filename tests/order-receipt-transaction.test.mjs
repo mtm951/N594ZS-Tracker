@@ -56,7 +56,7 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
     projectById:id=>db.projects.find(p=>Number(p.id)===Number(id)),
     isClosedOrder:o=>['Received','Cancelled'].includes(o.status),
     // Uncalled UI dependencies are supplied so the real file can load.
-    openModal:()=>{},modalHeader:()=>'',field:()=>'',textareaField:()=>'',projectOptions:()=>'',partOptions:()=>'',systemOptions:()=>'',esc:x=>String(x??''),
+    openModal:html=>{ui.lastModal=html},modalHeader:()=>'',field:(_label,id,_value,type='text',extra='')=>`<input id="${id}" type="${type}" ${extra}>`,textareaField:()=>'',projectOptions:()=>'',partOptions:()=>'',systemOptions:()=>'',esc:x=>String(x??''),
     selectedNumber:()=>null,partName:()=>'',pill:()=>'',fmtMoney:()=>'',orderTotal:()=>0,
     isURL:()=>false,chooseAttachments:()=>{},handleEntityDrop:()=>{},renderAttachments:()=>Promise.resolve(),
     addEntityUpdate:()=>{},openProjectDetail:()=>{},openPartDetail:()=>{},currentDetail:null
@@ -66,6 +66,18 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   vm.runInContext(storeSource,ctx,{filename:'app-17a-data-store.js'});
   vm.runInContext(ordersSource,ctx,{filename:'app-08-orders.js'});
   return {ctx,db,saves,snapshots,alerts,errors,ui};
+}
+
+// Both receipt UI variants must carry the guarded-editor marker so mobile
+// keyboard/backdrop events cannot dismiss a quantity that hasn't been saved.
+{
+  const h=harness();
+  h.ctx.openReceiveOrderModal(502);
+  assert.match(h.ui.lastModal,/data-receipt-editor="single"/);
+  assert.match(h.ui.lastModal,/id="orReceiveQty"[^>]*inputmode="decimal"/);
+  h.ctx.openReceiveOrderGroupModal(501);
+  assert.match(h.ui.lastModal,/data-receipt-editor="group"/);
+  assert.match(h.ui.lastModal,/id="ogr-501"[^>]*type="number"/);
 }
 
 // A partial receipt updates the real order and its linked physical inventory
