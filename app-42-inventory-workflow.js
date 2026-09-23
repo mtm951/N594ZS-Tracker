@@ -51,12 +51,47 @@
     arr(part.inventoryAdjustments).forEach(function(a){
       rows.push({date:a.date||'',kind:'ADJUST',desc:(a.reason||'Inventory adjustment')+(a.notes?' • '+a.notes:''),qty:num(a.delta),unit:part.unit||'ea'});
     });
+
+    // New receipts are written onto the affected Part in the same local
+    // trackerStore batch that credits stock. Their audit survives Order edits
+    // or deletion. Never add them to stockQty a second time here.
+    arr(part.receiptHistory).forEach(function(r){
+      if(!(num(r.qty)>0))return;
+      var desc='Order receipt • '+(r.item||part.name||'Part')+
+        (r.vendor?' • '+r.vendor:'')+(r.tracking?' • Ref '+r.tracking:'');
+      rows.push({date:r.date||'',kind:'RECEIPT',desc,qty:num(r.qty),unit:r.unit||part.unit||'ea'});
+    });
+
+    // Older receipts only have automatically generated Order Updates text.
+    // Display them without migrating or crediting stock again. A structured
+    // event on ANY Part takes precedence so a later order re-link cannot
+    // reproduce one receipt in two different parts' histories.
+    var structuredUpdateIds=new Set();
+    arr(db.parts).forEach(function(p){
+      arr(p.receiptHistory).forEach(function(r){
+        if(r.orderUpdateId!==undefined&&r.orderUpdateId!==null)structuredUpdateIds.add(String(r.orderUpdateId));
+      });
+    });
+    arr(db.orders).forEach(function(o){
+      if(String(o.partId??'')!==String(part.id))return;
+      arr(o.updates).forEach(function(u){
+        if(u.id!==undefined&&u.id!==null&&structuredUpdateIds.has(String(u.id)))return;
+        var match=/^Received\s+(\d+(?:\.\d+)?)\s+(.+?)\s+\((?:line complete|partial receipt)\)\.$/.exec(String(u.text||''));
+        if(!match)return;
+        var qty=Number(match[1]);
+        if(!Number.isFinite(qty)||qty<=0)return;
+        var desc='Earlier order receipt • '+(o.item||part.name||'Part')+
+          (o.vendor?' • '+o.vendor:'')+(o.tracking?' • Ref '+o.tracking:'')+
+          ' • Historical part link inferred';
+        rows.push({date:u.date||o.receivedDate||'',kind:'RECEIPT',desc,qty,unit:match[2]||part.unit||'ea'});
+      });
+    });
     return rows.sort(function(a,b){return (b.date||'9999').localeCompare(a.date||'9999')});
   };
 
   function adjustmentHistoryHTML(p){
     var rows=[...arr(p.inventoryAdjustments)].sort(function(a,b){return (b.date||'').localeCompare(a.date||'')});
-    return `<div class="detail-section" id="manualInventoryAdjustments"><div class="section-tools"><label style="margin:0">Manual inventory adjustments</label><button class="icon-btn" onclick="openInventoryAdjustmentModal(${p.id})">+ Adjust</button></div>${rows.length?rows.map(function(a){var d=num(a.delta);return `<div class="inv-adjust-row"><span>${esc(a.date||'')}</span><span><b>${esc(a.reason||'Adjustment')}</b>${a.notes?`<div class="task-note">${esc(a.notes)}</div>`:''}</span><span class="inv-adjust-delta ${d>=0?'inv-adjust-pos':'inv-adjust-neg'}">${d>0?'+':''}${esc(d)} ${esc(p.unit||'ea')}</span><button class="icon-btn inv-reverse" onclick="reverseInventoryAdjustment(${p.id},${JSON.stringify(a.id)})">Reverse</button></div>`}).join(''):'<div class="muted small">No manual adjustments. Purchases and work-log usage still appear in the transaction history above.</div>'}<div class="tiny muted inv-ledger-note">On hand = recorded received/opening quantity + manual adjustments − work-log consumption. Project reservations affect Free inventory but do not change physical On Hand until they are used.</div></div>`;
+    return `<div class="detail-section" id="manualInventoryAdjustments"><div class="section-tools"><label style="margin:0">Manual inventory adjustments</label><button class="icon-btn" onclick="openInventoryAdjustmentModal(${p.id})">+ Adjust</button></div>${rows.length?rows.map(function(a){var d=num(a.delta);return `<div class="inv-adjust-row"><span>${esc(a.date||'')}</span><span><b>${esc(a.reason||'Adjustment')}</b>${a.notes?`<div class="task-note">${esc(a.notes)}</div>`:''}</span><span class="inv-adjust-delta ${d>=0?'inv-adjust-pos':'inv-adjust-neg'}">${d>0?'+':''}${esc(d)} ${esc(p.unit||'ea')}</span><button class="icon-btn inv-reverse" onclick="reverseInventoryAdjustment(${p.id},${JSON.stringify(a.id)})">Reverse</button></div>`}).join(''):'<div class="muted small">No manual adjustments. Linked purchases, order receipts and work-log usage appear in the movement history above.</div>'}<div class="tiny muted inv-ledger-note">On hand = recorded stock (including Orders-tab receipts) + manual adjustments − work-log consumption. Project reservations affect Free inventory but do not change physical On Hand until they are used.</div></div>`;
   }
 
   function decoratePartInventory(partId){
