@@ -7,6 +7,7 @@
   if(window.atomicReceiptOutbox)return;
   const KEY='n594zs_atomic_receipt_outbox_v1';
   const OPT='n594zs_atomic_receipts_opt_in_v1';
+  const ADJUST_OPT='n594zs_atomic_adjustments_opt_in_v1';
   const SNAP='n594zs_record_snapshot_v4';
   const VERS='n594zs_record_versions_v1';
   const RESOLVED='n594zs_atomic_receipt_resolutions_v1';
@@ -33,9 +34,11 @@
   }
   function pending(){return !!localStorage.getItem(KEY)}
   function enabled(){return localStorage.getItem(OPT)==='1'}
-  function shouldHandle(){
-    // Opting out must never let a new receipt bypass an older queued one.
-    return pending()||(enabled()&&!!supa&&!!cloudSession&&!!cloudWorkspaceId);
+  function adjustmentsEnabled(){return localStorage.getItem(ADJUST_OPT)==='1'}
+  function shouldHandle(kind='receipt'){
+    // Never bypass an earlier journal, regardless of which workflow created it.
+    const optedIn=kind==='adjustment'?adjustmentsEnabled():enabled();
+    return pending()||(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId);
   }
   function snapshot(){
     const out=new Map();
@@ -54,8 +57,9 @@
     if(e.workspaceId!==cloudWorkspaceId||e.userId!==cloudSession?.user?.id)
       throw new Error('A pending receipt belongs to a different workspace or account. Do not discard it.');
   }
-  function stage(work,message){
-    if(!shouldHandle())throw new Error('Atomic receipts require an authenticated, connected workspace.');
+  function stage(work,message,kind='receipt'){
+    const adjustment=kind==='adjustment';
+    if(!shouldHandle(kind))throw new Error('Atomic '+(adjustment?'adjustments':'receipts')+' require an authenticated, connected workspace.');
     if(!canCloudEdit())throw new Error('This workspace is read-only.');
     if(pending())throw new Error('An earlier receipt is still pending. Sync or review it before receiving more stock.');
     if(localStorage.getItem(PENDING)==='1')
@@ -63,11 +67,11 @@
     if(!cloudRecordSnapshot?.size)throw new Error('Cloud baseline is not available. Wait until the tracker finishes loading.');
     if(typeof crypto?.randomUUID!=='function')throw new Error('Secure receipt operation IDs are unavailable.');
     const before=snapshot(),old=copy(db);
-    let result,journalWritten=false;
+    let result,journalWritten=false,touchedKeys=[];
     try{
       // The scoped store rolls back an intermediate mutation error before we
       // ever create a journal. Do not use live captured Part/Order references.
-      result=trackerStore.batch(work,{persist:false});
+      result=trackerStore.batch(work,{persist:false,beforePersist:details=>{touchedKeys=details.keys}});
       const after=snapshot(),changes=[],originals=[];
       for(const [k,r] of after){
         const prior=before.get(k);
@@ -81,13 +85,34 @@
         });
         originals.push({key:k,data:prior.data});
       }
-      if(!changes.length||!changes.some(r=>r.record_type==='order'))
+      if(!changes.length)throw new Error('Atomic operation changed no records.');
+      if(adjustment){
+        // Atomic adjustments are limited to one existing Part and one append-only
+        // ledger entry; stockQty, unrelated Part fields and records are immutable.
+        if(changes.length!==1||changes[0].record_type!=='part')
+          throw new Error('Atomic adjustment must change exactly one existing Part.');
+        const change=changes[0],original=before.get(key('part',change.record_id))?.data;
+        if(!original)throw new Error('Atomic adjustment Part baseline is missing.');
+        const beforeRow=copy(original),afterRow=copy(change.data);
+        const previous=arr(beforeRow.inventoryAdjustments),next=arr(afterRow.inventoryAdjustments);
+        delete beforeRow.inventoryAdjustments;delete afterRow.inventoryAdjustments;
+        if(stable(beforeRow)!==stable(afterRow)||next.length!==previous.length+1||
+           stable(next.slice(0,-1))!==stable(previous))
+          throw new Error('Atomic adjustment may only append one inventory-history entry.');
+        const entry=next[next.length-1];
+        if(!entry?.id||!Number.isFinite(Number(entry.delta))||Number(entry.delta)===0||
+           previous.some(row=>String(row.id)===String(entry.id)))
+          throw new Error('Atomic adjustment history entry is invalid or duplicated.');
+        if(touchedKeys.length!==1||touchedKeys[0]!==key('part',change.record_id)||
+           Object.keys(old).some(k=>k!=='parts'&&k!=='orders'&&stable(old[k])!==stable(db[k])))
+          throw new Error('Atomic adjustment touched an unrelated record.');
+      }else if(!changes.some(r=>r.record_type==='order'))
         throw new Error('Receipt did not produce a changed Order record.');
       // This opt-in path is specifically for an Order + Part transaction.
       // A receipt without a linked Part can update only its Order and would
       // give a misleading atomic-inventory test result. Check BEFORE writing
       // the durable journal; the catch below restores the staged local DB.
-      for(const order of changes.filter(r=>r.record_type==='order')){
+      for(const order of (adjustment?[]:changes.filter(r=>r.record_type==='order'))){
         const linkedId=order.data?.partId;
         const partIncluded=linkedId&&changes.some(r=>r.record_type==='part'&&
           String(r.record_id)===String(linkedId));
@@ -101,7 +126,7 @@
       if([...after.keys()].some(k=>!before.has(k)&&!afterKeys.has(k)))
         throw new Error('Receipt unexpectedly created a Part or Order.');
       const e={
-        format:'N594ZS_ATOMIC_RECEIPT_V1',
+        format:'N594ZS_ATOMIC_RECEIPT_V1',operationKind:kind,
         operationId:crypto.randomUUID(),workspaceId:cloudWorkspaceId,
         userId:cloudSession.user.id,createdAt:new Date().toISOString(),
         changes, before:originals
@@ -113,7 +138,7 @@
       localStorage.setItem(PENDING,'1');
       cloudDirty=true;
       trackerStore.commit(message);
-      cloudStatusLabel('Receipt pending');
+      cloudStatusLabel(adjustment?'Adjustment pending':'Receipt pending');
       return result;
     }catch(error){
       if(!journalWritten)restore(old);
@@ -438,17 +463,19 @@
     const legacyUnlinked=e?.changes.some(r=>r.record_type==='order'&&
       (!r.data?.partId||!e.changes.some(p=>p.record_type==='part'&&
         String(p.record_id)===String(r.data.partId))));
-    const detail=e?'<div class="notice"><b>Pending receipt</b><br>Operation '+esc(e.operationId)+
+    const detail=e?'<div class="notice"><b>Pending '+(e.operationKind==='adjustment'?'adjustment':'receipt')+'</b><br>Operation '+esc(e.operationId)+
       '<br>Created '+esc(e.createdAt)+(e.blocked?'<br><b>Version conflict — no automatic retry.</b>':'')+
       '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
     openModal(modalHeader('Atomic receipt testing','One pending receipt per device; experimental')+
       '<div class="notice">When enabled on this device, Orders-tab receipts are journaled locally before cloud sync. The server applies linked Order and Part changes together. Other tracker records continue using normal sync.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
-      '<div class="detail-section"><b>Status: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending receipts cannot be discarded by reloading cloud data.</div></div>'+
+      '<div class="detail-section"><b>Atomic receipts: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending operations cannot be discarded by reloading cloud data.</div></div>'+ 
+      '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Separate opt-in; test on a disposable Part. Receipts and adjustments share one durable journal, so a second operation cannot overtake an unsynced first.</div></div>'+
       '<div class="modal-actions">'+
       (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">Download Pending Receipt Safety Copy</button>':'')+
-      '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable on This Device')+'</button>'+
+      '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable Receipt Testing')+'</button>'+ 
+      '<button class="secondary" onclick="atomicReceiptOutbox.toggleAdjustments()">'+(adjustmentsEnabled()?'Turn Off Atomic Adjustments':'Enable Atomic Adjustment Testing')+'</button>'+
       (e?(e.blocked?
         '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
         '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Receipt</button>'):'')+
@@ -462,6 +489,17 @@
     }
     openSettings();
   }
+  function toggleAdjustments(){
+    if(adjustmentsEnabled()){
+      localStorage.removeItem(ADJUST_OPT);
+      toast('New adjustments use normal sync. Pending operations stay protected.','good');
+    }else{
+      if(!confirm('Enable experimental atomic inventory adjustments on this device? Start with a disposable Part. Only one pending inventory operation at a time.'))return;
+      localStorage.setItem(ADJUST_OPT,'1');
+    }
+    openSettings();
+  }
+  function stageAdjustment(work,message){return stage(work,message,'adjustment')}
   async function retryFromUI(){
     if(!cloudSession||!cloudWorkspaceId)return alert('Sign in to your original workspace first.');
     const result=await window.saveCloudState();
@@ -528,7 +566,7 @@
     return originalStatus(label,kind);
   };
   window.atomicReceiptOutbox=Object.freeze({
-    enabled,shouldHandle,hasPending:pending,stage,flush,recoverLocal,
-    openSettings,toggle,retryFromUI,reviewConflict,exportPendingJournal
+    enabled,adjustmentsEnabled,shouldHandle,hasPending:pending,stage,stageAdjustment,flush,recoverLocal,
+    openSettings,toggle,toggleAdjustments,retryFromUI,reviewConflict,exportPendingJournal
   });
 })();
