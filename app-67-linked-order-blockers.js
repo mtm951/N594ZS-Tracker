@@ -375,7 +375,7 @@
       '<div class="notice">Add a separate blocker for each issue or delivery. Any Order may block several projects; you can find it by typing its item name here.</div>'+
       '<div class="form-grid" style="margin-top:12px">'+
       '<div class="full"><label>What is holding up this project?</label><textarea id="lobDescription" rows="3"'+
-      ' oninput="if(this.dataset)this.dataset.autofill=\\'0\\'">'+
+      ' oninput="this.dataset.autofill=0">'+
       esc(existing?.description||'')+'</textarea></div>'+
       '<div class="full"><label>Blocker type</label><select id="lobType" onchange="blockerTypeChanged()">'+
       '<option value="order"'+(manual?'':' selected')+'>Waiting for an order</option>'+
@@ -395,6 +395,28 @@
       '<button class="primary" onclick="saveLinkedOrderBlocker('+Number(p.id)+')">Save blocker</button></div>',true);
     renderRows();
   };
+  window.resolveManualProjectBlocker=function(projectId,blockerId){
+    const p=projectById(Number(projectId)),entry=rows(p?.orderBlockers)
+      .find(x=>same(x.id,blockerId));
+    if(!p||!entry||!isManual(entry)||entry.status!=='waiting')return;
+    if(pending())return alert('Sync or review the pending atomic inventory transaction first.');
+    if(!confirm('Mark "'+entry.description+'" resolved? This does not record a part receipt.'))return;
+    try{
+      trackerStore.batch(tx=>tx.update('project',p.id,draft=>{
+        const blocker=rows(draft.orderBlockers).find(x=>same(x.id,blockerId));
+        if(!blocker||!isManual(blocker)||blocker.status!=='waiting')
+          throw new Error('The manual blocker has changed; reopen this project.');
+        blocker.status='resolved';blocker.resolvedDate=today();
+        blocker.resolvedAt=new Date().toISOString();
+        blocker.resolvedBy='manual';
+        draft.updates=rows(draft.updates);
+        draft.updates.push({id:uid(),date:today(),
+          text:'Manual blocker resolved: '+blocker.description});
+        finishIfReady(draft);
+      }),{message:'Manual project blocker resolved.'});
+      window.openProjectDetail(p.id);
+    }catch(e){alert('Blocker was not resolved: '+e.message);}
+  };
   window.removeLinkedOrderBlocker=function(projectId,blockerId){
     const p=projectById(Number(projectId)),b=rows(p?.orderBlockers).find(x=>same(x.id,blockerId));
     if(!p||!b||b.status!=='waiting')return;
@@ -406,7 +428,7 @@
         if(!current||current.status!=='waiting')throw new Error('Blocker changed; refresh.');
         d.orderBlockers=d.orderBlockers.filter(x=>!same(x.id,blockerId));
         d.updates=rows(d.updates);
-        d.updates.push({id:uid(),date:today(),text:'Removed order blocker: '+current.description});
+        d.updates.push({id:uid(),date:today(),text:'Removed '+(isManual(current)?'manual':'order')+' blocker: '+current.description});
         finishIfReady(d);
       }),{message:'Waiting order blocker removed.'});
       window.openProjectDetail(p.id);
@@ -435,43 +457,51 @@
     const result=baseAudit(p),outstanding=waiting(p);
     if(!outstanding.length)return result;
     const issue={severity:'warning',label:'Outstanding order dependencies',
-      detail:outstanding.map(b=>b.description+' ('+mode(b).toUpperCase()+')').join(' • ')};
+      detail:outstanding.map(b=>b.description+(isManual(b)?' (MANUAL)':' ('+mode(b).toUpperCase()+')')).join(' • ')};
     return {...result,issues:[...result.issues,issue],
       warnings:[...result.warnings,issue],ready:false};
   };
   function card(p){
-    const all=rows(p.orderBlockers),orders=projectOrders(p),legacy=String(p.blockers||'').trim();
+    const all=rows(p.orderBlockers),orders=projectOrders(p),
+      legacy=String(p.blockers||'').trim();
     const prompt=legacy&&orders.length===1&&!all.length&&numeric(orders[0].qty)>0&&
       received(orders[0])+1e-9>=numeric(orders[0].qty)
-      ?'<div class="notice" style="margin:9px 0">Your linked order is already received. Confirm the old note refers only to it to resolve the blocker.</div>'+
+      ?'<div class="notice" style="margin:9px 0">An order linked to this project is already received. Confirm that your old blocker note refers only to it to resolve that note.</div>'+
        '<button class="btn success" onclick="resolveExistingLinkedOrderBlocker('+Number(p.id)+')">Resolve from Received Order</button>':'';
     const items=all.map(b=>{
-      const d=deps(b),done=b.status==='resolved';
+      const d=deps(b),done=b.status==='resolved',manual=isManual(b);
       const met=d.filter(x=>satisfied(x)).length;
+      const status=done?'Resolved':manual?'Manual issue':'Waiting for order';
       return '<div class="detail-card" style="padding:11px;margin:9px 0;background:var(--surface, #fff)">'+
         '<div class="section-tools"><div><b>'+esc(b.description)+'</b><div class="tiny muted">'+
-        (mode(b)==='any'?'ANY ONE':'ALL')+' • '+met+'/'+d.length+' requirements currently met'+
-        (done?' • Resolved '+esc(b.resolvedDate||''):' • Waiting')+
-        '</div></div><span class="mini-badge">'+(done?'Resolved':'Waiting')+'</span></div>'+
-        d.map(x=>{
+        (manual?'Manually resolved when the issue is addressed':
+          d.length===1?'Waiting for 1 ordered item':
+          (mode(b)==='any'?'ANY ONE':'ALL')+' • '+met+'/'+d.length+' requirements met')+
+        (done?' • Resolved '+esc(b.resolvedDate||''):'')+
+        '</div></div><span class="mini-badge">'+status+'</span></div>'+
+        (!manual?d.map(x=>{
           const o=findOrder(x.orderId),got=o?received(o):0,ok=satisfied(x);
           return '<div class="kv" style="padding:7px 0"><div>'+
             (o?'<button class="linkbtn" onclick="openOrderDetail('+Number(o.id)+')">'+esc(o.item)+'</button>':
               '<b>Linked order missing</b>')+
             '<div class="task-note">'+esc(got)+' / '+esc(x.requiredQty)+' required'+
-            (ok?' • Ready':' • Waiting')+'</div></div>'+
-            '<span class="mini-badge">'+(ok?'Received':'Outstanding')+'</span></div>';
-        }).join('')+
-        (!done?'<div class="action-row" style="margin-top:8px"><button class="icon-btn" onclick="openLinkedOrderBlockerModal('+
-          Number(p.id)+','+Number(b.id)+')">Edit requirements</button>'+
-          '<button class="icon-btn" onclick="removeLinkedOrderBlocker('+Number(p.id)+','+Number(b.id)+')">Remove</button></div>':'')+
+            (ok?' • Received':' • Waiting')+'</div></div>'+
+            '<span class="mini-badge">'+(ok?'Ready':'Outstanding')+'</span></div>';
+        }).join(''):'')+
+        (!done?'<div class="action-row" style="margin-top:8px">'+
+          (manual?'<button class="btn success" onclick="resolveManualProjectBlocker('+
+            Number(p.id)+','+Number(b.id)+')">Mark resolved</button>':'')+
+          '<button class="icon-btn" onclick="openLinkedOrderBlockerModal('+
+          Number(p.id)+','+Number(b.id)+')">Edit</button>'+
+          '<button class="icon-btn" onclick="removeLinkedOrderBlocker('+
+          Number(p.id)+','+Number(b.id)+')">Remove</button></div>':'')+
         '</div>';
     }).join('');
     return '<div class="detail-card" id="projectOrderBlockersCard">'+
-      '<div class="section-tools"><div><h3>Order-linked Blockers</h3><div class="tiny muted">Reuse orders across projects and blockers; ALL or ANY conditions.</div></div>'+
-      '<button class="icon-btn" onclick="openLinkedOrderBlockerModal('+Number(p.id)+')">+ Link Blocker</button></div>'+
-      (all.length?items:'<div class="muted small">No order dependencies linked yet.</div>')+
-      prompt+'</div>';
+      '<div class="section-tools"><div><h3>Project Blockers</h3>'+
+      '<div class="tiny muted">Several independent blockers per project. An order can block more than one project.</div></div>'+
+      '<button class="icon-btn" onclick="openLinkedOrderBlockerModal('+Number(p.id)+')">+ Add Blocker</button></div>'+
+      (all.length?items:'<div class="muted small">No tracked blockers yet.</div>')+prompt+'</div>';
   }
   const detailBase=window.openProjectDetail;
   window.openProjectDetail=function(id){
