@@ -124,6 +124,12 @@
         throw new Error('Only an existing waiting blocker can be edited.');
       if(moveLegacy&&(!String(p.blockers||'').trim()||blockerId!=null))
         throw new Error('The existing free-text blocker changed. Reopen the project.');
+      // Adding another Order to an existing blocker belongs in Edit
+      // requirements; do not silently create an indistinguishable second
+      // blocker because the form prefilled the same description.
+      if(!existing&&rows(p.orderBlockers).some(b=>b.status==='waiting'&&
+          String(b.description||'').trim().toLowerCase()===note.toLowerCase()))
+        throw new Error('A waiting blocker with this name already exists. Use Edit requirements on that blocker to add another order.');
       const id=existing?.id??uid();
       tx.update('project',projectId,d=>{
         d.orderBlockers=rows(d.orderBlockers);
@@ -168,30 +174,59 @@
   };
   window.saveMultiOrderBlocker=saveGroup;
 
-  function orderOptionHTML(p,selected){
-    const available=availableOrders(p);
-    const missing=selected!=null&&!available.some(o=>same(o.id,selected));
-    return (missing?'<option value="'+esc(selected)+'" selected disabled>'+
-      esc('Missing or cancelled order — select a replacement')+'</option>':'')+
-      available.map(o=>{
-        const owner=rows(db.projects).find(x=>same(x.id,o.projectId));
-        const prefix=same(o.projectId,p.id)?'This project':belongs(o,p.id)?'This project (shared)':'Shared: '+(owner?.title||'Unassigned');
-        return '<option value="'+esc(o.id)+'" '+(same(o.id,selected)?'selected':'')+'>'+
-          esc(prefix+' • '+o.item+' ('+received(o)+'/'+numeric(o.qty)+' received)')+'</option>';
-      }).join('');
+  // The order picker belongs to the current PROJECT, not the global Orders
+  // table. Cross-project orders are available only after an explicit opt-in.
+  // The item name leads every option; the owner project is just context.
+  function orderOptionHTML(p,selected,includeOthers=false,search=''){
+    const all=availableOrders(p);
+    const own=all.filter(o=>belongs(o,p.id));
+    const others=all.filter(o=>!belongs(o,p.id));
+    const original=all.find(o=>same(o.id,selected));
+    const query=String(search||'').trim().toLowerCase();
+    const candidate=includeOthers?others.filter(o=>
+      [o.item,o.vendor,o.tracking,projectName(o.projectId)].some(t=>
+        String(t||'').toLowerCase().includes(query))):[];
+    function option(o,shared=false){
+      const source=shared?' — '+projectName(o.projectId):'';
+      return '<option value="'+esc(o.id)+'"'+(same(o.id,selected)?' selected':'')+'>'+
+        esc((o.item||'Unnamed order')+' ('+received(o)+'/'+numeric(o.qty)+' received)'+source)+'</option>';
+    }
+    const missing=selected!=null&&selected!==''&&!original;
+    const retained=original&&!belongs(original,p.id)&&!includeOthers;
+    return '<option value=""'+(selected==null||selected===''?' selected':'')+'>— Select an order —</option>'+
+      (missing?'<option value="'+esc(selected)+'" selected disabled>Missing or cancelled order — select a replacement</option>':'')+
+      (own.length?'<optgroup label="Orders linked to this project">'+own.map(o=>option(o)).join('')+'</optgroup>':
+        '<option disabled>No orders linked to this project yet</option>')+
+      (retained?'<optgroup label="Previously selected shared order">'+option(original,true)+'</optgroup>':'')+
+      (includeOthers?'<optgroup label="Other projects — optional">'+
+        (candidate.length?candidate.map(o=>option(o,true)).join(''):
+          '<option disabled>No other orders match this search</option>')+
+        // Keep an existing selection when filtering; a search must never
+        // silently change a saved requirement to another part.
+        (original&&!belongs(original,p.id)&&!candidate.some(o=>same(o.id,original.id))?option(original,true):'')+
+        '</optgroup>':'');
   }
   let editingProjectId=null,editingBlockerId=null,editRows=[];
   const dom=id=>document.getElementById(id);
   function dependencyRow(p,entry,index){
-    const options=orderOptionHTML(p,entry.orderId);
-    const o=findOrder(entry.orderId)||availableOrders(p)[0];
+    const options=orderOptionHTML(p,entry.orderId,!!entry.includeOthers,entry.search||'');
+    const o=findOrder(entry.orderId);
+    const quantity=entry.requiredQty??'';
     return '<div class="detail-card lob-dependency" data-index="'+index+'" style="padding:10px;margin:7px 0">'+
       '<div class="section-tools"><b>Required order '+(index+1)+'</b>'+
       '<button class="icon-btn" type="button" onclick="removeBlockerDependency('+index+')"'+
       (editRows.length===1?' disabled title="Keep at least one order"':'')+'>Remove</button></div>'+
-      '<div class="form-grid"><div class="full"><label>Order</label>'+
-      '<select id="lobOrder'+index+'" onchange="linkedOrderBlockerOrderChanged('+index+')">'+options+'</select></div>'+
-      '<div><label>Required quantity</label><input id="lobQty'+index+'" type="number" min="0.000001" step="any" max="'+numeric(o?.qty)+'" value="'+esc(entry.requiredQty)+'" oninput="linkedOrderBlockerOrderChanged('+index+',false)"></div>'+
+      '<div class="form-grid"><div class="full"><label>Order from this project</label>'+
+      '<select id="lobOrder'+index+'" onchange="linkedOrderBlockerOrderChanged('+index+')">'+options+'</select>'+
+      '<small>Select the actual order containing the parts needed. Other projects are hidden unless you choose to include them.</small></div>'+
+      '<div class="full"><label><input id="lobIncludeOther'+index+'" type="checkbox" style="width:auto;margin-right:8px" '+
+      (entry.includeOthers?'checked ':'')+'onchange="toggleBlockerOtherOrders('+index+')"> Include orders from other projects</label></div>'+
+      (entry.includeOthers?'<div class="full"><label>Search other orders</label>'+
+        '<input id="lobSearch'+index+'" type="search" value="'+esc(entry.search||'')+
+        '" placeholder="Search order, vendor or project…" oninput="filterBlockerOtherOrders('+index+')"></div>':'')+
+      '<div><label>Required quantity</label><input id="lobQty'+index+'" type="number" min="0.000001" step="any"'+
+      (o?' max="'+numeric(o.qty)+'"':'')+' value="'+esc(quantity)+
+      '" oninput="linkedOrderBlockerOrderChanged('+index+',false)"></div>'+
       '<div class="full small muted" id="lobHint'+index+'"></div></div></div>';
   }
   function renderRows(){
@@ -202,17 +237,22 @@
   }
   function captureRows(){
     editRows=editRows.map((entry,i)=>({
+      ...entry,
       orderId:dom('lobOrder'+i)?.value??entry.orderId,
-      requiredQty:dom('lobQty'+i)?.value??entry.requiredQty
+      requiredQty:dom('lobQty'+i)?.value??entry.requiredQty,
+      search:dom('lobSearch'+i)?.value??entry.search??''
     }));
   }
   window.addBlockerDependency=function(){
     if(editRows.length>=20)return alert('Up to 20 orders per blocker.');
     captureRows();
-    const p=projectById(editingProjectId),orders=p&&availableOrders(p);
-    const chosen=orders?.find(o=>!editRows.some(d=>same(d.orderId,o.id)));
-    if(!chosen)return alert('No additional orders are available. Create the required order first.');
-    editRows.push({orderId:chosen.id,requiredQty:chosen.qty});
+    const p=projectById(editingProjectId);
+    if(!p)return;
+    // Critically: never auto-select an unrelated aircraft order when the
+    // project's own choices have been exhausted.
+    const next=availableOrders(p).find(o=>belongs(o,p.id)&&
+      !editRows.some(d=>same(d.orderId,o.id)));
+    editRows.push({orderId:next?.id??null,requiredQty:next?.qty??'',includeOthers:false,search:''});
     renderRows();
   };
   window.removeBlockerDependency=function(index){
@@ -220,13 +260,35 @@
     captureRows();
     editRows.splice(index,1);renderRows();
   };
+  window.toggleBlockerOtherOrders=function(index){
+    captureRows();
+    const entry=editRows[index];
+    if(!entry)return;
+    const checkbox=dom('lobIncludeOther'+index);
+    entry.includeOthers=checkbox?!!checkbox.checked:!entry.includeOthers;
+    if(!entry.includeOthers)entry.search='';
+    renderRows();
+  };
+  window.filterBlockerOtherOrders=function(index){
+    const p=projectById(editingProjectId),select=dom('lobOrder'+index);
+    if(!p||!select||!editRows[index])return;
+    const selected=select.value;
+    editRows[index].search=dom('lobSearch'+index)?.value||'';
+    select.innerHTML=orderOptionHTML(p,selected,true,editRows[index].search);
+    select.value=selected;
+  };
   window.linkedOrderBlockerOrderChanged=function(index,reset=true){
     const select=dom('lobOrder'+index),qty=dom('lobQty'+index);
-    const o=select&&findOrder(select.value);
-    if(!o||!qty)return;
+    if(!select||!qty)return;
+    const o=findOrder(select.value),hint=dom('lobHint'+index);
+    if(!o){
+      qty.removeAttribute?.('max');
+      if(reset)qty.value='';
+      if(hint)hint.textContent='Choose an order linked to this project, or explicitly include another project’s order.';
+      return;
+    }
     qty.max=String(numeric(o.qty));
     if(reset)qty.value=String(numeric(o.qty));
-    const hint=dom('lobHint'+index);
     if(hint)hint.textContent=received(o)+' of '+numeric(o.qty)+' received'+
       (received(o)>=numeric(qty.value)&&numeric(qty.value)>0?' • already satisfies this requirement':'');
   };
@@ -237,6 +299,8 @@
     const holds=!!dom('lobHolds')?.checked;
     const moveLegacy=!!dom('lobMoveLegacy')?.checked;
     try{
+      if(editRows.some(d=>!d.orderId||Number(d.orderId)<=0))
+        throw new Error('Choose an actual Order for every required row. No other-project order will be selected automatically.');
       const result=saveGroup(Number(projectId),editingBlockerId,note,dependencyMode,editRows,holds,moveLegacy);
       window.openProjectDetail(Number(projectId));
       toast('Order dependencies saved.','good');
@@ -245,23 +309,31 @@
   };
   window.openLinkedOrderBlockerModal=function(projectId,blockerId=null){
     const p=projectById(Number(projectId));if(!p)return;
-    const orders=availableOrders(p);
-    if(!orders.length)return alert('Create an order first, then link it to this project blocker.');
+    const all=availableOrders(p),own=all.filter(o=>belongs(o,p.id));
+    if(!all.length)return alert('Create an order first, then link it to this project blocker.');
     const existing=blockerId==null?null:rows(p.orderBlockers).find(b=>same(b.id,blockerId));
     if(blockerId!=null&&(!existing||existing.status!=='waiting'))
       return alert('Only waiting blockers may be edited. Create a new blocker if needed.');
     editingProjectId=Number(p.id);editingBlockerId=blockerId;
-    editRows=existing?deps(existing).map(d=>({...d})):
-      [{orderId:orders[0].id,requiredQty:orders[0].qty}];
+    editRows=existing?deps(existing).map(d=>({...d,includeOthers:false,search:''})):
+      [{orderId:own[0]?.id??null,requiredQty:own[0]?.qty??'',includeOthers:false,search:''}];
     const legacy=String(p.blockers||'').trim();
-    openModal(modalHeader(existing?'Edit order blocker':'New order blocker',p.title)+
-      '<div class="notice">One order may unblock several jobs. A blocker may depend on ALL of its orders, or ANY one alternative. Shared links do not reserve additional physical stock; use project reservations to allocate parts.</div>'+
+    const existingWaiting=!existing?rows(p.orderBlockers).filter(b=>b.status==='waiting'):[];
+    const editAdvice=existingWaiting.length?
+      '<div class="notice" style="margin:10px 0"><b>Adding a part to an existing blocker?</b> Use Edit requirements instead. This form creates a separate blocker.'+
+      existingWaiting.map(b=>'<div style="margin-top:8px"><button class="btn secondary" type="button" onclick="openLinkedOrderBlockerModal('+
+        Number(p.id)+','+Number(b.id)+')">Edit '+esc(b.description)+'</button></div>').join('')+'</div>':'';
+    openModal(modalHeader(existing?'Edit order blocker':'New independent blocker',p.title)+
+      '<div class="notice">Select the actual orders holding up this project. By default, only orders linked to this project appear. Add another required order to an existing blocker using Edit requirements; do not create a duplicate blocker.</div>'+
+      editAdvice+
+      (!own.length?'<div class="notice" style="margin:10px 0">No orders are linked to this project yet. Add or link an Order first, or explicitly enable other-project orders below.</div>':'')+
       '<div class="form-grid" style="margin-top:12px">'+
       '<div class="full"><label>What is being held up?</label><textarea id="lobDescription" rows="3">'+
-      esc(existing?.description||legacy||'Waiting for parts')+'</textarea></div>'+
+      esc(existing?.description||(existingWaiting.length?'':legacy||''))+'</textarea></div>'+
       '<div class="full"><label>When is this blocker resolved?</label>'+
       '<select id="lobMode"><option value="all" '+(mode(existing)==='all'?'selected':'')+'>ALL required orders received</option>'+
-      '<option value="any" '+(mode(existing)==='any'?'selected':'')+'>ANY ONE required order received</option></select></div>'+
+      '<option value="any" '+(mode(existing)==='any'?'selected':'')+'>ANY ONE required order received</option></select>'+
+      '<small>ALL means every selected order reaches its specified quantity; ANY means one selected alternative does.</small></div>'+
       '<div class="full" id="lobDependencies"></div>'+
       '<div class="full"><button class="btn secondary" type="button" onclick="addBlockerDependency()">+ Add another order</button></div>'+
       '<div class="full"><label><input id="lobHolds" type="checkbox" style="width:auto;margin-right:8px" '+
