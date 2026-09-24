@@ -357,3 +357,51 @@ function inventoryHarness(db,values={},includeSmartMovement=false){
 }
 
 console.log('core workflow regression tests passed');
+
+
+
+// Scoped manual adjustments use the real production handler and the same
+// history-only Part mutation in both default and opt-in atomic mode.
+{
+  const db={parts:[{id:10,name:'Test terminal',stockQty:4,unit:'ea',linkedProjectIds:[],
+    inventoryAdjustments:[]}],orders:[],projects:[],logs:[],purchases:[],
+    equipment:[],invoices:[],maintenance:[],settings:{}};
+  const values={iaDelta:'-1',iaDate:'2026-09-24',iaReason:'Count correction',iaNotes:'Measured'};
+  const h=inventoryHarness(db,values);
+  h.RECORD_ARRAYS={part:'parts'};
+  load(dataStoreSource,h,'app-17a-data-store.js');
+  const staged=[];
+  let atomic=true,saveCalls=0;
+  h.saveDB=()=>{saveCalls++};
+  h.atomicReceiptOutbox={
+    shouldHandle:kind=>{assert.equal(kind,'adjustment');return atomic},
+    stageAdjustment:(work,message)=>{
+      staged.push(message);
+      return h.trackerStore.batch(work,{message});
+    }
+  };
+  h.saveInventoryAdjustment(10);
+  assert.deepEqual(staged,['Inventory adjustment recorded.']);
+  assert.equal(db.parts[0].stockQty,4,'adjustment overwrote actual receipt stock');
+  assert.equal(db.parts[0].inventoryAdjustments.length,1);
+  assert.equal(db.parts[0].inventoryAdjustments[0].delta,-1);
+  assert.equal(h.partAvailable(db.parts[0]),3);
+  assert.equal(saveCalls,1);
+  const adjustmentId=db.parts[0].inventoryAdjustments[0].id;
+  h.reverseInventoryAdjustment(10,adjustmentId);
+  assert.deepEqual(staged,['Inventory adjustment recorded.','Inventory adjustment reversed.']);
+  assert.equal(db.parts[0].inventoryAdjustments.length,2);
+  assert.equal(db.parts[0].inventoryAdjustments[1].reverses,adjustmentId);
+  assert.equal(h.partAvailable(db.parts[0]),4);
+  assert.equal(saveCalls,2);
+  h.reverseInventoryAdjustment(10,adjustmentId);
+  assert.equal(db.parts[0].inventoryAdjustments.length,2,'reversal duplicated');
+
+  atomic=false;
+  values.iaDelta='2';
+  h.saveInventoryAdjustment(10);
+  assert.equal(db.parts[0].inventoryAdjustments.length,3);
+  assert.equal(h.partAvailable(db.parts[0]),6);
+  assert.equal(staged.length,2,'non-opt-in adjustment reached experimental journal');
+  assert.equal(saveCalls,3);
+}

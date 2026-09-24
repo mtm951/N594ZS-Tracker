@@ -14,7 +14,18 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.22** (verify against current `index.html` on every new session)
+- Current release: **v5.19.23** (verify against current `index.html` on every new session)
+
+## v5.19.23 opt-in atomic manual inventory adjustment (September 24)
+
+- On September 24, the owner confirmed the current Order/Part atomic receiving workflow and its cross-device history checks passed on their devices. Before any expansion, created the immutable GitHub recovery branch `validated-atomic-receiving-2026-09-24` at `11f6d449ecc6f9c0414ac6a41b59615b0774698f`, plus a **new cloud snapshot** id `314b75e5-0b61-4060-b919-fd76acd9704d` containing 916 active records. Neither action edited existing aircraft records.
+- This is a SMALL FIRST EXTENSION: the existing Part's **Save Adjustment** and **Reverse** buttons use a scoped `trackerStore.batch` for predictable synchronous rollback. When the new **Atomic manual adjustments** device toggle is enabled under Cloud Account → Atomic Inventory Testing, they instead use the existing durable atomic receipt journal plus the existing `sync_tracker_records_atomic` RPC. Receipts keep their independent pre-existing opt-in. No database schema/RPC changes were required.
+- Adjustment staging is deliberately restricted to exactly ONE existing Part, EXACTLY ONE appended `inventoryAdjustments` history event, no stockQty or other Part-field changes and no unrelated record touched. It verifies the confirmed cloud baseline before durable write; if unsafe, the local batch rolls back without an outgoing journal. Both operation types share one journal and one pending slot; an older blocked journal cannot be bypassed by toggling either mode off.
+- New manual event fields are normalized **before** journaling (`reverses:null` for a fresh adjustment), avoiding a false mismatch when global `saveDB` normalizes Part adjustment history. The code exposes `stageAdjustment`, `adjustmentsEnabled` and `toggleAdjustments`, but leaves adjustment mode **OFF by default** on every device. Non-opt-in adjustments still use ordinary guarded cloud sync.
+- The existing generic exact-cloud-match conflict review can safely acknowledge an already-applied Part-only adjustment without reapplying it, with a corrected adjustment-specific confirmation. Stale or divergent records remain blocked and need explicit review. Do NOT interpret a successful retry alone as cross-device testing.
+- Added tests for the new production handler, reversal deduplication, original default path, idempotent Part-only RPC acknowledgement, offline reload recovery, strict mutation scope, storage failure, pending-operation serialization, server version conflict, exact-cloud-match review without replay and post-save normalization. Existing receipt regressions remain unchanged.
+- This release DOES NOT atomically protect the more complex Reserve→Use, newly created Work Log entries, purchase-stock materialization or other multi-record consumption flows. Those require a separately designed typed journal that handles newly created Logs/Projects/Purchases, before enabling them on genuine aircraft data. Do not claim full application-wide ACID.
+- Feature branch `atomic-inventory-adjustments-v5.19.23`; branch CI and normal Pages deploy must pass before counting v5.19.23 as live. Real-device offline and simultaneous-device tests for **adjustments** are still required. Start with a disposable Part; don't alter existing actual stock during validation.
 
 ## v5.19.22 supervised recovery of a deleted experimental test Order
 
