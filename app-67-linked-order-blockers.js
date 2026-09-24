@@ -217,7 +217,7 @@
         '<button class="icon-btn" type="button" onclick="removeBlockerDependency('+index+')"'+
         (editRows.length===1?' disabled':'')+'>Remove</button></div>':'')+
       '<div class="form-grid">'+
-      '<div class="full"><label>Search for the order blocking this project</label>'+
+      '<div class="full order-item-autocomplete"><label>Search for the order blocking this project</label>'+
       '<input id="lobSearch'+index+'" type="search" autocomplete="off" role="combobox"'+
       ' aria-autocomplete="list" aria-expanded="false" aria-controls="lobSuggestions'+index+'"'+
       ' placeholder="Type an item name, vendor or order number…"'+
@@ -226,7 +226,7 @@
       ' oninput="searchBlockerOrders('+index+')"'+
       ' onkeydown="blockerOrderSearchKeys(event,'+index+')">'+
       '<div id="lobSuggestions'+index+'" role="listbox" class="order-item-suggestions"'+
-      ' style="max-height:235px;overflow-y:auto" hidden></div>'+
+      ' style="position:relative;top:auto;left:auto;right:auto;max-height:235px;overflow-y:auto;margin-top:6px" hidden></div>'+
       '<div id="lobSelected'+index+'" class="notice" style="margin-top:8px;'+(o?'':'display:none')+'">'+
       (o?selectedOrderCaption(o,p):'')+'</div>'+
       '<small>Start typing to see matching orders. This project’s orders appear first;'+
