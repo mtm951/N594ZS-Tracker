@@ -388,7 +388,53 @@ console.log('linked order blocker and atomic receipt regressions passed');
   assert.match(h.modal(),/ALL required orders received/);
   assert.match(h.modal(),/ANY ONE required order received/);
   assert.match(h.modal(),/Add another order/);
-  assert.match(holder.innerHTML,/Shared: Unassigned/);
+  assert.match(h.modal(),/Edit Waiting on panel light/,'new blocker should guide user to edit the existing blocker');
+  assert.match(holder.innerHTML,/Orders linked to this project/);
+  assert.match(holder.innerHTML,/Test panel light/);
+  assert.doesNotMatch(holder.innerHTML,/Shared connector/,'unrelated project orders should not clutter the picker');
+  assert.doesNotMatch(holder.innerHTML,/Unassigned/);
+  h.ctx.toggleBlockerOtherOrders(0); // explicit opt-in (no DOM checkbox in fixture)
+  assert.match(holder.innerHTML,/Shared connector/);
+  assert.match(holder.innerHTML,/Other projects — optional/);
+  assert.match(holder.innerHTML,/Shared connector \(0\/1 received\) — Unlinked/);
+  assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,null,'Waiting on panel light','all',
+    [{orderId:31,requiredQty:1}],true,false),/Edit requirements/);
+}
+
+// Adding another order prefers the remaining order linked to THIS project.
+// When those run out, the extra row stays unselected rather than choosing
+// an unrelated project (e.g., prop bolts on an annunciator blocker).
+{
+  const db=fixture();
+  db.orders.push({id:32,item:'TEST CONNECTOR',partId:22,projectId:41,
+    qty:4,receivedQty:0,status:'Ordered',updates:[]});
+  db.orders.push({id:33,item:'PROPELLER WASHERS',partId:23,projectId:99,
+    qty:6,receivedQty:0,status:'Ordered',updates:[]});
+  const h=harness(db),holder={innerHTML:''};
+  h.ctx.document.getElementById=id=>id==='lobDependencies'?holder:null;
+  h.ctx.openLinkedOrderBlockerModal(41,71);
+  assert.match(holder.innerHTML,/Test panel light/);
+  assert.doesNotMatch(holder.innerHTML,/PROPELLER WASHERS/);
+  h.ctx.addBlockerDependency();
+  assert.match(holder.innerHTML,/Required order 2/);
+  assert.match(holder.innerHTML,/value="32" selected/,'second row should choose TEST CONNECTOR');
+  assert.doesNotMatch(holder.innerHTML,/PROPELLER WASHERS/);
+  h.ctx.addBlockerDependency();
+  assert.match(holder.innerHTML,/Required order 3/);
+  assert.match(holder.innerHTML,/value="" selected/,'no unrelated Order should be auto-selected');
+  assert.doesNotMatch(holder.innerHTML,/PROPELLER WASHERS/);
+  h.ctx.toggleBlockerOtherOrders(2);
+  assert.match(holder.innerHTML,/PROPELLER WASHERS/,'an unrelated Order is available on explicit request');
+}
+{
+  const db=fixture();
+  db.orders[0].projectId=99;
+  const h=harness(db),holder={innerHTML:''};
+  h.ctx.document.getElementById=id=>id==='lobDependencies'?holder:null;
+  h.ctx.openLinkedOrderBlockerModal(41);
+  assert.match(h.modal(),/No orders are linked to this project yet/);
+  assert.match(holder.innerHTML,/value="" selected/);
+  assert.doesNotMatch(holder.innerHTML,/Test panel light/);
 }
 
 // A single physical order shared with TWO projects must produce one Part
