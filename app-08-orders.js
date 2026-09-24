@@ -163,7 +163,7 @@ function openOrderProjectLinkModal(orderId){
     '<div class="form-grid" style="margin-top:12px"><div class="full"><label>Add another project</label><select id="olAddProject">'+projectOptions(null)+'</select></div>'+
     '<div class="full"><button class="btn primary" onclick="addOrderProjectLink('+Number(orderId)+')">+ Add Project</button></div>'+
     '<div class="full"><label>Change primary project</label><select id="olPrimaryProject">'+projectOptions(o.projectId)+'</select>'+
-    '<small>Changing primary replaces that primary link and moves the order\'s project cost attribution. Other related links remain.</small></div></div>'+
+    '<small>Changing primary replaces that primary link and moves the order\'s project cost attribution. Other related links remain. Selecting No linked project promotes the next related project if one exists.</small></div></div>'+
     '<div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail('+Number(orderId)+')">Done</button>'+
     '<button class="btn primary" onclick="saveOrderProjectLink('+Number(orderId)+')">Change Primary</button></div>',true);
 }
@@ -220,7 +220,11 @@ function removeOrderProjectLink(orderId,pid){
   const extras=arr(o.linkedProjectIds).filter(x=>Number(x)!==Number(pid));
   const text=primary?(extras.length?'Removing the primary project will promote the next related project and move cost attribution to it. Continue?':'Remove the only linked project? The order will no longer have project cost attribution.'):
     'Remove '+projectName(pid)+' from this order? This does not remove existing project blockers or part assignments.';
-  if(!confirm(text))return;
+  const project=projectById(pid);
+  const relatedBlockers=arr(project?.orderBlockers).filter(b=>b.status==='waiting'&&
+    (Number(b.orderId)===Number(orderId)||arr(b.dependencies).some(dep=>Number(dep.orderId)===Number(orderId))));
+  const warning=relatedBlockers.length?'\nThis project still has '+relatedBlockers.length+' waiting blocker dependency'+(relatedBlockers.length===1?'':'ies')+' on this order. Removing the link will NOT delete or resolve the blocker. Review it separately.':'';
+  if(!confirm(text+warning))return;
   try{commitOrderProjectLinks(orderId,d=>{
     const remaining=orderProjectIds(d).filter(x=>Number(x)!==Number(pid));
     d.projectId=remaining[0]??null;d.linkedProjectIds=remaining.slice(1);
