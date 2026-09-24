@@ -176,7 +176,7 @@
     if(!shouldHandle(kind)||!supa||!cloudSession||!cloudWorkspaceId)
       throw new Error('Atomic '+(adjustment?'adjustments':consumption?'part consumption':'receipts')+' requires an authenticated workspace. Connect without discarding local changes.');
     if(!canCloudEdit())throw new Error('This workspace is read-only.');
-    if(pending())throw new Error('An earlier atomic operation is still pending. Sync or review it before changing inventory.');
+    if(pending())throw new Error('An earlier receipt is still pending, or another atomic operation is awaiting sync. Review it before changing inventory.');
     if(localStorage.getItem(PENDING)==='1')
       throw new Error('Other changes are waiting to sync. Wait for Synced or resolve the conflict before receiving.');
     if(!cloudRecordSnapshot?.size)throw new Error('Cloud baseline is not available. Wait until the tracker finishes loading.');
