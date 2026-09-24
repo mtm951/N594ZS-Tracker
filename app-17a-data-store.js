@@ -12,6 +12,7 @@
   if(window.trackerStore)return;
 
   let batchDepth=0;
+  let batchTouchedKeys=null;
 
   function copy(value){
     if(value===undefined)return undefined;
@@ -34,6 +35,9 @@
   }
 
   function sameId(a,b){return String(a??'')===String(b??'')}
+  function touch(type,id='singleton'){
+    if(batchDepth>0&&batchTouchedKeys)batchTouchedKeys.add(String(type)+':'+String(id));
+  }
 
   function read(type,id='singleton'){
     const info=resolveType(type);
@@ -88,18 +92,26 @@
       commit(...args){ensureActive();return commit(...args)}
     });
     batchDepth=1;
-    let result;
+    batchTouchedKeys=new Set();
+    let result,touchedKeys=[];
     try{
       result=mutator(tx);
       if(result&&typeof result.then==='function')throw new Error('Async trackerStore batches are not supported yet.');
+      touchedKeys=[...batchTouchedKeys];
+      if(typeof options.beforePersist==='function'){
+        const hookResult=options.beforePersist({keys:[...touchedKeys],result});
+        if(hookResult&&typeof hookResult.then==='function')throw new Error('Async trackerStore beforePersist hooks are not supported.');
+      }
     }catch(error){
       active=false;
       batchDepth=0;
+      batchTouchedKeys=null;
       restoreSnapshot(snapshot);
       throw error;
     }
     active=false;
     batchDepth=0;
+    batchTouchedKeys=null;
 
     // Commit is intentionally outside the mutation-rollback catch. saveDB()
     // may already have written the browser cache or queued cloud sync before
@@ -116,6 +128,7 @@
 
     if(info.kind==='singleton'){
       db[info.key]=next;
+      touch(type,'singleton');
       if(shouldPersist(options))commit(options.message||'');
       return copy(next);
     }
@@ -129,6 +142,7 @@
 
     const rows=db[info.key],index=rows.findIndex(row=>sameId(row?.id,recordId));
     if(index>=0)rows[index]=next;else rows.push(next);
+    touch(type,recordId);
     if(shouldPersist(options))commit(options.message||'');
     return copy(next);
   }
@@ -149,6 +163,7 @@
     const rows=db[info.key],index=rows.findIndex(row=>sameId(row?.id,id));
     if(index<0)return false;
     rows.splice(index,1);
+    touch(type,id);
     if(shouldPersist(options))commit(options.message||'');
     return true;
   }
