@@ -405,3 +405,62 @@ console.log('core workflow regression tests passed');
   assert.equal(staged.length,2,'non-opt-in adjustment reached experimental journal');
   assert.equal(saveCalls,3);
 }
+
+
+ 
+// 9) The production Reserve -> Use handler must stage Part + Project + new
+// Work Log + installed-Purchase credit together, without pre-transaction writes.
+{
+  const makeDB=()=>({
+    parts:[{id:10,name:'Disposable test washer',partNo:'T-123',system:'Hardware',
+      unit:'ea',stockQty:0,unitCost:2,purchaseIds:['purchase-1'],
+      linkedProjectIds:[41],inventoryAdjustments:[]}],
+    projects:[{id:41,title:'Disposable test project',system:'Hardware',status:'In Progress',
+      plannedParts:[{id:501,partId:10,name:'Disposable test washer',qty:2,unit:'ea',notes:''}],
+      partsUsed:[]}],
+    purchases:[{id:'purchase-1',pn:'T-123',qty:2,disposition:'Installed',
+      inventoryPartId:10,inventoryApplied:true,inventoryReceiptMaterializedQty:0,
+      inventoryReceiptMaterialized:false}],
+    logs:[],orders:[],equipment:[],invoices:[],maintenance:[],settings:{}
+  });
+  const fields={urQty:'2',urDate:'2026-09-24',urWork:'Installed two test washers',
+    urNotes:'Disposable atomic test'};
+  const db=makeDB(),h=inventoryHarness(db,fields);
+  h.RECORD_ARRAYS={part:'parts',project:'projects',log:'logs',purchase:'purchases'};
+  let saves=0;h.saveDB=()=>{saves++};
+  load(dataStoreSource,h,'app-17a-data-store.js');
+  let captured=null,touched=[];
+  h.atomicReceiptOutbox={
+    shouldHandle:kind=>{assert.equal(kind,'consumption');return true},
+    stageConsumption:(work,message,meta)=>{
+      captured=meta;
+      assert.equal(db.logs.length,0,'a Work Log was inserted before atomic staging');
+      assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,0,
+        'purchase was modified before a transaction could roll back');
+      h.trackerStore.batch(work,{persist:false,beforePersist:d=>{touched=d.keys}});
+      h.trackerStore.commit(message);
+    }
+  };
+  h.saveReservedPartUse(41,501);
+  assert.equal(saves,1,'atomic consumption must persist once');
+  assert.equal(captured.mode,'reserved');
+  assert.deepEqual(new Set(touched),new Set(['purchase:purchase-1','part:10','project:41','log:'+captured.logId]));
+  assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,2);
+  assert.equal(db.parts[0].stockQty,2,'installed purchase credit was not materialized');
+  assert.equal(db.logs.length,1);
+  assert.equal(db.logs[0].consumedParts[0].qty,2);
+  assert.equal(db.logs[0].origin,'reserved-part-use');
+  assert.equal(db.projects[0].plannedParts.length,0);
+  assert.equal(db.projects[0].partsUsed[0].logId,db.logs[0].id);
+  assert.equal(h.partAvailable(db.parts[0]),0,'purchase inflow and consumption outflow double-counted');
+  const failed=makeDB(),fh=inventoryHarness(failed,fields);
+  fh.atomicReceiptOutbox={shouldHandle:()=>true,
+    stageConsumption:()=>{throw new Error('Deliberate staging failure')}};
+  fh.saveReservedPartUse(41,501);
+  assert.equal(failed.logs.length,0,'failed staging left a ghost Work Log');
+  assert.equal(failed.parts[0].stockQty,0,'failed staging applied a receipt');
+  assert.equal(failed.purchases[0].inventoryReceiptMaterializedQty,0,
+    'failed staging consumed purchase provenance');
+  assert.equal(failed.projects[0].plannedParts[0].qty,2,'failed staging released reservation');
+}
+console.log('atomic Reserve -> Use production handler regression tests passed');
