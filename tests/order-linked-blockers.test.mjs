@@ -377,65 +377,150 @@ console.log('linked order blocker and atomic receipt regressions passed');
   assert.equal(h.localStorage.getItem(OUTBOX),null);
 }
 
-// The link form must offer ALL, ANY, adding multiple orders, and explicitly
-// labelled shared orders rather than silently reassigning order ownership.
+// The simple form is about individual blockers and ACTUAL order items.
+// Own orders are suggested first; searching shows live matching orders from
+// any project, with the item name preceding its project context.
 {
   const db=fixture();
   db.orders.push({id:32,item:'Shared connector',partId:22,projectId:99,
     qty:1,receivedQty:0,status:'Ordered',updates:[]});
-  const h=harness(db),holder={innerHTML:''};
-  h.ctx.document.getElementById=id=>id==='lobDependencies'?holder:null;
+  const h=harness(db);
+  const element=(value='')=>({
+    value,checked:false,dataset:{},style:{},innerHTML:'',hidden:false,
+    attrs:{},setAttribute(k,v){this.attrs[k]=String(v)},
+    removeAttribute(k){delete this.attrs[k]}
+  });
+  const nodes={
+    lobDependencies:element(),lobSearch0:element(),lobSuggestions0:element(),
+    lobSelected0:element(),lobQty0:element(),lobHint0:element(),
+    lobDescription:element(),lobType:element('order'),
+    lobHolds:element()
+  };
+  nodes.lobHolds.checked=true;
+  h.ctx.document.getElementById=id=>nodes[id]||null;
   h.ctx.openLinkedOrderBlockerModal(41);
-  assert.match(h.modal(),/ALL required orders received/);
-  assert.match(h.modal(),/ANY ONE required order received/);
-  assert.match(h.modal(),/Add another order/);
-  assert.match(h.modal(),/Edit Waiting on panel light/,'new blocker should guide user to edit the existing blocker');
-  assert.match(holder.innerHTML,/Orders linked to this project/);
-  assert.match(holder.innerHTML,/Test panel light/);
-  assert.doesNotMatch(holder.innerHTML,/Shared connector/,'unrelated project orders should not clutter the picker');
-  assert.doesNotMatch(holder.innerHTML,/Unassigned/);
-  h.ctx.toggleBlockerOtherOrders(0); // explicit opt-in (no DOM checkbox in fixture)
-  assert.match(holder.innerHTML,/Shared connector/);
-  assert.match(holder.innerHTML,/Other projects — optional/);
-  assert.match(holder.innerHTML,/Shared connector \(0\/1 received\) — Unlinked/);
-  assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,null,'Waiting on panel light','all',
-    [{orderId:31,requiredQty:1}],true,false),/Edit requirements/);
+  assert.match(h.modal(),/Add project blocker/);
+  assert.match(h.modal(),/Other issue — resolve manually/);
+  assert.doesNotMatch(h.modal(),/ANY ONE required orders received/);
+  assert.doesNotMatch(h.modal(),/Include orders from other projects/);
+  assert.match(nodes.lobDependencies.innerHTML,/searchBlockerOrders\(0\)/);
+  assert.match(nodes.lobDependencies.innerHTML,/Type an item name/);
+  assert.equal(h.ctx.blockerOrderMatches(41,'panel')[0].id,31);
+  assert.equal(h.ctx.blockerOrderMatches(41,'connector')[0].id,32);
+  h.ctx.searchBlockerOrders(0);
+  assert.match(nodes.lobSuggestions0.innerHTML,/Test panel light/);
+  assert.doesNotMatch(nodes.lobSuggestions0.innerHTML,/Shared connector/);
+  nodes.lobSearch0.value='connector';
+  h.ctx.searchBlockerOrders(0);
+  assert.match(nodes.lobSuggestions0.innerHTML,/Shared connector/);
+  assert.match(nodes.lobSuggestions0.innerHTML,/From Unlinked/);
+  assert.equal(nodes.lobSearch0.attrs['aria-expanded'],'true');
+  // Typing is NOT selecting. A direct click on a suggestion is required.
+  assert.equal(nodes.lobQty0.value,'');
+  h.ctx.chooseBlockerOrder(0,32);
+  assert.equal(nodes.lobSearch0.value,'Shared connector');
+  assert.equal(nodes.lobQty0.value,'1');
+  assert.match(nodes.lobSelected0.innerHTML,/Shared connector/);
+  assert.equal(nodes.lobSuggestions0.hidden,true);
+  assert.equal(nodes.lobDescription.value,'Waiting for Shared connector');
+  h.ctx.saveLinkedOrderBlocker(41);
+  const blockers=h.db.projects[0].orderBlockers;
+  assert.equal(blockers.length,2,'new independent blocker replaced the old one');
+  assert.equal(blockers[0].description,'Waiting on panel light');
+  assert.equal(blockers[1].description,'Waiting for Shared connector');
+  assert.equal(blockers[1].dependencies[0].orderId,32);
+  assert.equal(h.db.parts[0].stockQty,0,'adding a blocker credited stock');
+  assert.equal(h.db.orders.length,2,'adding a blocker duplicated an order');
+  assert.equal(h.ctx.blockingProjectsForOrder(32)[0].projectId,41);
 }
 
-// Adding another order prefers the remaining order linked to THIS project.
-// When those run out, the extra row stays unselected rather than choosing
-// an unrelated project (e.g., prop bolts on an annunciator blocker).
+// Typing a label that resembles an Order does not count as an explicit
+// selection. Changing a previously selected label invalidates that choice.
 {
-  const db=fixture();
+  const h=harness(),fake=(value='')=>({value,innerHTML:'',style:{},
+    attrs:{},setAttribute(k,v){this.attrs[k]=v},removeAttribute(k){delete this.attrs[k]}});
+  const nodes={lobDependencies:fake(),lobSearch0:fake(),lobSuggestions0:fake(),
+    lobSelected0:fake(),lobQty0:fake(),lobHint0:fake(),
+    lobDescription:fake('Waiting on actual LED'),lobType:fake('order'),
+    lobHolds:{checked:true}};
+  h.ctx.document.getElementById=id=>nodes[id]||null;
+  h.ctx.openLinkedOrderBlockerModal(41);
+  nodes.lobSearch0.value='Test panel light'; // No suggestion was chosen.
+  nodes.lobQty0.value='1';
+  assert.equal(h.ctx.saveLinkedOrderBlocker(41),null);
+  assert.match(h.alerts.at(-1),/Choose a suggested order/);
+  h.ctx.chooseBlockerOrder(0,31);
+  nodes.lobSearch0.value='A different custom part';
+  h.ctx.searchBlockerOrders(0);
+  assert.equal(nodes.lobQty0.value,'');
+  assert.equal(h.ctx.saveLinkedOrderBlocker(41),null);
+  assert.equal(h.db.projects[0].orderBlockers.length,1);
+}
+
+// A project may contain several distinct blockers, including two with the
+// same generic description, so long as they refer to different orders.
+// One delivery resolves only the relevant blocker, then the other later.
+{
+  const db=fixture();db.projects[0].orderBlockers=[];
   db.orders.push({id:32,item:'TEST CONNECTOR',partId:22,projectId:41,
     qty:4,receivedQty:0,status:'Ordered',updates:[]});
-  db.orders.push({id:33,item:'PROPELLER WASHERS',partId:23,projectId:99,
-    qty:6,receivedQty:0,status:'Ordered',updates:[]});
+  db.parts.push({id:22,name:'TEST CONNECTOR',stockQty:0});
+  const h=harness(db);
+  const a=h.ctx.saveMultiOrderBlocker(41,null,'Waiting for parts','all',
+    [{orderId:31,requiredQty:2}],true,false);
+  const b=h.ctx.saveMultiOrderBlocker(41,null,'Waiting for parts','all',
+    [{orderId:32,requiredQty:1}],true,false);
+  assert.notEqual(a,b);
+  assert.equal(db.projects[0].orderBlockers.length,2);
+  assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,null,'Waiting for parts','all',
+    [{orderId:31,requiredQty:2}],true,false),/exact blocker/);
+  receipt(h,2,31);
+  assert.equal(db.projects[0].orderBlockers.find(x=>x.id===a).status,'resolved');
+  assert.equal(db.projects[0].orderBlockers.find(x=>x.id===b).status,'waiting');
+  assert.equal(db.projects[0].status,'Held Up');
+  receipt(h,1,32);
+  assert.equal(db.projects[0].status,'In Progress');
+}
+
+// Manual blockers (unrelated to incoming physical goods) can coexist,
+// require an explicit Mark resolved, and never credit inventory on creation
+// or resolution. One remaining issue keeps the project blocked.
+{
+  const db=fixture();
+  db.projects[0].orderBlockers=[];db.projects[0].orderBlockerHeld=false;
+  const h=harness(db);
+  const manual1=h.ctx.saveMultiOrderBlocker(41,null,'Waiting for mechanic','all',
+    [],true,false,true);
+  const manual2=h.ctx.saveMultiOrderBlocker(41,null,'Waiting for a clear day','all',
+    [],true,false,true);
+  assert.equal(db.projects[0].orderBlockers.length,2);
+  assert.equal(db.projects[0].status,'Held Up');
+  assert.equal(h.ctx.blockingProjectsForOrder(31).length,0);
+  h.ctx.resolveManualProjectBlocker(41,manual1);
+  assert.equal(db.projects[0].orderBlockers.find(x=>x.id===manual1).status,'resolved');
+  assert.equal(db.projects[0].status,'Held Up');
+  h.ctx.resolveManualProjectBlocker(41,manual2);
+  assert.equal(db.projects[0].status,'In Progress');
+  assert.equal(db.projects[0].updates.filter(x=>x.text.startsWith('Manual blocker resolved:')).length,2);
+  assert.equal(db.parts[0].stockQty,0);
+}
+
+// An existing complex ALL/ANY group remains editable without being
+// silently converted to the simplified one-order blocker.
+{
+  const db=fixture();
+  db.orders.push({id:32,item:'Legacy connector',partId:22,projectId:41,
+    qty:2,receivedQty:0,status:'Ordered',updates:[]});
+  db.projects[0].orderBlockers=[{id:71,description:'Original combined blocker',
+    status:'waiting',holdsProject:true,mode:'any',dependencies:[
+      {orderId:31,requiredQty:1},{orderId:32,requiredQty:1}]}];
   const h=harness(db),holder={innerHTML:''};
   h.ctx.document.getElementById=id=>id==='lobDependencies'?holder:null;
   h.ctx.openLinkedOrderBlockerModal(41,71);
-  assert.match(holder.innerHTML,/Test panel light/);
-  assert.doesNotMatch(holder.innerHTML,/PROPELLER WASHERS/);
-  h.ctx.addBlockerDependency();
-  assert.match(holder.innerHTML,/Required order 2/);
-  assert.match(holder.innerHTML,/value="32" selected/,'second row should choose TEST CONNECTOR');
-  assert.doesNotMatch(holder.innerHTML,/PROPELLER WASHERS/);
-  h.ctx.addBlockerDependency();
-  assert.match(holder.innerHTML,/Required order 3/);
-  assert.match(holder.innerHTML,/value="" selected/,'no unrelated Order should be auto-selected');
-  assert.doesNotMatch(holder.innerHTML,/PROPELLER WASHERS/);
-  h.ctx.toggleBlockerOtherOrders(2);
-  assert.match(holder.innerHTML,/PROPELLER WASHERS/,'an unrelated Order is available on explicit request');
-}
-{
-  const db=fixture();
-  db.orders[0].projectId=99;
-  const h=harness(db),holder={innerHTML:''};
-  h.ctx.document.getElementById=id=>id==='lobDependencies'?holder:null;
-  h.ctx.openLinkedOrderBlockerModal(41);
-  assert.match(h.modal(),/No orders are linked to this project yet/);
-  assert.match(holder.innerHTML,/value="" selected/);
-  assert.doesNotMatch(holder.innerHTML,/Test panel light/);
+  assert.match(h.modal(),/This existing blocker already depends on several orders/);
+  assert.match(h.modal(),/ANY ONE required order/);
+  assert.match(holder.innerHTML,/Order 2/);
+  assert.match(holder.innerHTML,/Legacy connector/);
 }
 
 // A single physical order shared with TWO projects must produce one Part
