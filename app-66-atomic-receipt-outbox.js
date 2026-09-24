@@ -522,6 +522,7 @@
         'No cloud records need to be written. '+
         (unlinked?'WARNING: This older receipt has no linked Part update and did NOT credit inventory. ':
           e.operationKind==='adjustment'?'The Part adjustment matches the cloud. ':
+          e.operationKind==='consumption'?'The linked Part, Project, Work Log and any Purchase credits all match the cloud. ':
           'Linked Part and Order changes both match the cloud. ')+
         'Archive and acknowledge this local journal? This does NOT receive anything again.';
       if(!confirm(prompt))return {matched:true,resolved:false};
@@ -604,7 +605,7 @@
       cloudPending:localStorage.getItem(PENDING)==='1'
     };
     if(typeof downloadJSON!=='function')throw new Error('Download support is unavailable. Keep this browser data intact.');
-    downloadJSON(record,'N594ZS_Atomic_Receipt_Safety_'+today()+'.json');
+    downloadJSON(record,'N594ZS_Atomic_'+(e?.operationKind==='consumption'?'Consumption':'Receipt')+'_Safety_'+today()+'.json');
     toast('Pending atomic receipt safety download started. Keep the file separate from your core backup.','good');
     return record;
   }
@@ -619,13 +620,14 @@
       '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
     openModal(modalHeader('Atomic inventory testing','One pending atomic operation per device; experimental')+
-      '<div class="notice">Order receipts and manual Part adjustments have separate opt-ins. Enabled operations are journaled locally before cloud sync, then applied through the same idempotent server transaction. Other tracker workflows still use normal sync.</div>'+
+      '<div class="notice">Order receipts, manual Part adjustments and Reserve → Use have separate opt-ins. Enabled operations share one durable, idempotent cloud transaction journal. All other tracker workflows still use normal sync.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
       '<div class="detail-section"><b>Atomic receipts: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending operations cannot be discarded by reloading cloud data.</div></div>'+ 
       '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Separate opt-in; test on a disposable Part. Receipts and adjustments share one durable journal, so a second operation cannot overtake an unsynced first.</div></div>'+
-      '<div class="modal-actions">'+
       '<div class="detail-section"><b>Atomic Reserve → Use: '+(consumptionEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental; independent opt-in. A Part, Project, new Work Log and linked Purchase credits save together.</div></div>'+
-      (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">Download Pending Atomic Safety Copy</button>':'')+
+      '<div class="modal-actions">'+
+      (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">'+
+        (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
       '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable Receipt Testing')+'</button>'+ 
       '<button class="secondary" onclick="atomicReceiptOutbox.toggleAdjustments()">'+(adjustmentsEnabled()?'Turn Off Atomic Adjustments':'Enable Atomic Adjustment Testing')+'</button>'+
       '<button class="secondary" onclick="atomicReceiptOutbox.toggleConsumption()">'+(consumptionEnabled()?'Turn Off Atomic Consumption':'Enable Atomic Reserve → Use Testing')+'</button>'+
