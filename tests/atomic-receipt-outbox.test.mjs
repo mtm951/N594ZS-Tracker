@@ -724,6 +724,33 @@ for(const work of [
   assert.equal(h.rpcCalls.length,0);
 }
 
+// The production saveDB normalizer fills default adjustment properties.
+// The staged journal must already be canonical or recoverLocal will refuse
+// to replay what looks like an unexpected intervening local edit.
+{
+  const h=makeHarness({enabled:false});
+  h.localStorage.setItem(ADJUST_OPT,'1');
+  const rawSave=h.ctx.saveDB;
+  h.ctx.saveDB=message=>{
+    h.db.parts[0].inventoryAdjustments=h.db.parts[0].inventoryAdjustments.map(row=>({
+      ...row,id:row.id||1001,date:row.date||'2026-09-24',
+      delta:Number(row.delta)||0,reason:row.reason||'Adjustment',
+      notes:row.notes||'',reverses:row.reverses||null
+    }));
+    return rawSave(message);
+  };
+  h.ctx.atomicReceiptOutbox.stageAdjustment(
+    tx=>tx.update('part',21,p=>{p.inventoryAdjustments=[{
+      id:1001,date:'2026-09-24',delta:2,reason:'Found / recovered',notes:'Fixture',reverses:null
+    }]}),'Canonical found part'
+  );
+  assert.deepEqual(h.saved[0].db.parts[0],h.db.parts[0]);
+  const result=await h.ctx.saveCloudState();
+  assert.equal(result.applied.length,0);
+  assert.equal(h.rpcCalls.length,1,'post-save normalization blocked the atomic journal');
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+}
+
 // Offline journal survives a reload and replays exactly once after reconnect.
 // A version conflict leaves it intact for explicit cloud comparison.
 {
