@@ -399,7 +399,7 @@ console.log('linked order blocker and atomic receipt regressions passed');
   nodes.lobHolds.checked=true;
   h.ctx.document.getElementById=id=>nodes[id]||null;
   h.ctx.openLinkedOrderBlockerModal(41);
-  assert.match(h.modal(),/Add project blocker/);
+  assert.match(h.modal(),/Add a separate blocker for each issue or delivery/);
   assert.match(h.modal(),/Other issue — resolve manually/);
   assert.doesNotMatch(h.modal(),/ANY ONE required orders received/);
   assert.doesNotMatch(h.modal(),/Include orders from other projects/);
