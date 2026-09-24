@@ -286,34 +286,44 @@
   async function recoverLocal(){
     const e=read();
     if(!e)return false;
-    if(!cloudSession||!cloudWorkspaceId)throw new Error('Connect to the workspace before recovering a receipt.');
+    if(!cloudSession||!cloudWorkspaceId)throw new Error('Connect to the workspace before recovering a pending atomic operation.');
     validateIdentity(e);
-    let changed=false;
-    const current=snapshot();
+    const current=snapshot(),writes=[];
+    // Preflight every member BEFORE modifying any in-memory row. In
+    // particular, a crash can leave a newly created Work Log absent while
+    // the existing Part/Project/Purchase edits survived in another tab.
     for(const r of e.changes){
       const k=key(r.record_type,r.record_id);
-      const now=current.get(k)?.data||null;
-      const original=e.before.find(x=>x.key===k)?.data||null;
+      const prior=e.before.find(x=>x.key===k);
+      if(!prior)throw new Error('Atomic recovery is missing the original record: '+k);
+      const now=current.get(k)?.data??null,original=prior.data??null;
       if(stable(now)===stable(r.data))continue;
-      if(!original||stable(now)!==stable(original)){
-        throw new Error('A pending receipt has newer local edits. Do not reload cloud data; review the receipt first.');
-      }
+      if(original===null){
+        if(r.record_type!=='log'||now!==null)
+          throw new Error('Atomic recovery found an unexpected new record: '+k);
+      }else if(stable(now)!==stable(original))
+        throw new Error('A pending atomic operation has newer local edits. Do not reload cloud data.');
       const arrayName={part:'parts',order:'orders',project:'projects',log:'logs',purchase:'purchases'}[r.record_type];
-      if(!arrayName||!Array.isArray(db[arrayName]))throw new Error('Pending atomic record type is unavailable.');
-      const array=db[arrayName],index=array.findIndex(x=>String(x.id)===String(r.record_id));
-      if(index<0){
-        if(r.record_type!=='log'||original!==null)throw new Error('Pending atomic record is missing from the local cache.');
-        array.push(copy(r.data));
-      }else array[index]=copy(r.data);
-      changed=true;
+      if(!arrayName||!Array.isArray(db[arrayName]))
+        throw new Error('Pending atomic record type is unavailable: '+k);
+      writes.push({arrayName,record_id:r.record_id,data:r.data,created:original===null});
+    }
+    if(writes.length){
+      for(const w of writes){
+        const rows=db[w.arrayName],index=rows.findIndex(x=>String(x.id)===String(w.record_id));
+        if(index<0){
+          if(!w.created)throw new Error('Existing atomic record disappeared during recovery.');
+          rows.push(copy(w.data));
+        }else rows[index]=copy(w.data);
+      }
     }
     localStorage.setItem(PENDING,'1');cloudDirty=true;
-    if(changed){
+    if(writes.length){
       if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});
       else localStorage.setItem(DB_KEY,JSON.stringify(db));
       renderAll();
     }
-    return changed;
+    return !!writes.length;
   }
   function retain(message,kind){
     cloudDirty=true;
