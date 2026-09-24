@@ -182,4 +182,64 @@ function harness(db=original()){
   assert.match(h.alerts[0],/pending atomic inventory transaction/);
 }
 
+// Default Orders view shows only actionable lines. History shows Received and
+// Cancelled lines without deleting records, including completed group orders.
+// The chosen view survives a rerender; receiving the last unit removes a line
+// from Open and makes it available under History with exactly one stock credit.
+{
+  const db=original(),base=db.orders[0];
+  base.tracking='TEST-ORDER-7';
+  base.vendor='Disposable Test Vendor';
+  db.orders.push({...structuredClone(base),id:22,item:'TEST SCREW',
+    status:'Received',qty:2,receivedQty:2,inventoryAppliedQty:2,
+    inventoryApplied:true,partId:null});
+  db.orders.push({...structuredClone(base),id:23,item:'TEST WASHER',
+    status:'Cancelled',qty:3,receivedQty:0,partId:null});
+  const h=harness(db),{ctx,nodes}=h;
+  nodes['page-orders']={innerHTML:''};
+  nodes.orderStatus={value:'Open'};
+  nodes.orderSearch={value:''};
+  nodes.orderSystem={value:''};
+  const originalRecords=JSON.stringify(db);
+  ctx.renderOrders();
+  assert.match(nodes['page-orders'].innerHTML,/<option value="Open" selected>/);
+  assert.match(nodes['page-orders'].innerHTML,/History — received \/ cancelled/);
+  assert.match(nodes.orderRows.innerHTML,/TEST LED/);
+  assert.doesNotMatch(nodes.orderRows.innerHTML,/TEST SCREW/);
+  assert.doesNotMatch(nodes.orderRows.innerHTML,/TEST WASHER/);
+  nodes.orderStatus.value='History';
+  ctx.setOrderStatusFilter('History');
+  assert.doesNotMatch(nodes.orderRows.innerHTML,/TEST LED/);
+  assert.match(nodes.orderRows.innerHTML,/TEST SCREW/);
+  assert.match(nodes.orderRows.innerHTML,/TEST WASHER/);
+  assert.match(nodes.orderRows.innerHTML,/0 units remaining/);
+  ctx.renderOrders();
+  assert.match(nodes['page-orders'].innerHTML,/<option value="History" selected>/,
+    'rerender lost selected History view');
+  nodes.orderStatus.value='Received';ctx.setOrderStatusFilter('Received');
+  assert.match(nodes.orderRows.innerHTML,/TEST SCREW/);
+  assert.doesNotMatch(nodes.orderRows.innerHTML,/TEST WASHER/);
+  nodes.orderStatus.value='';ctx.setOrderStatusFilter('');
+  assert.match(nodes.orderRows.innerHTML,/TEST LED/);
+  assert.match(nodes.orderRows.innerHTML,/TEST SCREW/);
+  assert.match(nodes.orderRows.innerHTML,/TEST WASHER/);
+  assert.equal(JSON.stringify(db),originalRecords,'filtering must not mutate stored Orders');
+
+  nodes.orderStatus.value='Open';ctx.setOrderStatusFilter('Open');
+  ctx.trackerStore.batch(tx=>ctx.applyOrderReceipt(tx,21,4,'2026-09-24'),
+    {message:'Received TEST LED'});
+  ctx.renderOrderRows();
+  assert.match(nodes.orderRows.innerHTML,/No matching orders/);
+  nodes.orderStatus.value='History';ctx.setOrderStatusFilter('History');
+  assert.match(nodes.orderRows.innerHTML,/TEST LED/);
+  assert.match(nodes.orderRows.innerHTML,/TEST SCREW/);
+  assert.match(nodes.orderRows.innerHTML,/TEST WASHER/);
+  assert.equal(db.orders.length,3,'receiving must retain complete Order history');
+  assert.equal(db.orders[0].status,'Received');
+  assert.equal(db.orders[0].receivedQty,4);
+  assert.equal(db.parts[0].stockQty,4,'History view caused duplicate stock credit');
+}
+
+console.log('Open / History / All order view regression tests passed');
+
 console.log('Order multiple project links, UI, ownership, shared blocker and inventory tests passed');
