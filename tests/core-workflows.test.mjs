@@ -500,8 +500,8 @@ console.log('atomic Reserve -> Use production handler regression tests passed');
   const purchase={id:'low-stock',qty:1,disposition:'Installed',
     inventoryPartId:65,inventoryReceiptMaterializedQty:0};
   const db={parts:[part],projects:[project],logs:[],purchases:[purchase],orders:[],settings:{}};
-  const original=structuredClone(db);
   const h=inventoryHarness(db,{urQty:2,urDate:'2026-09-24'});
+  const original=structuredClone(db); // compare AFTER normalizer fills default history arrays
   let attempted=0;h.confirm=()=>false;
   h.atomicReceiptOutbox={shouldHandle:()=>true,stageConsumption:()=>{attempted++}};
   h.saveReservedPartUse(66,670);
