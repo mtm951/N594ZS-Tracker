@@ -132,19 +132,43 @@
     openModal(`${modalHeader('Adjust Inventory',p.name)}<div class="notice" style="margin-bottom:12px">Current calculated on hand: <b>${on===null?'—':esc(on+' '+(p.unit||'ea'))}</b>. Enter a positive change to add stock or a negative change to remove stock.</div><div class="form-grid">${field('Date','iaDate',today(),'date')}${field('Quantity change (+ / −)','iaDelta','','number','step="any"')}<div class="full"><label>Reason</label><select id="iaReason"><option>Count correction</option><option>Returned to stock</option><option>Found / recovered</option><option>Scrapped / damaged</option><option>Lost / missing</option><option>Other adjustment</option></select></div>${textareaField('Notes','iaNotes','')}</div><div class="modal-actions"><button class="btn secondary" onclick="openPartDetail(${p.id})">Cancel</button><button class="btn primary" onclick="saveInventoryAdjustment(${p.id})">Save Adjustment</button></div>`);
   };
 
+  // A manual adjustment changes ONE Part and appends a permanent history row.
+  // The optional atomic journal captures it before browser persistence. Normal
+  // sync remains the default and now uses the same scoped rollback-safe store.
+  function persistInventoryAdjustment(partId,entry,message){
+    const work=tx=>tx.update('part',partId,draft=>{
+      draft.inventoryAdjustments=arr(draft.inventoryAdjustments);
+      if(draft.inventoryAdjustments.some(a=>String(a.id)===String(entry.id)))
+        throw new Error('Adjustment ID already exists; no duplicate was recorded.');
+      if(entry.reverses&&draft.inventoryAdjustments.some(a=>String(a.reverses)===String(entry.reverses)))
+        throw new Error('This adjustment has already been reversed.');
+      draft.inventoryAdjustments.push(entry);
+    });
+    if(window.atomicReceiptOutbox?.shouldHandle('adjustment'))
+      window.atomicReceiptOutbox.stageAdjustment(work,message);
+    else trackerStore.batch(work,{message});
+  }
+
   window.saveInventoryAdjustment=function(partId){
     var p=partById(Number(partId));if(!p)return;
     var delta=Number(val('iaDelta'));if(!Number.isFinite(delta)||delta===0)return alert('Enter a non-zero quantity change.');
     if(delta<0){var on=partAvailable(p);if(on!==null&&on+delta<0&&!confirm('This adjustment will make calculated inventory negative. Save it anyway?'))return;}
-    p.inventoryAdjustments=arr(p.inventoryAdjustments);p.inventoryAdjustments.push({id:uid(),date:val('iaDate')||today(),delta:delta,reason:val('iaReason')||'Adjustment',notes:val('iaNotes')||''});
-    saveDB('Inventory adjustment recorded.');openPartDetail(p.id);
+    const entry={id:uid(),date:val('iaDate')||today(),delta,reason:val('iaReason')||'Adjustment',notes:val('iaNotes')||''};
+    try{persistInventoryAdjustment(p.id,entry,'Inventory adjustment recorded.')}
+    catch(error){alert('Adjustment was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.');return}
+    openPartDetail(p.id);
   };
 
   window.reverseInventoryAdjustment=function(partId,adjustmentId){
-    var p=partById(Number(partId));if(!p)return;var a=arr(p.inventoryAdjustments).find(function(x){return String(x.id)===String(adjustmentId)});if(!a)return;
+    var p=partById(Number(partId));if(!p)return;
+    var a=arr(p.inventoryAdjustments).find(function(x){return String(x.id)===String(adjustmentId)});if(!a)return;
+    if(arr(p.inventoryAdjustments).some(x=>String(x.reverses)===String(a.id)))
+      return alert('This adjustment already has a reversal in its history.');
     if(!confirm('Reverse this adjustment with an equal and opposite transaction?'))return;
-    p.inventoryAdjustments.push({id:uid(),date:today(),delta:-num(a.delta),reason:'Reversal',notes:`Reverses ${a.reason||'adjustment'} from ${a.date||'unknown date'}`,reverses:a.id});
-    saveDB('Inventory adjustment reversed.');openPartDetail(p.id);
+    const entry={id:uid(),date:today(),delta:-num(a.delta),reason:'Reversal',notes:`Reverses ${a.reason||'adjustment'} from ${a.date||'unknown date'}`,reverses:a.id};
+    try{persistInventoryAdjustment(p.id,entry,'Inventory adjustment reversed.')}
+    catch(error){alert('Reversal was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.');return}
+    openPartDetail(p.id);
   };
 
   // ----- Reserved -> Used workflow -----
