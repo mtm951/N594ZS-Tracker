@@ -113,7 +113,7 @@
         if(!order||order.status==='Cancelled')throw new Error('Selected order is missing or cancelled.');
         if(!Number.isFinite(d.requiredQty)||d.requiredQty<=0||
            d.requiredQty>numeric(order.qty)+1e-9)
-          throw new Error('Required quantity for '+order.item+' must be above zero and cannot exceed ordered quantity.');
+          throw new Error('Required quantity exceeds the ordered quantity or is invalid for '+order.item+'.');
         if(ids.has(String(d.orderId)))throw new Error('Select each order once within a blocker. The same order can support other blockers.');
         ids.add(String(d.orderId));
       }
