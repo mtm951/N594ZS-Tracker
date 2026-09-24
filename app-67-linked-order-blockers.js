@@ -167,12 +167,16 @@
   window.saveMultiOrderBlocker=saveGroup;
 
   function orderOptionHTML(p,selected){
-    return availableOrders(p).map(o=>{
-      const owner=rows(db.projects).find(x=>same(x.id,o.projectId));
-      const prefix=same(o.projectId,p.id)?'This project':'Shared: '+(owner?.title||'Unassigned');
-      return '<option value="'+esc(o.id)+'" '+(same(o.id,selected)?'selected':'')+'>'+
-        esc(prefix+' • '+o.item+' ('+received(o)+'/'+numeric(o.qty)+' received)')+'</option>';
-    }).join('');
+    const available=availableOrders(p);
+    const missing=selected!=null&&!available.some(o=>same(o.id,selected));
+    return (missing?'<option value="'+esc(selected)+'" selected disabled>'+
+      esc('Missing or cancelled order — select a replacement')+'</option>':'')+
+      available.map(o=>{
+        const owner=rows(db.projects).find(x=>same(x.id,o.projectId));
+        const prefix=same(o.projectId,p.id)?'This project':'Shared: '+(owner?.title||'Unassigned');
+        return '<option value="'+esc(o.id)+'" '+(same(o.id,selected)?'selected':'')+'>'+
+          esc(prefix+' • '+o.item+' ('+received(o)+'/'+numeric(o.qty)+' received)')+'</option>';
+      }).join('');
   }
   let editingProjectId=null,editingBlockerId=null,editRows=[];
   const dom=id=>document.getElementById(id);
@@ -185,7 +189,7 @@
       (editRows.length===1?' disabled title="Keep at least one order"':'')+'>Remove</button></div>'+
       '<div class="form-grid"><div class="full"><label>Order</label>'+
       '<select id="lobOrder'+index+'" onchange="linkedOrderBlockerOrderChanged('+index+')">'+options+'</select></div>'+
-      '<div><label>Required quantity</label><input id="lobQty'+index+'" type="number" min="0.000001" step="any" max="'+numeric(o?.qty)+'" value="'+esc(entry.requiredQty)+'"></div>'+
+      '<div><label>Required quantity</label><input id="lobQty'+index+'" type="number" min="0.000001" step="any" max="'+numeric(o?.qty)+'" value="'+esc(entry.requiredQty)+'" oninput="linkedOrderBlockerOrderChanged('+index+',false)"></div>'+
       '<div class="full small muted" id="lobHint'+index+'"></div></div></div>';
   }
   function renderRows(){
@@ -249,7 +253,7 @@
       [{orderId:orders[0].id,requiredQty:orders[0].qty}];
     const legacy=String(p.blockers||'').trim();
     openModal(modalHeader(existing?'Edit order blocker':'New order blocker',p.title)+
-      '<div class="notice">One order may unblock several jobs. A blocker may depend on ALL of its orders, or ANY one alternative. The original order retains its inventory and purchase associations.</div>'+
+      '<div class="notice">One order may unblock several jobs. A blocker may depend on ALL of its orders, or ANY one alternative. Shared links do not reserve additional physical stock; use project reservations to allocate parts.</div>'+
       '<div class="form-grid" style="margin-top:12px">'+
       '<div class="full"><label>What is being held up?</label><textarea id="lobDescription" rows="3">'+
       esc(existing?.description||legacy||'Waiting for parts')+'</textarea></div>'+
