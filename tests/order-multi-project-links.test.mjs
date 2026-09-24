@@ -42,7 +42,7 @@ function harness(db=original()){
     orderTotal:o=>Number(o.qty)*Number(o.unitPrice||0)+Number(o.shipping||0)+Number(o.tax||0),
     projectCost:p=>db.orders.filter(o=>Number(o.projectId)===p.id)
       .reduce((sum,o)=>sum+Number(o.qty)*Number(o.unitPrice||0),0),
-    consumedCost:()=>0,partAvailable:p=>p.stockQty,partConsumedQty:()=>0,
+    consumedCost:()=>0,partAvailable:p=>p.stockQty,partConsumedQty:()=>0,isURL:()=>false,
     fmtMoney:n=>'$'+Number(n||0).toFixed(2),pill:x=>String(x??''),
     esc:x=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
     modalHeader:()=>'',systemOptions:()=>'',partOptions:()=>'',field:()=>'',textareaField:()=>'',partOnOrderQty:()=>4,
