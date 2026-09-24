@@ -218,6 +218,91 @@
   // sync or second device may have already saved their exact payload.
   // Never overwrite the server or clear the journal merely because its
   // quantity looks right: every staged field must match exactly.
+  // A pre-v5.19.19 Order-only test can remain blocked after the user deletes
+  // that disposable Order elsewhere. A tombstone is not an exact payload
+  // match: NEVER replay a deleted order or silently discard its local journal.
+  // Offer archival only after a second read and explicit user confirmation.
+  async function reviewDeletedOrderOnlyTest(e,remote){
+    const r=e.changes[0];
+    if(!e.blocked||e.changes.length!==1||r.record_type!=='order'||
+       r.data?.partId||!remote?.deleted_at||!(Number(remote.record_version)>0)||
+       String(remote.record_id)!==String(r.record_id)||
+       String(remote.record_type)!=='order')return null;
+    const k=key('order',r.record_id);
+    const server=remote.data||{},staged=r.data||{};
+    if(server.partId||String(server.id)!==String(r.record_id)||
+       String(server.item)!==String(staged.item)||
+       Number(server.qty)!==Number(staged.qty)||
+       Number(server.receivedQty)!==Number(staged.receivedQty))return null;
+    // The originating browser must have ALREADY removed the disposable
+    // Order. If it still contains any version of the record, use supervised
+    // review instead of hiding its potentially newer local edits.
+    if(snapshot().has(k)){
+      alert('This test Order is deleted in the cloud but still exists locally. No journal was changed. Save your safety copy and request review.');
+      return {matched:false,deleted:true,resolved:false};
+    }
+    if(!confirm('The cloud shows that the unlinked test Order "'+
+      String(staged.item||'')+'" was deleted after recording '+String(staged.receivedQty)+
+      ' of '+String(staged.qty)+' units. This pending journal contains NO Part update or inventory credit. '+
+      'Did you intentionally delete this disposable test Order and save its Pending Receipt Safety Copy? Cancel if unsure.'))
+      return {matched:false,deleted:true,resolved:false};
+    if(!confirm('Archive the obsolete pending receipt on THIS device? This does not restore the deleted Order, receive the remaining units, modify cloud records, or change physical inventory.'))
+      return {matched:false,deleted:true,resolved:false};
+
+    // Re-fetch the same canonical row after confirmation. Reject concurrent
+    // changes to the tombstone or the pending operation.
+    const {data:latest,error}=await supa.from('tracker_records')
+      .select('record_type,record_id,data,deleted_at,record_version')
+      .eq('workspace_id',e.workspaceId).in('record_id',[String(r.record_id)]);
+    if(error)throw error;
+    const row=arr(latest).find(x=>x.record_type==='order'&&
+      String(x.record_id)===String(r.record_id));
+    const current=read();
+    if(!current||current.operationId!==e.operationId||
+       stable(current.changes)!==stable(e.changes)||!row?.deleted_at||
+       String(row.deleted_at)!==String(remote.deleted_at)||
+       Number(row.record_version)!==Number(remote.record_version)||
+       stable(row.data)!==stable(remote.data)||snapshot().has(k))
+      throw new Error('Order or journal changed during recovery; no pending receipt was cleared.');
+
+    // Archive FULL original evidence BEFORE changing the version baseline or
+    // clearing the live journal. A failed storage write preserves the journal.
+    const prior=localStorage.getItem(RESOLVED),archive=prior?JSON.parse(prior):[];
+    if(!Array.isArray(archive))
+      throw new Error('Saved receipt-resolution archive is invalid.');
+    const records=archive.filter(x=>x.operationId!==e.operationId);
+    records.push({operationId:e.operationId,resolvedAt:new Date().toISOString(),
+      reason:'deleted-unlinked-test-order',journal:current,
+      cloudTombstone:{record_type:'order',record_id:String(row.record_id),
+        record_version:Number(row.record_version),deleted_at:row.deleted_at}});
+    const archiveJSON=JSON.stringify(records.slice(-20));
+    localStorage.setItem(RESOLVED,archiveJSON);
+    if(localStorage.getItem(RESOLVED)!==archiveJSON)
+      throw new Error('Could not verify pending receipt recovery archive.');
+
+    // The local Order is absent and the server's tombstone agrees. Update
+    // only this key's baseline so ordinary guarded sync won't recreate it.
+    cloudRecordSnapshot.delete(k);
+    cloudRecordVersions.set(k,Number(row.record_version));
+    const snapshots=JSON.stringify(Object.fromEntries(cloudRecordSnapshot));
+    const versions=JSON.stringify(Object.fromEntries(cloudRecordVersions));
+    localStorage.setItem(SNAP,snapshots);localStorage.setItem(VERS,versions);
+    if(localStorage.getItem(SNAP)!==snapshots||localStorage.getItem(VERS)!==versions)
+      throw new Error('Could not save tombstone baseline; pending journal retained.');
+    localStorage.removeItem(KEY);
+    if(localStorage.getItem(KEY))
+      throw new Error('Could not clear archived journal; original evidence remains in archive.');
+    cloudStatusLabel('Sync pending');
+    const outcome=await window.saveCloudState();
+    if(localStorage.getItem(PENDING)==='1'||outcome?.pending){
+      alert('The deleted test receipt was archived locally. Other edits may still need sync; review the cloud-status indicator.');
+    }else{
+      toast('Deleted test receipt archived; cloud inventory was not changed.','good');
+    }
+    openSettings();
+    return {matched:false,deleted:true,resolved:true};
+  }
+
   async function reviewConflict(){
     let e;
     try{
@@ -239,6 +324,16 @@
           stable(row.data)!==stable(r.data);
       });
       if(differing.length){
+        // The user may have intentionally deleted an old, unlinked test
+        // Order after its browser journal was blocked. Do not call the RPC
+        // or restore the deleted record; offer a fully guarded local archive.
+        if(differing.length===1){
+          const staged=differing[0],remote=serverRows.get(key(staged.record_type,staged.record_id));
+          if(remote?.deleted_at){
+            const handled=await reviewDeletedOrderOnlyTest(e,remote);
+            if(handled)return handled;
+          }
+        }
         alert('The cloud differs from the pending receipt for '+differing.map(r=>r.record_type+' '+r.record_id).join(', ')+
           '. Nothing was changed or discarded. Keep this browser’s saved data and request a supervised conflict review; do not re-receive the order.');
         return {matched:false,differing:differing.map(r=>key(r.record_type,r.record_id))};
