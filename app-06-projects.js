@@ -28,7 +28,7 @@ function saveProject(id){
     trackerStore.write('project',newId,{id:newId,...o,partsUsed:[],updates:[]},{message:'Project created.'});
   }
 }
-function deleteProject(id){if(!confirm('Delete this project? Linked parts, orders, logs and documents will remain but may show as unlinked.'))return;db.projects=db.projects.filter(x=>x.id!==id);db.orders.forEach(o=>{if(o.projectId===id)o.projectId=null});db.logs.forEach(l=>{l.projectIds=l.projectIds.filter(x=>x!==id)});db.docs.forEach(d=>{d.linkedProjectIds=d.linkedProjectIds.filter(x=>x!==id)});db.parts.forEach(p=>{p.linkedProjectIds=p.linkedProjectIds.filter(x=>x!==id)});db.checklists.forEach(c=>{if(c.projectId===id)c.projectId=null});closeModal();saveDB('Project deleted.');}
+function deleteProject(id){if(!confirm('Delete this project? Linked parts, orders, logs and documents will remain but may show as unlinked.'))return;db.projects=db.projects.filter(x=>x.id!==id);db.orders.forEach(o=>{const remaining=orderProjectIds(o).filter(pid=>pid!==Number(id));o.projectId=remaining[0]??null;o.linkedProjectIds=remaining.slice(1)});db.logs.forEach(l=>{l.projectIds=l.projectIds.filter(x=>x!==id)});db.docs.forEach(d=>{d.linkedProjectIds=d.linkedProjectIds.filter(x=>x!==id)});db.parts.forEach(p=>{p.linkedProjectIds=p.linkedProjectIds.filter(x=>x!==id)});db.checklists.forEach(c=>{if(c.projectId===id)c.projectId=null});closeModal();saveDB('Project deleted.');}
 
 let pendingProjectCompletion=null;
 function projectCloseoutAudit(project){
@@ -37,7 +37,7 @@ function projectCloseoutAudit(project){
   const add=(severity,label,detail)=>issues.push({severity,label,detail});
   const steps=arr(project.steps),unfinishedSteps=steps.filter(x=>!x.done);
   const reservations=arr(project.plannedParts).filter(x=>num(x.qty)>0);
-  const orders=arr(db.orders).filter(o=>Number(o.projectId)===id&&!isClosedOrder(o));
+  const orders=arr(db.orders).filter(o=>orderLinkedToProject(o,id)&&!isClosedOrder(o));
   const checks=arr(db.checklists).filter(c=>Number(c.projectId)===id);
   const incompleteChecks=checks.filter(ch=>arr(ch.items).some(i=>!i.done));
   const logs=arr(db.logs).filter(l=>arr(l.projectIds).some(pid=>Number(pid)===id));
@@ -109,7 +109,7 @@ if(!document.getElementById('projectCloseoutStyle')){
 function openProjectDetail(id){
   const p=projectById(id);if(!p)return;currentDetail={type:'project',id};
   const logs=db.logs.filter(l=>l.projectIds.includes(id)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const orders=db.orders.filter(o=>o.projectId===id);
+  const orders=db.orders.filter(o=>orderLinkedToProject(o,id));
   const docs=db.docs.filter(d=>d.linkedProjectIds.includes(id));
   const checks=db.checklists.filter(c=>c.projectId===id);
   const openOrders=orders.filter(o=>!isClosedOrder(o));
@@ -125,7 +125,7 @@ function openProjectDetail(id){
     </div><div>
       <div class="detail-card"><h3>Next Step</h3><div class="detail-text">${esc(p.nextStep||'No next step recorded.')}</div></div>
       <div class="detail-card"><h3>Blocker / What Is Holding It Up</h3>${p.blockers?`<div class="danger-note">${esc(p.blockers)}</div>`:'<div class="muted">No blocker recorded.</div>'}</div>
-      <div class="detail-card"><div class="section-tools"><h3>Orders / Things to Buy</h3><button class="icon-btn" onclick="openOrderModal(null,${id})">+ Order</button></div>${orders.length?orders.map(o=>`<div class="kv click-row" onclick="openOrderDetail(${o.id})"><div><b>${esc(o.item)}</b><div class="task-note">${esc(o.vendor||'')} ${o.eta?'• ETA '+esc(o.eta):''}</div></div><div>${pill(o.status)}<div class="tiny right">${db.settings.showCosts?fmtMoney(orderTotal(o)):''}</div></div></div>`).join(''):'<div class="empty">Nothing recorded to order.</div>'}${openOrders.length?`<div class="tiny muted" style="margin-top:8px">${openOrders.length} order${openOrders.length===1?'':'s'} still open.</div>`:''}</div>
+      <div class="detail-card"><div class="section-tools"><h3>Orders / Things to Buy</h3><button class="icon-btn" onclick="openOrderModal(null,${id})">+ Order</button></div>${orders.length?orders.map(o=>`<div class="kv click-row" onclick="openOrderDetail(${o.id})"><div><b>${esc(o.item)}</b><div class="task-note">${esc(o.vendor||'')} ${o.eta?'• ETA '+esc(o.eta):''}${Number(o.projectId)===Number(id)?'':' • Shared order'}</div></div><div>${pill(o.status)}<div class="tiny right">${db.settings.showCosts?fmtMoney(orderTotal(o)):''}</div></div></div>`).join(''):'<div class="empty">Nothing recorded to order.</div>'}${openOrders.length?`<div class="tiny muted" style="margin-top:8px">${openOrders.length} order${openOrders.length===1?'':'s'} still open.</div>`:''}</div>
       <div class="detail-card"><h3>Linked Checklists</h3>${checks.length?checks.map(c=>`<div class="kv click-row" onclick="openChecklistDetail(${c.id})"><span>${esc(c.name)}</span><b>${c.items.filter(i=>i.done).length}/${c.items.length}</b></div>`).join(''):'<div class="muted">No checklist linked.</div>'}</div>
       <div class="detail-card"><div class="section-tools"><h3>Project Updates</h3><button class="icon-btn" onclick="addEntityUpdate('project',${id})">+ Update</button></div>${p.updates.length?`<div class="timeline">${[...p.updates].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(u=>`<div class="timeline-item"><div class="timeline-date">${esc(u.date||'')}</div><div class="timeline-body">${esc(u.text||'')}</div></div>`).join('')}</div>`:'<div class="muted">No updates yet.</div>'}</div>
       ${projectCloseoutSummaryHTML(p)}
