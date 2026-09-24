@@ -14,7 +14,14 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.29**, pending verification of main-branch Pages deployment at time of writing; verify current `index.html` and Actions on every session.
+- Current release: **v5.19.30**, pending verification of main-branch Pages deployment at time of writing; verify current `index.html` and Actions on every session.
+
+## v5.19.30 Open orders by default and non-destructive History (September 24)
+
+- User confirmed that completed order #18374415 should remain searchable history, not clutter the active Orders queue. This is a presentation-only change to the ORIGINAL `app-05-views.js`. The Orders view opens with `Open — active orders` selected. Other views: `History — received / cancelled`, `All orders`, and the original individual statuses. The chosen filter persists across Orders page rerenders within the same open app session; on next full load it defaults to Open again.
+- A line is shown in Open if `!isClosedOrder(o)` and in History if `isClosedOrder(o)`. Existing order records, receipt events, inventory and total spending are UNCHANGED; the History tab is an inclusive status filter, **not deletion, archival, or a second copy**. Search, project, system and sortable columns still operate with the selected filter. Received and Cancelled lines from a group remain separately inspectable in History; if some order lines are active, only those active lines appear in Open.
+- Corrected the order group banner's `units remaining` calculation to exclude closed lines, especially cancelled lines that otherwise misleadingly reported unreceived quantities as still due. This is display-only and does not adjust actual ordered, received or inventory quantities.
+- Pre-change GitHub recovery branch `validated-v5.19.29-before-order-history-2026-09-24` points to main `53eea7a3b2d2263d720fd7fb1c869ddd26b978e4`. No production cloud SQL writes or active aircraft data changes were required. `tests/order-multi-project-links.test.mjs` now checks default Open, History/All/individual statuses, status persistence during rerender, retention of completed and cancelled group lines, no filter data mutations, and that receiving the remaining test LEDs moves the line from Open to History with only one inventory credit. Full regression workflow also runs on `orders-*` branches. Phone and desktop visual confirmation are still owner acceptance tasks.
 
 ## v5.19.29 simplified blockers and real live order search (September 24)
 
