@@ -391,5 +391,38 @@ console.log('linked order blocker and atomic receipt regressions passed');
   assert.match(holder.innerHTML,/Shared: Unassigned/);
 }
 
+// A single physical order shared with TWO projects must produce one Part
+// stock credit and two project resolutions in one durable atomic journal.
+{
+  const db=fixture();
+  db.orders[0].linkedProjectIds=[42];
+  db.projects.push({id:42,title:'Second panel sharing the same ordered LED',
+    status:'Held Up',percent:0,blockers:'',updates:[],orderBlockerHeld:true,
+    orderBlockers:[{id:92,orderId:31,description:'Shared lamp requirement',
+      requiredQty:2,status:'waiting',holdsProject:true}]});
+  const h=harness(db,{atomic:true,online:false});
+  h.ctx.atomicReceiptOutbox.stage(tx=>h.ctx.applyOrderReceipt(tx,31,2,'2026-09-24'),
+    'Atomic shared order receipt');
+  const journal=JSON.parse(h.localStorage.getItem(OUTBOX));
+  const changed=journal.changes.map(x=>x.record_type);
+  assert.deepEqual(changed.sort(),['order','part','project','project']);
+  assert.equal(db.parts[0].stockQty,2);
+  assert.equal(db.orders[0].receivedQty,2);
+  assert.equal(db.projects[0].status,'In Progress');
+  assert.equal(db.projects[1].status,'In Progress');
+  assert.equal(db.projects[0].updates.filter(u=>u.text.startsWith('Order blocker resolved:')).length,1);
+  assert.equal(db.projects[1].updates.filter(u=>u.text.startsWith('Order blocker resolved:')).length,1);
+  const waiting=await h.ctx.saveCloudState();
+  assert.equal(waiting.pending,true,'offline shared receipt lost its durable journal');
+  assert.equal(h.rpc.length,0);
+  h.ctx.navigator.onLine=true;
+  await h.ctx.saveCloudState();
+  assert.equal(h.rpc.length,1);
+  assert.equal(h.rpc[0].changes.length,4);
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+}
+
+console.log('v5.19.27 atomic shared Order / two Project regressions passed');
+
 console.log('v5.19.26 many-to-many ALL/ANY dependency regressions passed');
 
