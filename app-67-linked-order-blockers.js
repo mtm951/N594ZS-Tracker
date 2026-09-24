@@ -104,6 +104,7 @@
       return linked.id;
     },{message:'Order-linked project blocker saved.'});
   }
+  window.linkOrderBlockerForProject=saveLink;
   window.saveLinkedOrderBlocker=function(projectId){
     const orderId=Number(document.getElementById('lobOrder')?.value);
     const description=document.getElementById('lobDescription')?.value||'';
@@ -131,8 +132,8 @@
       '<div class="full"><label>Order holding up the work</label><select id="lobOrder" onchange="linkedOrderBlockerOrderChanged()">'+orderOptions+'</select></div>'+
       '<div><label>Quantity required before work can resume</label><input id="lobQuantity" type="number" step="any" min="0.000001" max="'+numeric(first.qty)+'" value="'+numeric(first.qty)+'"></div>'+
       '<div class="full"><label>What is held up?</label><textarea id="lobDescription" rows="3">'+esc(text||('Waiting for '+first.item))+'</textarea></div>'+
-      '<div class="full"><label><input id="lobHolds" type="checkbox" checked> Keep this project held until the required quantity arrives</label></div>'+
-      (text?'<div class="full"><label><input id="lobMoveLegacy" type="checkbox"> This existing free-text blocker refers ONLY to this order. Archive it and clear the old blocker field.</label><small>If other reasons remain, leave this unchecked and edit the old note separately.</small></div>':'')+
+      '<div class="full"><label><input id="lobHolds" type="checkbox" style="width:auto;margin-right:8px" checked> Keep this project held until the required quantity arrives</label></div>'+
+      (text?'<div class="full"><label><input id="lobMoveLegacy" type="checkbox" style="width:auto;margin-right:8px"> This existing free-text blocker refers ONLY to this order. Archive it and clear the old blocker field.</label><small>If other reasons remain, leave this unchecked and edit the old note separately.</small></div>':'')+
       '<div class="full" id="lobReceiptHint"></div></div>'+
       '<div class="modal-actions"><button class="secondary" onclick="openProjectDetail('+Number(p.id)+')">Cancel</button>'+
       '<button class="primary" onclick="saveLinkedOrderBlocker('+Number(p.id)+')">Link Order</button></div>');
@@ -170,7 +171,7 @@
   const baseAudit=window.projectCloseoutAudit;
   if(typeof baseAudit==='function')window.projectCloseoutAudit=function(p){
     const result=baseAudit(p);
-    const outstanding=waiting(p);
+    const outstanding=p?waiting(p):[];
     if(!outstanding.length)return result;
     const issue={severity:'warning',label:'Order-linked blockers still outstanding',
       detail:outstanding.map(b=>b.description).join(' • ')};
