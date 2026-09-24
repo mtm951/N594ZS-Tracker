@@ -371,7 +371,7 @@
     legacyGroup=!!existing&&deps(existing).length>1;
     const manual=isManual(existing);
     editRows=existing&&!manual?deps(existing).map(d=>({
-      ...d,search:findOrder(d.orderId)?.item||''}):
+      ...d,search:findOrder(d.orderId)?.item||''})):
       [{orderId:null,requiredQty:'',search:''}];
     const legacy=String(p.blockers||'').trim();
     openModal(modalHeader(existing?'Edit blocker':'Add project blocker',p.title)+
