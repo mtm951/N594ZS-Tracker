@@ -517,4 +517,129 @@ function receiptWork(tx){
   assert.match(h.alerts.at(-1),/No pending atomic receipt/);
 }
 
+
+// A deleted older, UNLINKED test Order cannot be replayed. The originating
+// device has already removed that Order; only an explicitly approved local
+// archive of the protected journal can unblock ordinary guarded sync.
+function deletedTestFixture(){
+  const previous={id:31,item:'Numb',qty:4,partId:null,receivedQty:0,
+    status:'Ordered',updates:[]};
+  const staged={...structuredClone(previous),receivedQty:2,
+    receivedDate:'2026-09-23',updates:[{id:71,date:'2026-09-23',
+      text:'Received 2 ea (partial receipt).'}]};
+  const journal={
+    format:'N594ZS_ATOMIC_RECEIPT_V1',
+    operationId:'older-unlinked-test',
+    workspaceId:'workspace-1',userId:'user-1',
+    createdAt:'2026-09-23T16:22:50Z',blocked:true,
+    changes:[{record_type:'order',record_id:'31',data:staged,
+      deleted_at:null,expected_version:2,updated_client:'client-1'}],
+    before:[{key:'order:31',data:previous}]
+  };
+  const deleted={
+    record_type:'order',record_id:'31',
+    data:{...structuredClone(staged),updates:[{id:72,date:'2026-09-23',
+      text:'Received 2 ea (partial receipt).'}]},
+    deleted_at:'2026-09-23T20:06:53Z',record_version:4
+  };
+  const seed={
+    db:{parts:[{id:21,name:'Unrelated real aircraft part',stockQty:8}],
+      orders:[],projects:[],settings:{},logs:[],docs:[],checklists:[]},
+    baseline:{parts:[{id:21,name:'Unrelated real aircraft part',stockQty:8}],
+      orders:[previous],partVersion:3,orderVersion:2},
+    storage:{[OPT]:'0',[OUTBOX]:JSON.stringify(journal),[PENDING]:'1',
+      [SNAP]:JSON.stringify({'part:21':stable({id:21,name:'Unrelated real aircraft part',stockQty:8}),
+        'order:31':stable(previous)}),[VERS]:JSON.stringify({'part:21':3,'order:31':2})}
+  };
+  return {previous,staged,journal,deleted,seed};
+}
+{
+  const f=deletedTestFixture();
+  const h=makeHarness({enabled:false,seed:f.seed,onCloudRead:()=>({
+    data:[structuredClone(f.deleted)],error:null
+  })});
+  h.ctx.atomicReceiptOutbox.exportPendingJournal();
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.deleted,true);
+  assert.equal(result.resolved,true);
+  assert.equal(h.cloudReads.length,2,'deleted Order needs a second read after confirmation');
+  assert.equal(h.rpcCalls.length,0,'deleted receipt was sent to atomic RPC');
+  assert.equal(h.oldLoadCount(),0,'recovery overwrote the entire local cache');
+  assert.equal(h.oldSaveCount(),1,'remaining guarded sync was not resumed');
+  assert.equal(h.db.parts[0].stockQty,8,'archive changed real physical inventory');
+  assert.equal(h.db.orders.length,0,'deleted Order was resurrected');
+  assert.equal(h.localStorage.getItem(OUTBOX),null,'archived journal remained blocked');
+  const archive=JSON.parse(h.localStorage.getItem(RESOLVED));
+  assert.equal(archive.length,1);
+  assert.equal(archive[0].reason,'deleted-unlinked-test-order');
+  assert.equal(archive[0].journal.operationId,f.journal.operationId);
+  assert.equal(archive[0].cloudTombstone.record_version,4);
+  assert.equal(JSON.parse(h.localStorage.getItem(VERS))['order:31'],4);
+  assert.equal(JSON.parse(h.localStorage.getItem(SNAP))['order:31'],undefined);
+  assert.equal(h.safetyExports.length,1,'original journal safety export is missing');
+}
+{
+  const f=deletedTestFixture();
+  const h=makeHarness({enabled:false,seed:f.seed,confirmResult:false,
+    onCloudRead:()=>({data:[structuredClone(f.deleted)],error:null})});
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.resolved,false);
+  assert.equal(h.cloudReads.length,1);
+  assert.ok(h.localStorage.getItem(OUTBOX),'journal cleared without consent');
+  assert.equal(h.localStorage.getItem(RESOLVED),null);
+  assert.equal(h.oldSaveCount(),0);
+  assert.equal(h.rpcCalls.length,0);
+}
+{
+  // A browser that still contains this Order could have unsaved local
+  // edits. Even if the server deleted it, DO NOT offer one-click archival.
+  const f=deletedTestFixture();
+  f.seed.db.orders=[structuredClone(f.staged)];
+  const h=makeHarness({seed:f.seed,
+    onCloudRead:()=>({data:[structuredClone(f.deleted)],error:null})});
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.resolved,false);
+  assert.equal(result.deleted,true);
+  assert.ok(h.localStorage.getItem(OUTBOX));
+  assert.equal(h.oldSaveCount(),0);
+  assert.match(h.alerts.at(-1),/still exists locally/);
+}
+{
+  // Never archive if the journal affects a linked Part, or the cloud row
+  // doesn't represent the very same quantity and item as the old test.
+  const f=deletedTestFixture();
+  f.journal.changes[0].data.partId=21;
+  f.seed.storage[OUTBOX]=JSON.stringify(f.journal);
+  const h=makeHarness({seed:f.seed,
+    onCloudRead:()=>({data:[structuredClone(f.deleted)],error:null})});
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.resolved,undefined);
+  assert.ok(h.localStorage.getItem(OUTBOX));
+  assert.equal(h.localStorage.getItem(RESOLVED),null);
+  assert.equal(h.oldSaveCount(),0);
+}
+{
+  const f=deletedTestFixture();
+  const h=makeHarness({seed:f.seed,failKey:RESOLVED,
+    onCloudRead:()=>({data:[structuredClone(f.deleted)],error:null})});
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.matched,false);
+  assert.match(result.error,/Storage quota exhausted/);
+  assert.ok(h.localStorage.getItem(OUTBOX),'archive failure lost original journal');
+  assert.equal(h.oldSaveCount(),0);
+}
+{
+  const f=deletedTestFixture();
+  let reads=0;
+  const h=makeHarness({seed:f.seed,onCloudRead:()=>{
+    reads++;
+    return {data:[{...structuredClone(f.deleted),record_version:reads===1?4:5}],error:null};
+  }});
+  const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(result.matched,false);
+  assert.match(result.error,/changed during recovery/);
+  assert.ok(h.localStorage.getItem(OUTBOX),'race condition lost journal');
+  assert.equal(h.oldSaveCount(),0);
+}
+
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
