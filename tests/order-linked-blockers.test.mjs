@@ -59,6 +59,7 @@ function harness(db=fixture(),{atomic=false,online=true,server=null}={}){
     arr:x=>Array.isArray(x)?x:[],num:x=>Number(x)||0,esc:String,
     partById:id=>db.parts.find(x=>String(x.id)===String(id)),
     projectById:id=>db.projects.find(x=>String(x.id)===String(id)),
+    projectName:id=>db.projects.find(x=>String(x.id)===String(id))?.title||'Unlinked',
     orderById:id=>db.orders.find(x=>String(x.id)===String(id)),
     orderReceivedQty:o=>Number(o.receivedQty)||0,
     saveDB:()=>{saves++;if(atomic)assert.ok(localStorage.getItem(OUTBOX),'Journal must predate saveDB');},
