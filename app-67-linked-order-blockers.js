@@ -265,7 +265,7 @@
       '<b>'+esc(o.item||'Unnamed order')+'</b>'+
       '<small>'+esc(received(o))+'/'+esc(o.qty)+' received • '+
       (belongs(o,p.id)?'This project':'From '+esc(projectName(o.projectId)))+
-      (o.tracking?' • '+esc(o.tracking):'')+'</small></button>'
+      ' • '+esc(o.tracking||'#'+o.id)+'</small></button>'
     ).join('');
   }
   window.searchBlockerOrders=function(index){
@@ -345,6 +345,9 @@
     const manual=dom('lobType')?.value==='manual';
     if(!manual)captureRows();
     const note=dom('lobDescription')?.value||'';
+    const oldBlocker=rows(projectById(Number(projectId))?.orderBlockers).find(b=>same(b.id,editingBlockerId));
+    if(manual&&oldBlocker&&!isManual(oldBlocker)&&deps(oldBlocker).length>1&&
+      !confirm('Replace this combined order blocker with a manual issue? Its existing order dependencies will be archived in earlier updates but no longer tracked here.'))return null;
     const holds=!!dom('lobHolds')?.checked;
     const moveLegacy=!!dom('lobMoveLegacy')?.checked;
     const dependencyMode=legacyGroup?(dom('lobMode')?.value||'all'):'all';
@@ -503,6 +506,33 @@
       '<button class="icon-btn" onclick="openLinkedOrderBlockerModal('+Number(p.id)+')">+ Add Blocker</button></div>'+
       (all.length?items:'<div class="muted small">No tracked blockers yet.</div>')+prompt+'</div>';
   }
+  // Reverse lookup is derived from explicit Project records. Sharing an
+  // order as a blocker never changes the order's cost attribution, inventory,
+  // project assignment or received quantity.
+  function blockingProjectsForOrder(orderId){
+    return rows(db.projects).flatMap(p=>rows(p.orderBlockers)
+      .filter(b=>!isManual(b)&&deps(b).some(d=>same(d.orderId,orderId)))
+      .map(b=>({projectId:p.id,projectTitle:p.title,blockerId:b.id,
+        description:b.description,status:b.status})));
+  }
+  window.blockingProjectsForOrder=blockingProjectsForOrder;
+  const orderDetailBase=window.openOrderDetail;
+  if(typeof orderDetailBase==='function')window.openOrderDetail=function(id){
+    orderDetailBase(id);
+    const box=dom('modalBox'),related=blockingProjectsForOrder(id);
+    if(!box||!related.length||box.querySelector('#orderBlockingProjectsCard'))return;
+    const right=box.querySelector('.detail-grid > div:nth-child(2)');
+    if(!right)return;
+    const html='<div class="detail-card" id="orderBlockingProjectsCard">'+
+      '<h3>Projects blocked by this order</h3>'+
+      '<div class="tiny muted" style="margin-bottom:8px">One order may block several projects. These are references, not additional stock reservations or duplicate costs.</div>'+
+      related.map(x=>'<div class="kv"><div>'+
+        '<button class="linkbtn" onclick="openProjectDetail('+Number(x.projectId)+')">'+esc(x.projectTitle)+'</button>'+
+        '<div class="tiny muted">'+esc(x.description)+'</div></div>'+
+        '<span class="mini-badge">'+esc(x.status==='resolved'?'Resolved':'Waiting')+'</span></div>').join('')+
+      '</div>';
+    right.insertAdjacentHTML('afterbegin',html);
+  };
   const detailBase=window.openProjectDetail;
   window.openProjectDetail=function(id){
     detailBase(id);
