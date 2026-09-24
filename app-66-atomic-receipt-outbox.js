@@ -8,6 +8,7 @@
   const KEY='n594zs_atomic_receipt_outbox_v1';
   const OPT='n594zs_atomic_receipts_opt_in_v1';
   const ADJUST_OPT='n594zs_atomic_adjustments_opt_in_v1';
+  const CONSUME_OPT='n594zs_atomic_consumption_opt_in_v1';
   const SNAP='n594zs_record_snapshot_v4';
   const VERS='n594zs_record_versions_v1';
   const RESOLVED='n594zs_atomic_receipt_resolutions_v1';
@@ -35,14 +36,15 @@
   function pending(){return !!localStorage.getItem(KEY)}
   function enabled(){return localStorage.getItem(OPT)==='1'}
   function adjustmentsEnabled(){return localStorage.getItem(ADJUST_OPT)==='1'}
+  function consumptionEnabled(){return localStorage.getItem(CONSUME_OPT)==='1'}
   function shouldHandle(kind='receipt'){
     // Never bypass an earlier journal, regardless of which workflow created it.
-    const optedIn=kind==='adjustment'?adjustmentsEnabled():enabled();
-    return pending()||(kind==='adjustment'?optedIn:(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId));
+    const optedIn=kind==='adjustment'?adjustmentsEnabled():kind==='consumption'?consumptionEnabled():enabled();
+    return pending()||(kind==='receipt'?(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId):optedIn);
   }
   function snapshot(){
     const out=new Map();
-    for(const [type,arrayKey] of [['order','orders'],['part','parts']])
+    for(const [type,arrayKey] of [['order','orders'],['part','parts'],['project','projects'],['log','logs'],['purchase','purchases']])
       for(const row of arr(db[arrayKey])){
         const k=key(type,row.id);
         out.set(k,{key:k,record_type:type,record_id:String(row.id),data:copy(row)});
@@ -57,12 +59,124 @@
     if(e.workspaceId!==cloudWorkspaceId||e.userId!==cloudSession?.user?.id)
       throw new Error('A pending receipt belongs to a different workspace or account. Do not discard it.');
   }
-  function stage(work,message,kind='receipt'){
-    const adjustment=kind==='adjustment';
+
+  // This release deliberately supports ONLY one Reserve -> Use operation:
+  // one existing Part and Project, one newly created Work Log and zero or
+  // more existing Purchase rows used to materialize previously installed stock.
+  // New IDs, unexpected side effects and stale cloud baselines fail closed.
+  function validateConsumption(before,after,changes,touchedKeys,old,meta){
+    if(meta?.mode!=='reserved'||!(Number(meta.qty)>0)||
+       !Number.isFinite(Number(meta.qty))||meta.partId==null||
+       meta.projectId==null||meta.logId==null||meta.reservationId==null)
+      throw new Error('Atomic consumption requires one specific Reserve -> Use transaction.');
+    const byType=type=>changes.filter(r=>r.record_type===type);
+    if(changes.some(r=>!['part','project','log','purchase'].includes(r.record_type))||
+       byType('part').length!==1||byType('project').length!==1||
+       byType('log').length!==1||
+       String(byType('part')[0].record_id)!==String(meta.partId)||
+       String(byType('project')[0].record_id)!==String(meta.projectId)||
+       String(byType('log')[0].record_id)!==String(meta.logId))
+      throw new Error('Atomic consumption must stage one Part, one Project and one new Work Log.');
+    const wanted=new Set(changes.map(r=>key(r.record_type,r.record_id)));
+    const touched=new Set(touchedKeys);
+    if(wanted.size!==changes.length||wanted.size!==touched.size||
+       [...wanted].some(k=>!touched.has(k)))
+      throw new Error('Consumption touched records outside the atomic transaction.');
+    for(const k of Object.keys(old)){
+      if(['parts','projects','logs','purchases'].includes(k))continue;
+      if(stable(old[k])!==stable(db[k]))
+        throw new Error('Consumption unexpectedly modified '+k+'.');
+    }
+    for(const [k,row] of before){
+      if(!after.has(k))throw new Error('Consumption unexpectedly deleted '+k+'.');
+      if(!wanted.has(k)&&stable(row.data)!==stable(after.get(k).data))
+        throw new Error('Consumption changed an untracked record: '+k);
+    }
+    for(const [k] of after){
+      if(!before.has(k)&&k!==key('log',meta.logId))
+        throw new Error('Consumption unexpectedly created '+k+'.');
+    }
+    const log=byType('log')[0].data;
+    if(before.has(key('log',meta.logId))||
+       !Array.isArray(log.consumedParts)||log.consumedParts.length!==1||
+       String(log.id)!==String(meta.logId)||
+       log.origin!=='reserved-part-use'||
+       !arr(log.projectIds).some(id=>String(id)===String(meta.projectId))||
+       arr(log.projectIds).length!==1)
+      throw new Error('Atomic consumption Work Log is not a unique reserved-use entry.');
+    const consumed=log.consumedParts[0];
+    if(String(consumed.id)!==String(meta.consumedItemId)||
+       String(consumed.partId)!==String(meta.partId)||
+       String(consumed.projectPartId)!==String(meta.projectPartId)||
+       Math.abs(Number(consumed.qty)-Number(meta.qty))>1e-9)
+      throw new Error('Work Log consumption does not match the requested Part and quantity.');
+    const originalProject=before.get(key('project',meta.projectId))?.data;
+    const nextProject=byType('project')[0].data;
+    if(!originalProject||String(nextProject.id)!==String(meta.projectId))
+      throw new Error('Consumption Project baseline is missing.');
+    const oldReservation=arr(originalProject.plannedParts).find(x=>String(x.id)===String(meta.reservationId));
+    if(!oldReservation||String(oldReservation.partId)!==String(meta.partId)||
+       Number(meta.qty)>Number(oldReservation.qty)+1e-9)
+      throw new Error('Reserved quantity changed; refresh before recording use.');
+    const expectedReservations=copy(arr(originalProject.plannedParts));
+    const selected=expectedReservations.find(x=>String(x.id)===String(meta.reservationId));
+    selected.qty=Math.max(0,Number(selected.qty)-Number(meta.qty));
+    const expectedRemaining=selected.qty<=1e-9?expectedReservations.filter(x=>String(x.id)!==String(meta.reservationId)):expectedReservations;
+    const priorUsed=arr(originalProject.partsUsed),afterUsed=arr(nextProject.partsUsed);
+    const used=afterUsed[afterUsed.length-1];
+    if(stable(arr(nextProject.plannedParts))!==stable(expectedRemaining)||
+       afterUsed.length!==priorUsed.length+1||
+       stable(afterUsed.slice(0,-1))!==stable(priorUsed)||
+       String(used?.id)!==String(meta.projectPartId)||
+       String(used?.logId)!==String(meta.logId)||
+       String(used?.consumedItemId)!==String(meta.consumedItemId)||
+       String(used?.partId)!==String(meta.partId)||
+       Math.abs(Number(used?.qty)-Number(meta.qty))>1e-9)
+      throw new Error('Project reservation release and Parts Used entry must match the Work Log.');
+    const strippedProjectBefore=copy(originalProject),strippedProjectAfter=copy(nextProject);
+    delete strippedProjectBefore.plannedParts;delete strippedProjectBefore.partsUsed;
+    delete strippedProjectAfter.plannedParts;delete strippedProjectAfter.partsUsed;
+    if(stable(strippedProjectBefore)!==stable(strippedProjectAfter))
+      throw new Error('Consumption changed an unrelated Project field.');
+    const originalPart=before.get(key('part',meta.partId))?.data,nextPart=byType('part')[0].data;
+    if(!originalPart||String(nextPart.id)!==String(meta.partId))
+      throw new Error('Consumption source Part baseline is missing.');
+    const oldPart=copy(originalPart),newPart=copy(nextPart);
+    delete oldPart.stockQty;delete oldPart.linkedProjectIds;
+    delete newPart.stockQty;delete newPart.linkedProjectIds;
+    if(stable(oldPart)!==stable(newPart)||
+       !arr(nextPart.linkedProjectIds).some(id=>String(id)===String(meta.projectId))||
+       arr(originalPart.linkedProjectIds).some(id=>!arr(nextPart.linkedProjectIds).some(n=>String(n)===String(id))))
+      throw new Error('Consumption changed unrelated Part fields or project links.');
+    let credited=0;
+    for(const purchase of byType('purchase')){
+      const original=before.get(key('purchase',purchase.record_id))?.data,updated=purchase.data;
+      if(!original||original.disposition!=='Installed')
+        throw new Error('Only an existing Installed Purchase can materialize receipts.');
+      const prior=Number(original.inventoryReceiptMaterializedQty)||0;
+      const next=Number(updated.inventoryReceiptMaterializedQty);
+      const delta=next-prior;
+      if(!Number.isFinite(delta)||delta<=0||next>Number(original.qty)+1e-9||
+         updated.inventoryReceiptMaterialized!==true||updated.inventoryApplied!==true)
+        throw new Error('Purchase credit is not a valid single receipt materialization.');
+      const cleanOld=copy(original),cleanNew=copy(updated);
+      for(const field of ['inventoryReceiptMaterializedQty','inventoryReceiptMaterialized','inventoryApplied']){
+        delete cleanOld[field];delete cleanNew[field];
+      }
+      if(stable(cleanOld)!==stable(cleanNew))
+        throw new Error('Purchase had an unrelated change during consumption.');
+      credited+=delta;
+    }
+    if(Math.abs((Number(nextPart.stockQty)||0)-(Number(originalPart.stockQty)||0)-credited)>1e-9)
+      throw new Error('Purchase receipts and Part stock credit do not reconcile.');
+  }
+
+  function stage(work,message,kind='receipt',meta=null){
+    const adjustment=kind==='adjustment',consumption=kind==='consumption';
     if(!shouldHandle(kind)||!supa||!cloudSession||!cloudWorkspaceId)
-      throw new Error('Atomic '+(adjustment?'adjustments':'receipts')+' require an authenticated workspace. Connect without discarding local changes.');
+      throw new Error('Atomic '+(adjustment?'adjustments':consumption?'part consumption':'receipts')+' requires an authenticated workspace. Connect without discarding local changes.');
     if(!canCloudEdit())throw new Error('This workspace is read-only.');
-    if(pending())throw new Error('An earlier receipt is still pending. Sync or review it before receiving more stock.');
+    if(pending())throw new Error('An earlier receipt is still pending, or another atomic operation is awaiting sync. Review it before changing inventory.');
     if(localStorage.getItem(PENDING)==='1')
       throw new Error('Other changes are waiting to sync. Wait for Synced or resolve the conflict before receiving.');
     if(!cloudRecordSnapshot?.size)throw new Error('Cloud baseline is not available. Wait until the tracker finishes loading.');
@@ -76,7 +190,14 @@
       const after=snapshot(),changes=[],originals=[];
       for(const [k,r] of after){
         const prior=before.get(k);
-        if(!prior||stable(prior.data)===stable(r.data))continue;
+        if(!prior){
+          if(!consumption||r.record_type!=='log')throw new Error('Atomic operation unexpectedly created '+k+'.');
+          if(cloudRecordSnapshot.has(k)||cloudRecordVersions.has(k))throw new Error('New Work Log ID already exists in the cloud baseline.');
+          changes.push({record_type:'log',record_id:r.record_id,data:r.data,deleted_at:null,expected_version:0,updated_client:CLOUD_CLIENT_ID});
+          originals.push({key:k,data:null});
+          continue;
+        }
+        if(stable(prior.data)===stable(r.data))continue;
         if(!cloudRecordSnapshot.has(k)||cloudRecordSnapshot.get(k)!==stable(prior.data))
           throw new Error('The '+r.record_type+' has unverified local edits; sync first.');
         changes.push({
@@ -85,6 +206,18 @@
           updated_client:CLOUD_CLIENT_ID
         });
         originals.push({key:k,data:prior.data});
+      }
+      if(consumption){
+        // A consumption outflow is logged, not subtracted from stockQty. Lock
+        // the source Part's version even if its own payload was unchanged.
+        const pk=key('part',meta?.partId),original=before.get(pk);
+        if(!original||!after.has(pk))throw new Error('Consumption source Part is missing.');
+        if(!changes.some(r=>key(r.record_type,r.record_id)===pk)){
+          if(!cloudRecordSnapshot.has(pk)||cloudRecordSnapshot.get(pk)!==stable(original.data))
+            throw new Error('Source Part has unverified local edits; sync first.');
+          changes.push({record_type:'part',record_id:String(meta.partId),data:after.get(pk).data,deleted_at:null,expected_version:Number(cloudRecordVersions.get(pk))||0,updated_client:CLOUD_CLIENT_ID});
+          originals.push({key:pk,data:original.data});
+        }
       }
       if(!changes.length)throw new Error('Atomic operation changed no records.');
       if(adjustment){
@@ -107,13 +240,15 @@
         if(touchedKeys.length!==1||touchedKeys[0]!==key('part',change.record_id)||
            Object.keys(old).some(k=>k!=='parts'&&k!=='orders'&&stable(old[k])!==stable(db[k])))
           throw new Error('Atomic adjustment touched an unrelated record.');
+      }else if(consumption){
+        validateConsumption(before,after,changes,touchedKeys,old,meta);
       }else if(!changes.some(r=>r.record_type==='order'))
         throw new Error('Receipt did not produce a changed Order record.');
       // This opt-in path is specifically for an Order + Part transaction.
       // A receipt without a linked Part can update only its Order and would
       // give a misleading atomic-inventory test result. Check BEFORE writing
       // the durable journal; the catch below restores the staged local DB.
-      for(const order of (adjustment?[]:changes.filter(r=>r.record_type==='order'))){
+      for(const order of (adjustment||consumption?[]:changes.filter(r=>r.record_type==='order'))){
         const linkedId=order.data?.partId;
         const partIncluded=linkedId&&changes.some(r=>r.record_type==='part'&&
           String(r.record_id)===String(linkedId));
@@ -139,7 +274,7 @@
       localStorage.setItem(PENDING,'1');
       cloudDirty=true;
       trackerStore.commit(message);
-      cloudStatusLabel(adjustment?'Adjustment pending':'Receipt pending');
+      cloudStatusLabel(adjustment?'Adjustment pending':consumption?'Consumption pending':'Receipt pending');
       return result;
     }catch(error){
       if(!journalWritten)restore(old);
@@ -151,30 +286,44 @@
   async function recoverLocal(){
     const e=read();
     if(!e)return false;
-    if(!cloudSession||!cloudWorkspaceId)throw new Error('Connect to the workspace before recovering a receipt.');
+    if(!cloudSession||!cloudWorkspaceId)throw new Error('Connect to the workspace before recovering a pending atomic operation.');
     validateIdentity(e);
-    let changed=false;
-    const current=snapshot();
+    const current=snapshot(),writes=[];
+    // Preflight every member BEFORE modifying any in-memory row. In
+    // particular, a crash can leave a newly created Work Log absent while
+    // the existing Part/Project/Purchase edits survived in another tab.
     for(const r of e.changes){
       const k=key(r.record_type,r.record_id);
-      const now=current.get(k)?.data||null;
-      const original=e.before.find(x=>x.key===k)?.data||null;
+      const prior=e.before.find(x=>x.key===k);
+      if(!prior)throw new Error('Atomic recovery is missing the original record: '+k);
+      const now=current.get(k)?.data??null,original=prior.data??null;
       if(stable(now)===stable(r.data))continue;
-      if(!original||stable(now)!==stable(original)){
-        throw new Error('A pending receipt has newer local edits. Do not reload cloud data; review the receipt first.');
+      if(original===null){
+        if(r.record_type!=='log'||now!==null)
+          throw new Error('Atomic recovery found an unexpected new record: '+k);
+      }else if(stable(now)!==stable(original))
+        throw new Error('A pending atomic operation has newer local edits. Do not reload cloud data.');
+      const arrayName={part:'parts',order:'orders',project:'projects',log:'logs',purchase:'purchases'}[r.record_type];
+      if(!arrayName||!Array.isArray(db[arrayName]))
+        throw new Error('Pending atomic record type is unavailable: '+k);
+      writes.push({arrayName,record_id:r.record_id,data:r.data,created:original===null});
+    }
+    if(writes.length){
+      for(const w of writes){
+        const rows=db[w.arrayName],index=rows.findIndex(x=>String(x.id)===String(w.record_id));
+        if(index<0){
+          if(!w.created)throw new Error('Existing atomic record disappeared during recovery.');
+          rows.push(copy(w.data));
+        }else rows[index]=copy(w.data);
       }
-      const array=r.record_type==='part'?db.parts:db.orders;
-      const index=array.findIndex(x=>String(x.id)===String(r.record_id));
-      if(index<0)throw new Error('Pending receipt record is missing from the local cache.');
-      array[index]=copy(r.data);changed=true;
     }
     localStorage.setItem(PENDING,'1');cloudDirty=true;
-    if(changed){
+    if(writes.length){
       if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});
       else localStorage.setItem(DB_KEY,JSON.stringify(db));
       renderAll();
     }
-    return changed;
+    return !!writes.length;
   }
   function retain(message,kind){
     cloudDirty=true;
@@ -369,10 +518,11 @@
       const unlinked=e.changes.some(r=>r.record_type==='order'&&
         (!r.data?.partId||!e.changes.some(p=>p.record_type==='part'&&
           String(p.record_id)===String(r.data.partId))));
-      const prompt='The cloud ALREADY contains every field from this pending '+(e.operationKind==='adjustment'?'adjustment':'receipt')+'. '+
+      const prompt='The cloud ALREADY contains every field from this pending '+(e.operationKind==='adjustment'?'adjustment':e.operationKind==='consumption'?'consumption':'receipt')+'. '+
         'No cloud records need to be written. '+
         (unlinked?'WARNING: This older receipt has no linked Part update and did NOT credit inventory. ':
           e.operationKind==='adjustment'?'The Part adjustment matches the cloud. ':
+          e.operationKind==='consumption'?'The linked Part, Project, Work Log and any Purchase credits all match the cloud. ':
           'Linked Part and Order changes both match the cloud. ')+
         'Archive and acknowledge this local journal? This does NOT receive anything again.';
       if(!confirm(prompt))return {matched:true,resolved:false};
@@ -455,7 +605,7 @@
       cloudPending:localStorage.getItem(PENDING)==='1'
     };
     if(typeof downloadJSON!=='function')throw new Error('Download support is unavailable. Keep this browser data intact.');
-    downloadJSON(record,'N594ZS_Atomic_Receipt_Safety_'+today()+'.json');
+    downloadJSON(record,'N594ZS_Atomic_'+(e?.operationKind==='consumption'?'Consumption':'Receipt')+'_Safety_'+today()+'.json');
     toast('Pending atomic receipt safety download started. Keep the file separate from your core backup.','good');
     return record;
   }
@@ -465,19 +615,22 @@
     const legacyUnlinked=e?.changes.some(r=>r.record_type==='order'&&
       (!r.data?.partId||!e.changes.some(p=>p.record_type==='part'&&
         String(p.record_id)===String(r.data.partId))));
-    const detail=e?'<div class="notice"><b>Pending '+(e.operationKind==='adjustment'?'adjustment':'receipt')+'</b><br>Operation '+esc(e.operationId)+
+    const detail=e?'<div class="notice"><b>Pending '+(e.operationKind==='adjustment'?'adjustment':e.operationKind==='consumption'?'consumption':'receipt')+'</b><br>Operation '+esc(e.operationId)+
       '<br>Created '+esc(e.createdAt)+(e.blocked?'<br><b>Version conflict — no automatic retry.</b>':'')+
       '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
     openModal(modalHeader('Atomic inventory testing','One pending atomic operation per device; experimental')+
-      '<div class="notice">Order receipts and manual Part adjustments have separate opt-ins. Enabled operations are journaled locally before cloud sync, then applied through the same idempotent server transaction. Other tracker workflows still use normal sync.</div>'+
+      '<div class="notice">Order receipts, manual Part adjustments and Reserve → Use have separate opt-ins. Enabled operations share one durable, idempotent cloud transaction journal. All other tracker workflows still use normal sync.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
       '<div class="detail-section"><b>Atomic receipts: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending operations cannot be discarded by reloading cloud data.</div></div>'+ 
       '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Separate opt-in; test on a disposable Part. Receipts and adjustments share one durable journal, so a second operation cannot overtake an unsynced first.</div></div>'+
+      '<div class="detail-section"><b>Atomic Reserve → Use: '+(consumptionEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental; independent opt-in. A Part, Project, new Work Log and linked Purchase credits save together.</div></div>'+
       '<div class="modal-actions">'+
-      (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">Download Pending Receipt Safety Copy</button>':'')+
+      (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">'+
+        (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
       '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable Receipt Testing')+'</button>'+ 
       '<button class="secondary" onclick="atomicReceiptOutbox.toggleAdjustments()">'+(adjustmentsEnabled()?'Turn Off Atomic Adjustments':'Enable Atomic Adjustment Testing')+'</button>'+
+      '<button class="secondary" onclick="atomicReceiptOutbox.toggleConsumption()">'+(consumptionEnabled()?'Turn Off Atomic Consumption':'Enable Atomic Reserve → Use Testing')+'</button>'+
       (e?(e.blocked?
         '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
         '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Receipt</button>'):'')+
@@ -502,6 +655,17 @@
     openSettings();
   }
   function stageAdjustment(work,message){return stage(work,message,'adjustment')}
+  function stageConsumption(work,message,meta){return stage(work,message,'consumption',meta)}
+  function toggleConsumption(){
+    if(consumptionEnabled()){
+      localStorage.removeItem(CONSUME_OPT);
+      toast('New part use will follow ordinary sync. Pending operations stay protected.','good');
+    }else{
+      if(!confirm('Enable experimental atomic Reserve → Use on this device? First test with a disposable Part and Project. Other part-use forms still use ordinary sync.'))return;
+      localStorage.setItem(CONSUME_OPT,'1');
+    }
+    openSettings();
+  }
   async function retryFromUI(){
     if(!cloudSession||!cloudWorkspaceId)return alert('Sign in to your original workspace first.');
     const result=await window.saveCloudState();
@@ -564,11 +728,14 @@
   };
   const originalStatus=window.cloudStatusLabel;
   window.cloudStatusLabel=function(label,kind){
-    if(pending()&&label==='Synced')label='Receipt pending';
+    if(pending()&&label==='Synced'){
+      let kind='receipt';try{kind=read()?.operationKind||'receipt'}catch(_e){}
+      label=kind==='consumption'?'Consumption pending':kind==='adjustment'?'Adjustment pending':'Receipt pending';
+    }
     return originalStatus(label,kind);
   };
   window.atomicReceiptOutbox=Object.freeze({
-    enabled,adjustmentsEnabled,shouldHandle,hasPending:pending,stage,stageAdjustment,flush,recoverLocal,
-    openSettings,toggle,toggleAdjustments,retryFromUI,reviewConflict,exportPendingJournal
+    enabled,adjustmentsEnabled,consumptionEnabled,shouldHandle,hasPending:pending,stage,stageAdjustment,stageConsumption,flush,recoverLocal,
+    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,exportPendingJournal
   });
 })();

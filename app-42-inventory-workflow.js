@@ -191,9 +191,101 @@
     return id;
   }
 
+
+  // Experimental Reserve -> Use uses one durable Part/Project/Log/Purchase
+  // transaction. Previewing receipts has NO side effects: unlike the older
+  // path, rejecting an insufficient-stock warning leaves purchases intact.
+  function previewReservedUseCredits(part,qty){
+    var on=partAvailable(part);
+    var need=Math.max(0,qty-Math.max(0,Number(on)||0)),credits=[];
+    installedPurchaseSourcesForPart(part).forEach(function(source){
+      if(need<=1e-9)return;
+      var materialized=num(source.inventoryReceiptMaterializedQty);
+      var take=Math.min(Math.max(0,num(source.qty)-materialized),need);
+      if(take<=0)return;
+      credits.push({id:source.id,qty:take,previous:materialized});
+      need-=take;
+    });
+    return credits;
+  }
+
+  function saveAtomicReservedPartUse(project,item,part,qty){
+    var credits=previewReservedUseCredits(part,qty);
+    var credited=credits.reduce(function(sum,x){return sum+x.qty},0);
+    var on=partAvailable(part);
+    if(on!==null&&qty>on+credited+1e-9&&
+       !confirm('This use exceeds calculated physical inventory and will make the part quantity negative. Record it anyway?'))return;
+    var logId=uid(),consumedItemId=uid(),projectPartId=uid(),
+        unit=item.unit||part.unit||'ea',notes=val('urNotes')||'';
+    var meta={mode:'reserved',partId:part.id,projectId:project.id,
+      reservationId:item.id,logId:logId,consumedItemId:consumedItemId,
+      projectPartId:projectPartId,qty:qty};
+    var entry={
+      id:logId,date:val('urDate')||today(),airframeHours:'',engineHours:'',
+      laborHours:'',system:project.system||part.system||'General',
+      projectIds:[project.id],work:val('urWork')||('Used '+part.name),
+      observations:notes,blockers:'',nextStep:'',
+      consumedParts:[{id:consumedItemId,partId:part.id,name:part.name,
+        qty:qty,unit:unit,unitCost:part.unitCost,
+        notes:'Consumed from project reservation',projectPartId:projectPartId}],
+      otherCost:'',notes:'Created by Reserve → Use workflow.',
+      origin:'reserved-part-use'
+    };
+    var work=function(tx){
+      // Revalidate all relevant local records inside the scoped batch. Any
+      // failure rolls back in-memory changes before the journal is written.
+      var latestPart=tx.read('part',part.id),latestProject=tx.read('project',project.id);
+      var reserved=arr(latestProject?.plannedParts).find(function(x){return String(x.id)===String(item.id)});
+      if(!latestPart||!reserved||String(reserved.partId)!==String(part.id)||
+         num(reserved.qty)+1e-9<qty)
+        throw new Error('The reservation changed; reopen it before recording use.');
+      for(var credit of credits){
+        var purchase=tx.read('purchase',credit.id);
+        if(!purchase||purchase.disposition!=='Installed'||
+           num(purchase.inventoryReceiptMaterializedQty)!==credit.previous||
+           num(purchase.qty)-credit.previous+1e-9<credit.qty)
+          throw new Error('Installed Purchase provenance changed; sync before using this Part.');
+        tx.update('purchase',credit.id,function(draft){
+          draft.inventoryReceiptMaterializedQty=credit.previous+credit.qty;
+          draft.inventoryReceiptMaterialized=true;
+          draft.inventoryApplied=true;
+        });
+      }
+      tx.update('part',part.id,function(draft){
+        if(credited>0)draft.stockQty=(draft.stockQty===''?0:num(draft.stockQty))+credited;
+        draft.linkedProjectIds=arr(draft.linkedProjectIds);
+        if(!draft.linkedProjectIds.some(function(id){return String(id)===String(project.id)}))
+          draft.linkedProjectIds.push(project.id);
+      });
+      tx.update('project',project.id,function(draft){
+        draft.plannedParts=arr(draft.plannedParts);
+        var res=draft.plannedParts.find(function(x){return String(x.id)===String(item.id)});
+        if(!res||num(res.qty)+1e-9<qty)throw new Error('The reservation is no longer available.');
+        draft.partsUsed=arr(draft.partsUsed);
+        draft.partsUsed.push({id:projectPartId,partId:part.id,name:part.name,qty:qty,
+          unit:unit,unitCost:part.unitCost,
+          notes:(notes?notes+' • ':'')+'Recorded as physical inventory use • work log '+logId,
+          logId:logId,consumedItemId:consumedItemId,consumptionRecorded:true});
+        res.qty=Math.max(0,num(res.qty)-qty);
+        if(res.qty<=1e-9)draft.plannedParts=draft.plannedParts.filter(function(x){return String(x.id)!==String(item.id)});
+      });
+      if(tx.read('log',logId))throw new Error('Work Log ID already exists.');
+      tx.write('log',logId,entry);
+    };
+    try{
+      window.atomicReceiptOutbox.stageConsumption(work,'Reserved part used and inventory consumption recorded.',meta);
+    }catch(error){
+      alert('Atomic part use was not safely saved: '+(error?.message||String(error))+
+        '. The journal, if created, must finish syncing before retrying.');
+      return;
+    }
+    openLogDetail(logId);
+  }
+
   window.saveReservedPartUse=function(projectId,itemId){
     var project=projectById(Number(projectId));if(!project)return;var item=arr(project.plannedParts).find(function(x){return String(x.id)===String(itemId)});if(!item)return;var part=partById(Number(item.partId));if(!part)return;
     var qty=Number(val('urQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity used.');if(qty>num(item.qty)+1e-9)return alert('Quantity used cannot exceed the reserved quantity.');
+    if(window.atomicReceiptOutbox?.shouldHandle('consumption'))return saveAtomicReservedPartUse(project,item,part,qty);
     if(typeof window.preparePartForPhysicalUse==='function')window.preparePartForPhysicalUse(part,qty);
     var on=partAvailable(part);if(on!==null&&qty>on&&!confirm('This use exceeds calculated physical inventory and will make the part quantity negative. Record it anyway?'))return;
     var logId=uid(),consumedItemId=uid(),projectPartId=uid(),unit=item.unit||part.unit||'ea',notes=val('urNotes')||'';
