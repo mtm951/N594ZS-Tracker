@@ -164,11 +164,14 @@ function receipt(h,qty,orderId=31){
   db.parts[0].stockQty=1;
   const h=harness(db),originalOrder=clean(o),originalPart=clean(db.parts[0]);
   h.ctx.resolveExistingLinkedOrderBlocker(41);
-  assert.equal(p.status,'In Progress');
-  assert.equal(p.blockers,'');
-  assert.equal(p.orderBlockers[0].status,'resolved');
-  assert.equal(p.orderBlockers[0].resolvedBy,'existing-receipt');
-  assert.ok(p.updates.some(u=>u.text.includes('Prior free-text blocker archived')));
+  // trackerStore.update replaces the project row with a committed draft.
+  // Inspect the current row, not the stale pre-transaction reference.
+  const committed=db.projects[0];
+  assert.equal(committed.status,'In Progress');
+  assert.equal(committed.blockers,'');
+  assert.equal(committed.orderBlockers[0].status,'resolved');
+  assert.equal(committed.orderBlockers[0].resolvedBy,'existing-receipt');
+  assert.ok(committed.updates.some(u=>u.text.includes('Prior free-text blocker archived')));
   assert.deepEqual(o,originalOrder);
   assert.deepEqual(db.parts[0],originalPart);
   assert.equal(h.saves(),1,'linking an already received order should save once');
