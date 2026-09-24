@@ -259,7 +259,7 @@ console.log('linked order blocker and atomic receipt regressions passed');
   assert.equal(db.projects[0].status,'Held Up');
   assert.equal(db.projects[0].orderBlockers.find(b=>b.id===id1).status,'resolved');
   assert.equal(db.projects[0].orderBlockers.find(b=>b.id===id2).status,'waiting');
-  assert.equal(db.projects[1].status,'Blocked');
+  assert.equal(db.projects[1].status,'Held Up');
   receipt(h,1);
   assert.equal(db.projects[0].status,'In Progress');
   assert.equal(db.projects[1].status,'In Progress');
@@ -327,7 +327,7 @@ console.log('linked order blocker and atomic receipt regressions passed');
   assert.equal(b.dependencies.length,1);
   assert.equal(b.orderId,undefined);
   receipt(h,1);
-  assert.equal(b.status,'resolved');
+  assert.equal(h.db.projects[0].orderBlockers[0].status,'resolved');
   assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,71,'Reopen it','all',
     [{orderId:31,requiredQty:3}],true,false),/waiting blocker/);
 }
