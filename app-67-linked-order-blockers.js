@@ -504,6 +504,8 @@
       '<div class="section-tools"><div><h3>Project Blockers</h3>'+
       '<div class="tiny muted">Several independent blockers per project. An order can block more than one project.</div></div>'+
       '<button class="icon-btn" onclick="openLinkedOrderBlockerModal('+Number(p.id)+')">+ Add Blocker</button></div>'+
+      (legacy?'<div class="notice" style="margin:10px 0"><b>Additional older blocker note</b><div style="margin:6px 0">'+esc(legacy)+'</div>'+
+        '<button class="icon-btn" onclick="openProjectModal('+Number(p.id)+')">Edit older note</button></div>':'')+
       (all.length?items:'<div class="muted small">No tracked blockers yet.</div>')+prompt+'</div>';
   }
   // Reverse lookup is derived from explicit Project records. Sharing an
@@ -542,7 +544,7 @@
     if(!right)return;
     const old=[...right.querySelectorAll('.detail-card')].find(el=>
       el.querySelector('h3')?.textContent?.trim()==='Blocker / What Is Holding It Up');
-    if(old)old.insertAdjacentHTML('afterend',card(p));
+    if(old){old.insertAdjacentHTML('afterend',card(p));old.remove();}
     else right.insertAdjacentHTML('afterbegin',card(p));
   };
 })();
