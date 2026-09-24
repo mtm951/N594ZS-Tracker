@@ -237,3 +237,159 @@ function receipt(h,qty,orderId=31){
 }
 
 console.log('linked order blocker and atomic receipt regressions passed');
+
+// v5.19.26: The SAME order may release more than one independently described
+// blocker, including one on a different project. An order's original
+// project attribution and stock only change through their old pathways.
+{
+  const db=fixture();
+  db.projects[0].orderBlockers=[];
+  db.projects.push({id:42,title:'Other project using the same light',status:'Held Up',
+    blockers:'',updates:[],orderBlockers:[],orderBlockerHeld:false,partsUsed:[]});
+  const h=harness(db);
+  const id1=h.ctx.saveMultiOrderBlocker(41,null,'Panel wiring can begin','all',
+    [{orderId:31,requiredQty:1}],true,false);
+  const id2=h.ctx.saveMultiOrderBlocker(41,null,'Annunciator test can begin','all',
+    [{orderId:31,requiredQty:2}],true,false);
+  const id3=h.ctx.saveMultiOrderBlocker(42,null,'Separate dashboard testing','all',
+    [{orderId:31,requiredQty:2}],true,false);
+  assert.equal(new Set([id1,id2,id3]).size,3);
+  assert.equal(db.orders[0].projectId,41,'cross-project dependency changed order ownership');
+  receipt(h,1);
+  assert.equal(db.projects[0].status,'Held Up');
+  assert.equal(db.projects[0].orderBlockers.find(b=>b.id===id1).status,'resolved');
+  assert.equal(db.projects[0].orderBlockers.find(b=>b.id===id2).status,'waiting');
+  assert.equal(db.projects[1].status,'Blocked');
+  receipt(h,1);
+  assert.equal(db.projects[0].status,'In Progress');
+  assert.equal(db.projects[1].status,'In Progress');
+  assert.equal(db.projects[1].orderBlockers.find(b=>b.id===id3).status,'resolved');
+  assert.equal(db.parts[0].stockQty,2,'three blockers credited stock more than once');
+  assert.equal(db.orders[0].receivedQty,2);
+  assert.equal(db.projects[0].updates.filter(u=>u.text.startsWith('Order blocker resolved:')).length,2);
+}
+
+// ALL requires every distinct order; ANY releases after one acceptable
+// alternative. Receipt on another order after ANY was satisfied is inert.
+{
+  const db=fixture();
+  db.orders.push({id:32,item:'Alternate connector',partId:22,projectId:41,qty:3,
+    receivedQty:0,status:'Ordered',updates:[]});
+  db.parts.push({id:22,name:'Alternate connector',stockQty:0});
+  db.projects[0].orderBlockers=[];
+  const h=harness(db);
+  const group=h.ctx.saveMultiOrderBlocker(41,null,'Light AND connector','all',
+    [{orderId:31,requiredQty:2},{orderId:32,requiredQty:1}],true,false);
+  receipt(h,2,31);
+  assert.equal(db.projects[0].status,'Held Up');
+  assert.equal(db.projects[0].orderBlockers.find(b=>b.id===group).status,'waiting');
+  receipt(h,1,32);
+  assert.equal(db.projects[0].status,'In Progress');
+  assert.deepEqual(clean(db.projects[0].orderBlockers.find(b=>b.id===group).satisfiedOrderIds),[31,32]);
+
+  // Separate project; BOTH orders now carry previously recorded receipts.
+  db.projects.push({id:42,title:'Alternative-based job',status:'Open',
+    blockers:'',updates:[],orderBlockers:[],orderBlockerHeld:false,partsUsed:[]});
+  const alternative=h.ctx.saveMultiOrderBlocker(42,null,'Either test lamp is usable','any',
+    [{orderId:31,requiredQty:2},{orderId:32,requiredQty:2}],true,false);
+  assert.equal(db.projects[1].orderBlockers.find(b=>b.id===alternative).status,'resolved');
+  assert.equal(db.projects[1].status,'In Progress','already received alternative did not unblock');
+  receipt(h,1,32);
+  assert.equal(db.projects[1].updates.filter(x=>x.text.startsWith('Order blocker resolved:')).length,1);
+}
+
+// Waiting ANY group is satisfied by its first arriving alternative; its
+// second unreceived option must not hold the project afterward.
+{
+  const db=fixture();
+  db.orders.push({id:32,item:'Alternative light',partId:22,projectId:41,qty:2,
+    receivedQty:0,status:'Ordered',updates:[]});
+  db.parts.push({id:22,name:'Alternative light',stockQty:0});
+  db.projects[0].orderBlockers=[];
+  const h=harness(db);
+  const id=h.ctx.saveMultiOrderBlocker(41,null,'Either lamp will work','any',
+    [{orderId:31,requiredQty:2},{orderId:32,requiredQty:1}],true,false);
+  receipt(h,1,32);
+  assert.equal(db.projects[0].orderBlockers.find(x=>x.id===id).status,'resolved');
+  assert.equal(db.projects[0].status,'In Progress');
+  receipt(h,2,31);
+  assert.equal(db.projects[0].updates.filter(x=>x.text.startsWith('Order blocker resolved:')).length,1);
+}
+
+// Editing a legacy single-order waiting blocker migrates its shape without
+// erasing its event history. Editing a resolved blocker is rejected.
+{
+  const h=harness();
+  h.ctx.saveMultiOrderBlocker(41,71,'Two options','any',
+    [{orderId:31,requiredQty:1}],true,false);
+  const b=h.db.projects[0].orderBlockers[0];
+  assert.equal(b.mode,'any');
+  assert.equal(b.dependencies.length,1);
+  assert.equal(b.orderId,undefined);
+  receipt(h,1);
+  assert.equal(b.status,'resolved');
+  assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,71,'Reopen it','all',
+    [{orderId:31,requiredQty:3}],true,false),/waiting blocker/);
+}
+
+// Duplicate orders INSIDE a single group are invalid. The same order may
+// still appear in distinct blockers; cancelled/missing orders cannot be added.
+{
+  const h=harness(),before=clean(h.db);
+  assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,null,'Duplicate','all',
+    [{orderId:31,requiredQty:1},{orderId:31,requiredQty:2}],true,false),/each order once/);
+  assert.deepEqual(h.db,before);
+  assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,null,'Missing','all',
+    [{orderId:999,requiredQty:1}],true,false),/missing or cancelled/);
+  h.db.orders[0].status='Cancelled';
+  assert.throws(()=>h.ctx.saveMultiOrderBlocker(41,null,'Cancelled','all',
+    [{orderId:31,requiredQty:1}],true,false),/missing or cancelled/);
+  assert.equal(h.saves(),0);
+}
+
+// Group receipts must see ALL uncommitted Order updates in the SAME batch;
+// atomic receiving journals both Parts, both Orders and the Project together.
+{
+  const db=fixture();
+  db.orders.push({id:32,item:'Connector pack',partId:22,projectId:41,
+    qty:1,receivedQty:0,status:'Ordered',updates:[]});
+  db.parts.push({id:22,name:'Connector pack',stockQty:0});
+  db.projects[0].orderBlockers=[{id:77,description:'Both deliveries required',
+    mode:'all',dependencies:[{orderId:31,requiredQty:1},{orderId:32,requiredQty:1}],
+    holdsProject:true,status:'waiting'}];
+  const h=harness(db,{atomic:true,online:false});
+  h.ctx.atomicReceiptOutbox.stage(tx=>{
+    h.ctx.applyOrderReceipt(tx,31,1,'2026-09-24');
+    h.ctx.applyOrderReceipt(tx,32,1,'2026-09-24');
+    return 2;
+  },'Atomic group receipt');
+  const journal=JSON.parse(h.localStorage.getItem(OUTBOX));
+  assert.equal(journal.changes.filter(r=>r.record_type==='project').length,1);
+  assert.equal(journal.changes.filter(r=>r.record_type==='order').length,2);
+  assert.equal(journal.changes.filter(r=>r.record_type==='part').length,2);
+  assert.equal(db.projects[0].status,'In Progress');
+  assert.equal(db.projects[0].updates.filter(u=>u.text.startsWith('Order blocker resolved:')).length,1);
+  h.ctx.navigator.onLine=true;
+  await h.ctx.saveCloudState();
+  assert.equal(h.rpc.length,1);
+  assert.equal(h.rpc[0].changes.length,5);
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+}
+
+// The link form must offer ALL, ANY, adding multiple orders, and explicitly
+// labelled shared orders rather than silently reassigning order ownership.
+{
+  const db=fixture();
+  db.orders.push({id:32,item:'Shared connector',partId:22,projectId:99,
+    qty:1,receivedQty:0,status:'Ordered',updates:[]});
+  const h=harness(db),holder={innerHTML:''};
+  h.ctx.document.getElementById=id=>id==='lobDependencies'?holder:null;
+  h.ctx.openLinkedOrderBlockerModal(41);
+  assert.match(h.modal(),/ALL required orders received/);
+  assert.match(h.modal(),/ANY ONE required order received/);
+  assert.match(h.modal(),/Add another order/);
+  assert.match(holder.innerHTML,/Shared: Unassigned/);
+}
+
+console.log('v5.19.26 many-to-many ALL/ANY dependency regressions passed');
+
