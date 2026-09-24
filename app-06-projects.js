@@ -8,7 +8,7 @@ function openProjectModal(id=null){
     <div><label>Status</label><select id="prStatus">${['Open','In Progress','Blocked','Done'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${field('Progress %','prPercent',p.percent,'number','min="0" max="100"')}
     <div class="full"><label>Due / trigger</label><input id="prTrigger" value="${esc(p.trigger)}"></div>
-    ${textareaField('Summary','prSummary',p.summary)}${textareaField('Plan / notes','prPlan',p.plan)}${textareaField('Current blocker / what is holding it up','prBlockers',p.blockers)}${textareaField('Next step','prNext',p.nextStep)}
+    ${textareaField('Summary','prSummary',p.summary)}${textareaField('Plan / notes','prPlan',p.plan)}${textareaField('Additional older blocker note (optional; new blockers belong under Project Blockers)','prBlockers',p.blockers)}${textareaField('Next step','prNext',p.nextStep)}
   </div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteProject(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveProject(${id||'null'})">Save Project</button></div>`);
 }
 function saveProject(id){
