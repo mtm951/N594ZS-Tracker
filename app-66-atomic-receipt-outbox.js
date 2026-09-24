@@ -38,7 +38,7 @@
   function shouldHandle(kind='receipt'){
     // Never bypass an earlier journal, regardless of which workflow created it.
     const optedIn=kind==='adjustment'?adjustmentsEnabled():enabled();
-    return pending()||(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId);
+    return pending()||(kind==='adjustment'?optedIn:(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId));
   }
   function snapshot(){
     const out=new Map();
@@ -59,7 +59,8 @@
   }
   function stage(work,message,kind='receipt'){
     const adjustment=kind==='adjustment';
-    if(!shouldHandle(kind))throw new Error('Atomic '+(adjustment?'adjustments':'receipts')+' require an authenticated, connected workspace.');
+    if(!shouldHandle(kind)||!supa||!cloudSession||!cloudWorkspaceId)
+      throw new Error('Atomic '+(adjustment?'adjustments':'receipts')+' require an authenticated workspace. Connect without discarding local changes.');
     if(!canCloudEdit())throw new Error('This workspace is read-only.');
     if(pending())throw new Error('An earlier receipt is still pending. Sync or review it before receiving more stock.');
     if(localStorage.getItem(PENDING)==='1')
@@ -368,9 +369,10 @@
       const unlinked=e.changes.some(r=>r.record_type==='order'&&
         (!r.data?.partId||!e.changes.some(p=>p.record_type==='part'&&
           String(p.record_id)===String(r.data.partId))));
-      const prompt='The cloud ALREADY contains every field from this pending receipt. '+
+      const prompt='The cloud ALREADY contains every field from this pending '+(e.operationKind==='adjustment'?'adjustment':'receipt')+'. '+
         'No cloud records need to be written. '+
         (unlinked?'WARNING: This older receipt has no linked Part update and did NOT credit inventory. ':
+          e.operationKind==='adjustment'?'The Part adjustment matches the cloud. ':
           'Linked Part and Order changes both match the cloud. ')+
         'Archive and acknowledge this local journal? This does NOT receive anything again.';
       if(!confirm(prompt))return {matched:true,resolved:false};
@@ -467,8 +469,8 @@
       '<br>Created '+esc(e.createdAt)+(e.blocked?'<br><b>Version conflict — no automatic retry.</b>':'')+
       '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
-    openModal(modalHeader('Atomic receipt testing','One pending receipt per device; experimental')+
-      '<div class="notice">When enabled on this device, Orders-tab receipts are journaled locally before cloud sync. The server applies linked Order and Part changes together. Other tracker records continue using normal sync.</div>'+
+    openModal(modalHeader('Atomic inventory testing','One pending atomic operation per device; experimental')+
+      '<div class="notice">Order receipts and manual Part adjustments have separate opt-ins. Enabled operations are journaled locally before cloud sync, then applied through the same idempotent server transaction. Other tracker workflows still use normal sync.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
       '<div class="detail-section"><b>Atomic receipts: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending operations cannot be discarded by reloading cloud data.</div></div>'+ 
       '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Separate opt-in; test on a disposable Part. Receipts and adjustments share one durable journal, so a second operation cannot overtake an unsynced first.</div></div>'+
@@ -558,7 +560,7 @@
     previousAccount();
     const buttons=document.querySelector('#modalBox .modal-actions');
     if(buttons)buttons.insertAdjacentHTML('afterbegin',
-      '<button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Atomic Receipt Testing'+(pending()?' • Pending':'')+'</button>');
+      '<button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Atomic Inventory Testing'+(pending()?' • Pending':'')+'</button>');
   };
   const originalStatus=window.cloudStatusLabel;
   window.cloudStatusLabel=function(label,kind){
