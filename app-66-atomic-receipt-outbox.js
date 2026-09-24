@@ -59,6 +59,118 @@
     if(e.workspaceId!==cloudWorkspaceId||e.userId!==cloudSession?.user?.id)
       throw new Error('A pending receipt belongs to a different workspace or account. Do not discard it.');
   }
+
+  // This release deliberately supports ONLY one Reserve -> Use operation:
+  // one existing Part and Project, one newly created Work Log and zero or
+  // more existing Purchase rows used to materialize previously installed stock.
+  // New IDs, unexpected side effects and stale cloud baselines fail closed.
+  function validateConsumption(before,after,changes,touchedKeys,old,meta){
+    if(meta?.mode!=='reserved'||!(Number(meta.qty)>0)||
+       !Number.isFinite(Number(meta.qty))||meta.partId==null||
+       meta.projectId==null||meta.logId==null||meta.reservationId==null)
+      throw new Error('Atomic consumption requires one specific Reserve -> Use transaction.');
+    const byType=type=>changes.filter(r=>r.record_type===type);
+    if(changes.some(r=>!['part','project','log','purchase'].includes(r.record_type))||
+       byType('part').length!==1||byType('project').length!==1||
+       byType('log').length!==1||
+       String(byType('part')[0].record_id)!==String(meta.partId)||
+       String(byType('project')[0].record_id)!==String(meta.projectId)||
+       String(byType('log')[0].record_id)!==String(meta.logId))
+      throw new Error('Atomic consumption must stage one Part, one Project and one new Work Log.');
+    const wanted=new Set(changes.map(r=>key(r.record_type,r.record_id)));
+    const touched=new Set(touchedKeys);
+    if(wanted.size!==changes.length||wanted.size!==touched.size||
+       [...wanted].some(k=>!touched.has(k)))
+      throw new Error('Consumption touched records outside the atomic transaction.');
+    for(const k of Object.keys(old)){
+      if(['parts','projects','logs','purchases'].includes(k))continue;
+      if(stable(old[k])!==stable(db[k]))
+        throw new Error('Consumption unexpectedly modified '+k+'.');
+    }
+    for(const [k,row] of before){
+      if(!after.has(k))throw new Error('Consumption unexpectedly deleted '+k+'.');
+      if(!wanted.has(k)&&stable(row.data)!==stable(after.get(k).data))
+        throw new Error('Consumption changed an untracked record: '+k);
+    }
+    for(const [k] of after){
+      if(!before.has(k)&&k!==key('log',meta.logId))
+        throw new Error('Consumption unexpectedly created '+k+'.');
+    }
+    const log=byType('log')[0].data;
+    if(before.has(key('log',meta.logId))||
+       !Array.isArray(log.consumedParts)||log.consumedParts.length!==1||
+       String(log.id)!==String(meta.logId)||
+       log.origin!=='reserved-part-use'||
+       !arr(log.projectIds).some(id=>String(id)===String(meta.projectId))||
+       arr(log.projectIds).length!==1)
+      throw new Error('Atomic consumption Work Log is not a unique reserved-use entry.');
+    const consumed=log.consumedParts[0];
+    if(String(consumed.id)!==String(meta.consumedItemId)||
+       String(consumed.partId)!==String(meta.partId)||
+       String(consumed.projectPartId)!==String(meta.projectPartId)||
+       Math.abs(Number(consumed.qty)-Number(meta.qty))>1e-9)
+      throw new Error('Work Log consumption does not match the requested Part and quantity.');
+    const originalProject=before.get(key('project',meta.projectId))?.data;
+    const nextProject=byType('project')[0].data;
+    if(!originalProject||String(nextProject.id)!==String(meta.projectId))
+      throw new Error('Consumption Project baseline is missing.');
+    const oldReservation=arr(originalProject.plannedParts).find(x=>String(x.id)===String(meta.reservationId));
+    if(!oldReservation||String(oldReservation.partId)!==String(meta.partId)||
+       Number(meta.qty)>Number(oldReservation.qty)+1e-9)
+      throw new Error('Reserved quantity changed; refresh before recording use.');
+    const expectedReservations=copy(arr(originalProject.plannedParts));
+    const selected=expectedReservations.find(x=>String(x.id)===String(meta.reservationId));
+    selected.qty=Math.max(0,Number(selected.qty)-Number(meta.qty));
+    const expectedRemaining=selected.qty<=1e-9?expectedReservations.filter(x=>String(x.id)!==String(meta.reservationId)):expectedReservations;
+    const priorUsed=arr(originalProject.partsUsed),afterUsed=arr(nextProject.partsUsed);
+    const used=afterUsed[afterUsed.length-1];
+    if(stable(arr(nextProject.plannedParts))!==stable(expectedRemaining)||
+       afterUsed.length!==priorUsed.length+1||
+       stable(afterUsed.slice(0,-1))!==stable(priorUsed)||
+       String(used?.id)!==String(meta.projectPartId)||
+       String(used?.logId)!==String(meta.logId)||
+       String(used?.consumedItemId)!==String(meta.consumedItemId)||
+       String(used?.partId)!==String(meta.partId)||
+       Math.abs(Number(used?.qty)-Number(meta.qty))>1e-9)
+      throw new Error('Project reservation release and Parts Used entry must match the Work Log.');
+    const strippedProjectBefore=copy(originalProject),strippedProjectAfter=copy(nextProject);
+    delete strippedProjectBefore.plannedParts;delete strippedProjectBefore.partsUsed;
+    delete strippedProjectAfter.plannedParts;delete strippedProjectAfter.partsUsed;
+    if(stable(strippedProjectBefore)!==stable(strippedProjectAfter))
+      throw new Error('Consumption changed an unrelated Project field.');
+    const originalPart=before.get(key('part',meta.partId))?.data,nextPart=byType('part')[0].data;
+    if(!originalPart||String(nextPart.id)!==String(meta.partId))
+      throw new Error('Consumption source Part baseline is missing.');
+    const oldPart=copy(originalPart),newPart=copy(nextPart);
+    delete oldPart.stockQty;delete oldPart.linkedProjectIds;
+    delete newPart.stockQty;delete newPart.linkedProjectIds;
+    if(stable(oldPart)!==stable(newPart)||
+       !arr(nextPart.linkedProjectIds).some(id=>String(id)===String(meta.projectId))||
+       arr(originalPart.linkedProjectIds).some(id=>!arr(nextPart.linkedProjectIds).some(n=>String(n)===String(id))))
+      throw new Error('Consumption changed unrelated Part fields or project links.');
+    let credited=0;
+    for(const purchase of byType('purchase')){
+      const original=before.get(key('purchase',purchase.record_id))?.data,updated=purchase.data;
+      if(!original||original.disposition!=='Installed')
+        throw new Error('Only an existing Installed Purchase can materialize receipts.');
+      const prior=Number(original.inventoryReceiptMaterializedQty)||0;
+      const next=Number(updated.inventoryReceiptMaterializedQty);
+      const delta=next-prior;
+      if(!Number.isFinite(delta)||delta<=0||next>Number(original.qty)+1e-9||
+         updated.inventoryReceiptMaterialized!==true||updated.inventoryApplied!==true)
+        throw new Error('Purchase credit is not a valid single receipt materialization.');
+      const cleanOld=copy(original),cleanNew=copy(updated);
+      for(const field of ['inventoryReceiptMaterializedQty','inventoryReceiptMaterialized','inventoryApplied']){
+        delete cleanOld[field];delete cleanNew[field];
+      }
+      if(stable(cleanOld)!==stable(cleanNew))
+        throw new Error('Purchase had an unrelated change during consumption.');
+      credited+=delta;
+    }
+    if(Math.abs((Number(nextPart.stockQty)||0)-(Number(originalPart.stockQty)||0)-credited)>1e-9)
+      throw new Error('Purchase receipts and Part stock credit do not reconcile.');
+  }
+
   function stage(work,message,kind='receipt',meta=null){
     const adjustment=kind==='adjustment',consumption=kind==='consumption';
     if(!shouldHandle(kind)||!supa||!cloudSession||!cloudWorkspaceId)
