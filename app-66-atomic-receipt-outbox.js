@@ -8,6 +8,7 @@
   const KEY='n594zs_atomic_receipt_outbox_v1';
   const OPT='n594zs_atomic_receipts_opt_in_v1';
   const ADJUST_OPT='n594zs_atomic_adjustments_opt_in_v1';
+  const CONSUME_OPT='n594zs_atomic_consumption_opt_in_v1';
   const SNAP='n594zs_record_snapshot_v4';
   const VERS='n594zs_record_versions_v1';
   const RESOLVED='n594zs_atomic_receipt_resolutions_v1';
@@ -35,14 +36,15 @@
   function pending(){return !!localStorage.getItem(KEY)}
   function enabled(){return localStorage.getItem(OPT)==='1'}
   function adjustmentsEnabled(){return localStorage.getItem(ADJUST_OPT)==='1'}
+  function consumptionEnabled(){return localStorage.getItem(CONSUME_OPT)==='1'}
   function shouldHandle(kind='receipt'){
     // Never bypass an earlier journal, regardless of which workflow created it.
-    const optedIn=kind==='adjustment'?adjustmentsEnabled():enabled();
-    return pending()||(kind==='adjustment'?optedIn:(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId));
+    const optedIn=kind==='adjustment'?adjustmentsEnabled():kind==='consumption'?consumptionEnabled():enabled();
+    return pending()||(kind==='receipt'?(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId):optedIn);
   }
   function snapshot(){
     const out=new Map();
-    for(const [type,arrayKey] of [['order','orders'],['part','parts']])
+    for(const [type,arrayKey] of [['order','orders'],['part','parts'],['project','projects'],['log','logs'],['purchase','purchases']])
       for(const row of arr(db[arrayKey])){
         const k=key(type,row.id);
         out.set(k,{key:k,record_type:type,record_id:String(row.id),data:copy(row)});
@@ -57,12 +59,12 @@
     if(e.workspaceId!==cloudWorkspaceId||e.userId!==cloudSession?.user?.id)
       throw new Error('A pending receipt belongs to a different workspace or account. Do not discard it.');
   }
-  function stage(work,message,kind='receipt'){
-    const adjustment=kind==='adjustment';
+  function stage(work,message,kind='receipt',meta=null){
+    const adjustment=kind==='adjustment',consumption=kind==='consumption';
     if(!shouldHandle(kind)||!supa||!cloudSession||!cloudWorkspaceId)
-      throw new Error('Atomic '+(adjustment?'adjustments':'receipts')+' require an authenticated workspace. Connect without discarding local changes.');
+      throw new Error('Atomic '+(adjustment?'adjustments':consumption?'part consumption':'receipts')+' requires an authenticated workspace. Connect without discarding local changes.');
     if(!canCloudEdit())throw new Error('This workspace is read-only.');
-    if(pending())throw new Error('An earlier receipt is still pending. Sync or review it before receiving more stock.');
+    if(pending())throw new Error('An earlier atomic operation is still pending. Sync or review it before changing inventory.');
     if(localStorage.getItem(PENDING)==='1')
       throw new Error('Other changes are waiting to sync. Wait for Synced or resolve the conflict before receiving.');
     if(!cloudRecordSnapshot?.size)throw new Error('Cloud baseline is not available. Wait until the tracker finishes loading.');
