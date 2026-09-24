@@ -78,7 +78,14 @@
       const after=snapshot(),changes=[],originals=[];
       for(const [k,r] of after){
         const prior=before.get(k);
-        if(!prior||stable(prior.data)===stable(r.data))continue;
+        if(!prior){
+          if(!consumption||r.record_type!=='log')throw new Error('Atomic operation unexpectedly created '+k+'.');
+          if(cloudRecordSnapshot.has(k)||cloudRecordVersions.has(k))throw new Error('New Work Log ID already exists in the cloud baseline.');
+          changes.push({record_type:'log',record_id:r.record_id,data:r.data,deleted_at:null,expected_version:0,updated_client:CLOUD_CLIENT_ID});
+          originals.push({key:k,data:null});
+          continue;
+        }
+        if(stable(prior.data)===stable(r.data))continue;
         if(!cloudRecordSnapshot.has(k)||cloudRecordSnapshot.get(k)!==stable(prior.data))
           throw new Error('The '+r.record_type+' has unverified local edits; sync first.');
         changes.push({
@@ -87,6 +94,18 @@
           updated_client:CLOUD_CLIENT_ID
         });
         originals.push({key:k,data:prior.data});
+      }
+      if(consumption){
+        // A consumption outflow is logged, not subtracted from stockQty. Lock
+        // the source Part's version even if its own payload was unchanged.
+        const pk=key('part',meta?.partId),original=before.get(pk);
+        if(!original||!after.has(pk))throw new Error('Consumption source Part is missing.');
+        if(!changes.some(r=>key(r.record_type,r.record_id)===pk)){
+          if(!cloudRecordSnapshot.has(pk)||cloudRecordSnapshot.get(pk)!==stable(original.data))
+            throw new Error('Source Part has unverified local edits; sync first.');
+          changes.push({record_type:'part',record_id:String(meta.partId),data:after.get(pk).data,deleted_at:null,expected_version:Number(cloudRecordVersions.get(pk))||0,updated_client:CLOUD_CLIENT_ID});
+          originals.push({key:pk,data:original.data});
+        }
       }
       if(!changes.length)throw new Error('Atomic operation changed no records.');
       if(adjustment){
@@ -109,13 +128,15 @@
         if(touchedKeys.length!==1||touchedKeys[0]!==key('part',change.record_id)||
            Object.keys(old).some(k=>k!=='parts'&&k!=='orders'&&stable(old[k])!==stable(db[k])))
           throw new Error('Atomic adjustment touched an unrelated record.');
+      }else if(consumption){
+        validateConsumption(before,after,changes,touchedKeys,old,meta);
       }else if(!changes.some(r=>r.record_type==='order'))
         throw new Error('Receipt did not produce a changed Order record.');
       // This opt-in path is specifically for an Order + Part transaction.
       // A receipt without a linked Part can update only its Order and would
       // give a misleading atomic-inventory test result. Check BEFORE writing
       // the durable journal; the catch below restores the staged local DB.
-      for(const order of (adjustment?[]:changes.filter(r=>r.record_type==='order'))){
+      for(const order of (adjustment||consumption?[]:changes.filter(r=>r.record_type==='order'))){
         const linkedId=order.data?.partId;
         const partIncluded=linkedId&&changes.some(r=>r.record_type==='part'&&
           String(r.record_id)===String(linkedId));
@@ -141,7 +162,7 @@
       localStorage.setItem(PENDING,'1');
       cloudDirty=true;
       trackerStore.commit(message);
-      cloudStatusLabel(adjustment?'Adjustment pending':'Receipt pending');
+      cloudStatusLabel(adjustment?'Adjustment pending':consumption?'Consumption pending':'Receipt pending');
       return result;
     }catch(error){
       if(!journalWritten)restore(old);
