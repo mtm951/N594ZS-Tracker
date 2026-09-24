@@ -75,10 +75,10 @@ function harness(db=original()){
   assert.match(h.html(),/Change primary project/);
   nodes.olAddProject.value='20';ctx.addOrderProjectLink(21);
   nodes.olAddProject.value='30';ctx.addOrderProjectLink(21);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[10,20,30]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[10,20,30]);
   assert.equal(db.orders.length,1);
   assert.equal(db.parts[0].stockQty,0);
-  assert.deepEqual(db.parts[0].linkedProjectIds,[10,20,30]);
+  assert.deepEqual(Array.from(db.parts[0].linkedProjectIds),[10,20,30]);
   assert.equal(h.saves.length,2);
   assert.match(h.html(),/TEST — Second Panel/);
   assert.match(h.html(),/Make primary/);
@@ -104,16 +104,16 @@ function harness(db=original()){
 
   ctx.makePrimaryOrderProjectLink(21,20);
   assert.equal(db.orders[0].projectId,20);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[20,30,10]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[20,30,10]);
   assert.equal(ctx.projectCost(db.projects[1]),40);
   assert.equal(ctx.projectCost(db.projects[0]),0);
   nodes.olPrimaryProject.value='30';ctx.saveOrderProjectLink(21);
   assert.equal(db.orders[0].projectId,30);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[30,10]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[30,10]);
   ctx.removeOrderProjectLink(21,10);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[30]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[30]);
   ctx.removeOrderProjectLink(21,30);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[]);
   assert.equal(db.orders[0].projectId,null);
   assert.equal(db.parts[0].stockQty,0);
   assert.equal(db.orders.length,1);
@@ -128,7 +128,7 @@ function harness(db=original()){
   ctx.deleteProject(10);
   assert.equal(db.projects.length,2);
   assert.equal(db.orders[0].projectId,20);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[20,30]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[20,30]);
   assert.equal(db.orders[0].receivedQty,0);
   assert.equal(db.parts[0].stockQty,0);
 
@@ -141,7 +141,7 @@ function harness(db=original()){
   Object.assign(nodes,elements);
   ctx.saveOrder(21);
   assert.equal(db.orders[0].projectId,30);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[30]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[30]);
   assert.equal(db.orders[0].receivedQty,0);
 }
 
@@ -177,7 +177,7 @@ function harness(db=original()){
   ctx.atomicReceiptOutbox={hasPending:()=>true};
   nodes.olAddProject.value='20';
   ctx.addOrderProjectLink(21);
-  assert.deepEqual(ctx.orderProjectIds(db.orders[0]),[10]);
+  assert.deepEqual(Array.from(ctx.orderProjectIds(db.orders[0])),[10]);
   assert.equal(h.saves.length,0);
   assert.match(h.alerts[0],/pending atomic inventory transaction/);
 }
