@@ -16,9 +16,11 @@
     if(o?.inventoryAppliedQty!==undefined&&o.inventoryAppliedQty!=='')return numeric(o.inventoryAppliedQty);
     return o?.inventoryApplied?numeric(o.qty):0;
   };
-  const projectOrders=p=>rows(db.orders).filter(o=>same(o.projectId,p.id)&&o.status!=='Cancelled');
+  const belongs=(o,id)=>typeof window.orderLinkedToProject==='function'?orderLinkedToProject(o,id):
+    same(o.projectId,id)||rows(o.linkedProjectIds).some(pid=>same(pid,id));
+  const projectOrders=p=>rows(db.orders).filter(o=>belongs(o,p.id)&&o.status!=='Cancelled');
   const availableOrders=p=>rows(db.orders).filter(o=>o.status!=='Cancelled'&&numeric(o.qty)>0)
-    .sort((a,b)=>(same(b.projectId,p.id)?1:0)-(same(a.projectId,p.id)?1:0)||
+    .sort((a,b)=>(belongs(b,p.id)?1:0)-(belongs(a,p.id)?1:0)||
       String(a.item||'').localeCompare(String(b.item||'')));
   const deps=b=>rows(b.dependencies).length?b.dependencies:
     (b.orderId!=null?[{orderId:b.orderId,requiredQty:b.requiredQty}]:[]);
@@ -173,7 +175,7 @@
       esc('Missing or cancelled order — select a replacement')+'</option>':'')+
       available.map(o=>{
         const owner=rows(db.projects).find(x=>same(x.id,o.projectId));
-        const prefix=same(o.projectId,p.id)?'This project':'Shared: '+(owner?.title||'Unassigned');
+        const prefix=same(o.projectId,p.id)?'This project':belongs(o,p.id)?'This project (shared)':'Shared: '+(owner?.title||'Unassigned');
         return '<option value="'+esc(o.id)+'" '+(same(o.id,selected)?'selected':'')+'>'+
           esc(prefix+' • '+o.item+' ('+received(o)+'/'+numeric(o.qty)+' received)')+'</option>';
       }).join('');
