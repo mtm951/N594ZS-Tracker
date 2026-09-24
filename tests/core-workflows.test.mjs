@@ -464,3 +464,48 @@ console.log('core workflow regression tests passed');
   assert.equal(failed.projects[0].plannedParts[0].qty,2,'failed staging released reservation');
 }
 console.log('atomic Reserve -> Use production handler regression tests passed');
+
+
+// Partial reservations retain the unconsumed remainder; declining an
+// insufficient-stock warning does not materialize even one Purchase.
+{
+  const part={id:55,name:'Test split pin',unit:'ea',stockQty:4,linkedProjectIds:[56],
+    inventoryAdjustments:[]};
+  const project={id:56,title:'Test partial installation',status:'In Progress',
+    plannedParts:[{id:570,partId:55,qty:2,unit:'ea',name:'Test split pin'}],
+    partsUsed:[]};
+  const db={parts:[part],projects:[project],logs:[],purchases:[],orders:[],settings:{}};
+  const h=inventoryHarness(db,{urQty:1,urDate:'2026-09-24',urWork:'Used one split pin'});
+  h.RECORD_ARRAYS={part:'parts',project:'projects',log:'logs',purchase:'purchases'};
+  let staged=0;h.saveDB=()=>{};
+  load(dataStoreSource,h,'app-17a-data-store.js');
+  h.atomicReceiptOutbox={shouldHandle:()=>true,
+    stageConsumption:(work,_message,meta)=>{staged++;assert.equal(meta.qty,1);
+      h.trackerStore.batch(work,{persist:false})}};
+  h.saveReservedPartUse(56,570);
+  assert.equal(staged,1);
+  assert.equal(db.projects[0].plannedParts.length,1);
+  assert.equal(db.projects[0].plannedParts[0].qty,1);
+  assert.equal(db.logs.length,1);
+  assert.equal(db.logs[0].consumedParts[0].qty,1);
+  assert.equal(db.parts[0].stockQty,4);
+  assert.equal(h.partAvailable(db.parts[0]),3);
+}
+{
+  const part={id:65,name:'Test scarce washer',unit:'ea',stockQty:0,partNo:'S-1',
+    linkedProjectIds:[66],purchaseIds:['low-stock']};
+  const project={id:66,title:'Test insufficient stock',status:'In Progress',
+    plannedParts:[{id:670,partId:65,qty:2,unit:'ea',name:'Test scarce washer'}],
+    partsUsed:[]};
+  const purchase={id:'low-stock',qty:1,disposition:'Installed',
+    inventoryPartId:65,inventoryReceiptMaterializedQty:0};
+  const db={parts:[part],projects:[project],logs:[],purchases:[purchase],orders:[],settings:{}};
+  const original=structuredClone(db);
+  const h=inventoryHarness(db,{urQty:2,urDate:'2026-09-24'});
+  let attempted=0;h.confirm=()=>false;
+  h.atomicReceiptOutbox={shouldHandle:()=>true,stageConsumption:()=>{attempted++}};
+  h.saveReservedPartUse(66,670);
+  assert.equal(attempted,0,'consumption was staged after the user declined');
+  assert.deepEqual(db,original,'warning cancellation mutated a Part, Purchase or reservation');
+}
+console.log('partial reserved use and warning cancellation passed');
