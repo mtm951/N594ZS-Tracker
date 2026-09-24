@@ -1,4 +1,32 @@
 // ---------- ORDERS ----------
+// The original projectId remains the PRIMARY for cost attribution and older
+// integrations. linkedProjectIds stores additional associations only; it
+// does not duplicate an order, stock receipt, reservation, or purchase.
+function orderProjectIds(o){
+  const ids=[o?.projectId,...arr(o?.linkedProjectIds)].map(Number).filter(id=>Number.isSafeInteger(id)&&id>0);
+  return [...new Set(ids)];
+}
+function orderLinkedToProject(o,projectId){return orderProjectIds(o).includes(Number(projectId))}
+function orderProjectSummary(o){
+  const ids=orderProjectIds(o);
+  return ids.length?ids.map(id=>projectName(id)).join(', '):'—';
+}
+function orderProjectLinksHTML(o,id){
+  const linked=orderProjectIds(o);
+  const entries=linked.map((pid,index)=>{
+    const project=projectById(pid);
+    return '<div class="kv" style="gap:8px;align-items:center">'+
+      '<button class="linkbtn" onclick="openProjectDetail('+pid+')" title="Open project">'+esc(project?.title||'Missing project')+'</button>'+
+      '<span class="task-note">'+(index===0?'Primary':'Related')+'</span>'+
+      '<button class="icon-btn" onclick="removeOrderProjectLink('+Number(id)+','+pid+')" title="Remove this association">Remove</button></div>';
+  }).join('');
+  return '<div class="detail-card" id="orderLinkedProjectsCard">'+
+    '<div class="section-tools"><h3>Linked Projects'+(linked.length?' ('+linked.length+')':'')+'</h3>'+
+    '<div class="action-row"><button class="icon-btn" onclick="openOrderProjectLinkModal('+Number(id)+')">+ Add</button>'+
+    '<button class="icon-btn" onclick="openOrderProjectLinkModal('+Number(id)+')">Manage</button></div></div>'+
+    (entries||'<div class="muted">No project linked. Select + Add to associate this order with a project.</div>')+
+    '<div class="tiny muted" style="margin-top:8px">One physical order and receipt. Only the primary project receives this order\'s cost allocation; related projects share the reference.</div></div>';
+}
 function orderGroupKey(o){const ref=String(o?.tracking||'').trim().toLowerCase();return ref?`ref:${ref}`:`single:${o?.id}`}
 function orderReceivedQty(o){if(o?.receivedQty!==undefined&&o?.receivedQty!=='')return Math.min(num(o.qty),Math.max(0,num(o.receivedQty)));if(o?.inventoryAppliedQty!==undefined&&o?.inventoryAppliedQty!=='')return Math.min(num(o.qty),Math.max(0,num(o.inventoryAppliedQty)));return o?.inventoryApplied?num(o.qty):0}
 function orderRemainingQty(o){return Math.max(0,num(o?.qty)-orderReceivedQty(o))}
@@ -7,7 +35,7 @@ function openOrderModal(id=null,projectId=null,partId=null){
   const draft=id?orderById(id):{item:partId?partName(partId):'',partId:partId||null,projectId:projectId||null,system:'',qty:1,unit:partId?(partById(partId)?.unit||'ea'):'ea',vendor:partId?(partById(partId)?.vendor||''):'',url:partId?(partById(partId)?.url||''):'',unitPrice:partId?(partById(partId)?.unitCost||''):'',shipping:'',tax:'',status:'Need to Order',orderedDate:'',eta:'',receivedDate:'',tracking:'',blockerReason:'',notes:''};
   const inherited=typeof inferredOrderSystem==='function'?inferredOrderSystem(draft):'';
   const o=draft;
-  openModal(`${modalHeader(id?'Edit Order':'New Order')}<div class="form-grid"><div class="full order-item-autocomplete"><label for="orItem">Item / order description</label><input id="orItem" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="orItemSuggestions" placeholder="Type to search existing inventory or enter a new item…" value="${esc(o.item)}" onfocus="renderOrderItemSuggestions()" oninput="orderItemTyped()" onkeydown="orderItemSuggestionKeys(event)"><div id="orItemSuggestions" class="order-item-suggestions" role="listbox" hidden></div><small class="order-item-help">Select an existing part to link its inventory record automatically, or enter a custom description.</small></div><div><label>Linked project</label><select id="orProject">${projectOptions(o.projectId)}</select></div><div><label>Linked inventory part</label><select id="orPart" onchange="prefillOrderFromPart();hideOrderItemSuggestions()">${partOptions(o.partId)}</select></div><div><label>System</label><select id="orSystem">${systemOptions(o.system||inherited)}</select><small>${o.system?'Directly assigned':inherited?`Currently inherited from linked record: ${esc(inherited)}`:'Assign directly or link a project/part'}</small></div>${field('Quantity','orQty',o.qty,'number','step="any" min="0"')}${field('Unit','orUnit',o.unit||'ea')}${field('Vendor','orVendor',o.vendor)}${field('Unit price','orPrice',o.unitPrice,'number','step="0.01" min="0"')}${field('Shipping','orShipping',o.shipping,'number','step="0.01" min="0"')}${field('Tax','orTax',o.tax,'number','step="0.01" min="0"')}<div><label>Status</label><select id="orStatus">${['Need to Order','Quoted','Ordered','Backordered','Received','Cancelled'].map(x=>`<option ${o.status===x?'selected':''}>${x}</option>`).join('')}</select></div>${field('Ordered date','orOrdered',o.orderedDate,'date')}${field('ETA','orEta',o.eta,'date')}${field('Received date','orReceived',o.receivedDate,'date')}${field('Tracking / reference','orTracking',o.tracking)}<div class="full"><label>Vendor / product URL</label><input id="orUrl" value="${esc(o.url)}"></div>${textareaField('Blocker / why this order matters','orBlocker',o.blockerReason)}${textareaField('Order notes','orNotes',o.notes)}</div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteOrder(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveOrder(${id||'null'})">Save Order</button></div>`);
+  openModal(`${modalHeader(id?'Edit Order':'New Order')}<div class="form-grid"><div class="full order-item-autocomplete"><label for="orItem">Item / order description</label><input id="orItem" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="orItemSuggestions" placeholder="Type to search existing inventory or enter a new item…" value="${esc(o.item)}" onfocus="renderOrderItemSuggestions()" oninput="orderItemTyped()" onkeydown="orderItemSuggestionKeys(event)"><div id="orItemSuggestions" class="order-item-suggestions" role="listbox" hidden></div><small class="order-item-help">Select an existing part to link its inventory record automatically, or enter a custom description.</small></div><div><label>Primary project (cost attribution)</label><select id="orProject">${projectOptions(o.projectId)}</select><small>Manage additional linked projects from the order details after saving.</small></div><div><label>Linked inventory part</label><select id="orPart" onchange="prefillOrderFromPart();hideOrderItemSuggestions()">${partOptions(o.partId)}</select></div><div><label>System</label><select id="orSystem">${systemOptions(o.system||inherited)}</select><small>${o.system?'Directly assigned':inherited?`Currently inherited from linked record: ${esc(inherited)}`:'Assign directly or link a project/part'}</small></div>${field('Quantity','orQty',o.qty,'number','step="any" min="0"')}${field('Unit','orUnit',o.unit||'ea')}${field('Vendor','orVendor',o.vendor)}${field('Unit price','orPrice',o.unitPrice,'number','step="0.01" min="0"')}${field('Shipping','orShipping',o.shipping,'number','step="0.01" min="0"')}${field('Tax','orTax',o.tax,'number','step="0.01" min="0"')}<div><label>Status</label><select id="orStatus">${['Need to Order','Quoted','Ordered','Backordered','Received','Cancelled'].map(x=>`<option ${o.status===x?'selected':''}>${x}</option>`).join('')}</select></div>${field('Ordered date','orOrdered',o.orderedDate,'date')}${field('ETA','orEta',o.eta,'date')}${field('Received date','orReceived',o.receivedDate,'date')}${field('Tracking / reference','orTracking',o.tracking)}<div class="full"><label>Vendor / product URL</label><input id="orUrl" value="${esc(o.url)}"></div>${textareaField('Blocker / why this order matters','orBlocker',o.blockerReason)}${textareaField('Order notes','orNotes',o.notes)}</div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteOrder(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveOrder(${id||'null'})">Save Order</button></div>`);
 }
 function prefillOrderFromPart(){const p=partById(selectedNumber('orPart'));if(!p)return;if(!val('orItem'))document.getElementById('orItem').value=p.name;document.getElementById('orUnit').value=p.unit||'ea';if(!val('orVendor'))document.getElementById('orVendor').value=p.vendor||'';if(!val('orPrice'))document.getElementById('orPrice').value=p.unitCost??'';if(!val('orUrl'))document.getElementById('orUrl').value=p.url||'';if(!val('orSystem'))document.getElementById('orSystem').value=p.system||''}
 // Autocomplete deliberately leaves the description editable. Selecting a hit
@@ -96,16 +124,14 @@ function saveOrder(id){
   if(!o.item)return alert('Order item is required.');
 
   if(id){
-    trackerStore.update('order',id,draft=>Object.assign(draft,o),{persist:false});
+    trackerStore.update('order',id,draft=>{Object.assign(draft,o);draft.linkedProjectIds=arr(draft.linkedProjectIds).map(Number).filter(pid=>pid>0&&pid!==Number(draft.projectId));if(!draft.projectId&&draft.linkedProjectIds.length)draft.projectId=draft.linkedProjectIds.shift();},{persist:false});
   }else{
     const newId=uid();
-    trackerStore.write('order',newId,{id:newId,...o,updates:[],inventoryApplied:false},{persist:false});
+    trackerStore.write('order',newId,{id:newId,...o,linkedProjectIds:[],updates:[],inventoryApplied:false},{persist:false});
   }
 
-  if(o.partId&&o.projectId){
-    const p=partById(o.partId);
-    if(p&&!p.linkedProjectIds.includes(o.projectId))p.linkedProjectIds.push(o.projectId);
-  }
+  const savedOrder=id?orderById(id):db.orders[db.orders.length-1];
+  if(savedOrder?.partId){const p=partById(savedOrder.partId);if(p){p.linkedProjectIds=arr(p.linkedProjectIds);for(const pid of orderProjectIds(savedOrder))if(!p.linkedProjectIds.some(x=>Number(x)===pid))p.linkedProjectIds.push(pid)}}
 
   closeModal();
   trackerStore.commit(id?'Order updated.':'Order added.');
@@ -120,20 +146,86 @@ function savePartFromOrder(orderId){
   const o=orderById(orderId);if(!o)return;
   const name=val('opName').trim();if(!name)return alert('Part name is required.');
   const pid=uid();
-  db.parts.push({id:pid,name,partNo:val('opPN').trim(),system:val('opSystem')||'General',unit:val('opUnit')||o.unit||'ea',stockQty:0,minQty:'',status:val('opStatus')||'Order',vendor:val('opVendor'),url:val('opUrl'),unitCost:val('opCost'),location:val('opLocation'),purchaseDate:'',notes:val('opNotes'),linkedProjectIds:o.projectId?[o.projectId]:[],updates:[]});
+  db.parts.push({id:pid,name,partNo:val('opPN').trim(),system:val('opSystem')||'General',unit:val('opUnit')||o.unit||'ea',stockQty:0,minQty:'',status:val('opStatus')||'Order',vendor:val('opVendor'),url:val('opUrl'),unitCost:val('opCost'),location:val('opLocation'),purchaseDate:'',notes:val('opNotes'),linkedProjectIds:orderProjectIds(o),updates:[]});
   o.partId=pid;
   saveDB('Inventory part created with zero on hand and linked to the order.');
   openOrderDetail(orderId);
 }
 function openOrderProjectLinkModal(orderId){
   const o=orderById(orderId);if(!o)return;
-  openModal(`${modalHeader(o.projectId?'Change Linked Project':'Link Project',o.item)}<div class="notice">Choose the project this order supports. You can change or remove the link later.</div><div class="form-grid" style="margin-top:12px"><div class="full"><label>Project</label><select id="olProject">${projectOptions(o.projectId)}</select></div></div><div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail(${orderId})">Cancel</button><button class="btn primary" onclick="saveOrderProjectLink(${orderId})">Save Project Link</button></div>`);
+  const linked=orderProjectIds(o);
+  const rowsHTML=linked.map((id,i)=>'<div class="kv" style="gap:8px"><div><b>'+esc(projectName(id))+'</b><div class="tiny muted">'+(i===0?'Primary • full order cost attributed here':'Related • no duplicate stock or cost')+'</div></div>'+
+    '<div class="action-row">'+(i===0?'':'<button class="icon-btn" onclick="makePrimaryOrderProjectLink('+Number(orderId)+','+id+')">Make primary</button>')+
+    '<button class="icon-btn" onclick="removeOrderProjectLink('+Number(orderId)+','+id+')">Remove</button></div></div>').join('');
+  openModal(modalHeader('Manage Linked Projects',o.item)+
+    '<div class="notice">Associate one order with multiple projects without copying the order or receiving its parts twice. The primary project owns its cost attribution; related projects can reference the same order.</div>'+
+    '<div class="detail-card" style="margin-top:12px"><h3>Current links</h3>'+(rowsHTML||'<div class="muted">No projects linked.</div>')+'</div>'+
+    '<div class="form-grid" style="margin-top:12px"><div class="full"><label>Add another project</label><select id="olAddProject">'+projectOptions(null)+'</select></div>'+
+    '<div class="full"><button class="btn primary" onclick="addOrderProjectLink('+Number(orderId)+')">+ Add Project</button></div>'+
+    '<div class="full"><label>Change primary project</label><select id="olPrimaryProject">'+projectOptions(o.projectId)+'</select>'+
+    '<small>Changing primary replaces that primary link and moves the order\'s project cost attribution. Other related links remain.</small></div></div>'+
+    '<div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail('+Number(orderId)+')">Done</button>'+
+    '<button class="btn primary" onclick="saveOrderProjectLink('+Number(orderId)+')">Change Primary</button></div>',true);
+}
+function commitOrderProjectLinks(orderId,change,message){
+  if(window.atomicReceiptOutbox?.hasPending?.())throw new Error('Finish or review the pending atomic inventory transaction before changing order links.');
+  return trackerStore.batch(tx=>{
+    const before=tx.read('order',orderId);if(!before)throw new Error('Order no longer exists.');
+    const result=tx.update('order',orderId,d=>{
+      change(d);
+      const links=orderProjectIds(d);
+      d.projectId=links[0]??null;
+      d.linkedProjectIds=links.slice(1);
+    });
+    // Preserve existing primary-order behavior: tag the linked Part with
+    // project associations, but NEVER reserve or credit inventory here.
+    const part=result.partId?tx.read('part',result.partId):null;
+    if(part){
+      const missing=orderProjectIds(result).filter(pid=>!arr(part.linkedProjectIds).some(id=>Number(id)===pid));
+      if(missing.length)tx.update('part',part.id,d=>{d.linkedProjectIds=[...arr(d.linkedProjectIds),...missing]});
+    }
+    return result;
+  },{message});
+}
+function addOrderProjectLink(orderId){
+  const pid=selectedNumber('olAddProject');
+  if(!pid||!projectById(pid))return alert('Select a valid project to add.');
+  const o=orderById(orderId);if(!o)return;
+  if(orderLinkedToProject(o,pid))return alert('This project is already linked to the order.');
+  try{commitOrderProjectLinks(orderId,d=>{if(d.projectId)d.linkedProjectIds=[...arr(d.linkedProjectIds),pid];else d.projectId=pid;},'Project added to order.');
+      openOrderProjectLinkModal(orderId);}
+  catch(e){alert('Project link was not saved: '+e.message)}
 }
 function saveOrderProjectLink(orderId){
-  const o=orderById(orderId);if(!o)return;
-  const projectId=selectedNumber('olProject');o.projectId=projectId;
-  if(projectId&&o.partId){const p=partById(o.partId);if(p&&!p.linkedProjectIds.includes(projectId))p.linkedProjectIds.push(projectId)}
-  closeModal();saveDB(projectId?'Order linked to project.':'Project link removed.');setTimeout(()=>openOrderDetail(orderId),50);
+  const pid=selectedNumber('olPrimaryProject');
+  if(pid&&!projectById(pid))return alert('The selected project no longer exists.');
+  try{commitOrderProjectLinks(orderId,d=>{
+    d.linkedProjectIds=arr(d.linkedProjectIds).filter(x=>Number(x)!==pid);
+    d.projectId=pid||null;
+  },'Primary project updated.');openOrderProjectLinkModal(orderId);}
+  catch(e){alert('Primary project was not changed: '+e.message)}
+}
+function makePrimaryOrderProjectLink(orderId,pid){
+  const o=orderById(orderId);if(!o||!orderLinkedToProject(o,pid)||Number(o.projectId)===Number(pid))return;
+  if(!confirm('Make '+projectName(pid)+' the primary project? The order\'s full cost attribution will move there; its previous primary remains a related project.'))return;
+  try{commitOrderProjectLinks(orderId,d=>{
+    d.linkedProjectIds=[...arr(d.linkedProjectIds).filter(x=>Number(x)!==Number(pid)),...(d.projectId?[d.projectId]:[])];
+    d.projectId=pid;
+  },'Primary project changed.');openOrderProjectLinkModal(orderId);}
+  catch(e){alert('Primary project was not changed: '+e.message)}
+}
+function removeOrderProjectLink(orderId,pid){
+  const o=orderById(orderId);if(!o||!orderLinkedToProject(o,pid))return;
+  const primary=Number(o.projectId)===Number(pid);
+  const extras=arr(o.linkedProjectIds).filter(x=>Number(x)!==Number(pid));
+  const text=primary?(extras.length?'Removing the primary project will promote the next related project and move cost attribution to it. Continue?':'Remove the only linked project? The order will no longer have project cost attribution.'):
+    'Remove '+projectName(pid)+' from this order? This does not remove existing project blockers or part assignments.';
+  if(!confirm(text))return;
+  try{commitOrderProjectLinks(orderId,d=>{
+    const remaining=orderProjectIds(d).filter(x=>Number(x)!==Number(pid));
+    d.projectId=remaining[0]??null;d.linkedProjectIds=remaining.slice(1);
+  },'Project link removed.');openOrderProjectLinkModal(orderId);}
+  catch(e){alert('Project link was not removed: '+e.message)}
 }
 function openOrderPartLinkModal(orderId){
   const o=orderById(orderId);if(!o)return;
@@ -142,7 +234,7 @@ function openOrderPartLinkModal(orderId){
 function saveOrderPartLink(orderId){
   const o=orderById(orderId);if(!o)return;
   const partId=selectedNumber('olPart');o.partId=partId;
-  if(partId&&o.projectId){const p=partById(partId);if(p&&!p.linkedProjectIds.includes(o.projectId))p.linkedProjectIds.push(o.projectId)}
+  if(partId){const p=partById(partId);if(p){p.linkedProjectIds=arr(p.linkedProjectIds);for(const pid of orderProjectIds(o))if(!p.linkedProjectIds.some(x=>Number(x)===pid))p.linkedProjectIds.push(pid)}}
   closeModal();saveDB(partId?'Order linked to inventory part.':'Inventory part link removed.');setTimeout(()=>openOrderDetail(orderId),50);
 }
 function applyOrderReceipt(tx,orderId,qty,receiptDate=''){
@@ -281,5 +373,5 @@ function openOrderDetail(id){
   openModal(`${modalHeader(o.item,`${o.vendor||'No vendor'} • ${o.status}`)}<div class="summary-strip"><div class="summary-cell"><div class="lab">Status</div><div class="val">${pill(o.status)}</div></div><div class="summary-cell"><div class="lab">Ordered</div><div class="val">${esc(o.qty)} ${esc(o.unit||'')}</div></div><div class="summary-cell"><div class="lab">Received</div><div class="val">${esc(orderReceivedQty(o))} ${esc(o.unit||'')}</div></div><div class="summary-cell"><div class="lab">Remaining</div><div class="val">${esc(orderRemainingQty(o))} ${esc(o.unit||'')}</div></div><div class="summary-cell"><div class="lab">ETA</div><div class="val">${esc(o.eta||'—')}</div></div><div class="summary-cell"><div class="lab">Total</div><div class="val">${db.settings.showCosts?fmtMoney(orderTotal(o)):'Hidden'}</div></div></div>
   <div class="detail-grid"><div><div class="detail-card"><div class="section-tools"><h3>Order Details</h3><button class="icon-btn" onclick="openOrderModal(${id})">Edit</button></div><div class="grid"><div class="span-6"><div class="kv"><span>Vendor</span><b>${esc(o.vendor||'—')}</b></div><div class="kv"><span>Unit price</span><b>${db.settings.showCosts?fmtMoney(o.unitPrice):'Hidden'}</b></div><div class="kv"><span>Shipping</span><b>${db.settings.showCosts?fmtMoney(o.shipping):'Hidden'}</b></div><div class="kv"><span>Tax</span><b>${db.settings.showCosts?fmtMoney(o.tax):'Hidden'}</b></div></div><div class="span-6"><div class="kv"><span>Ordered</span><b>${esc(o.orderedDate||'—')}</b></div><div class="kv"><span>Received</span><b>${esc(o.receivedDate||'—')}</b></div><div class="kv"><span>Tracking / ref.</span><b>${esc(o.tracking||'—')}</b></div><div class="kv"><span>Inventory applied</span><b>${o.inventoryApplied?'Yes':'No'}</b></div></div></div>${o.blockerReason?`<div class="detail-section"><label>Why this order matters / blocker</label><div class="danger-note">${esc(o.blockerReason)}</div></div>`:''}<div class="detail-section"><label>Notes</label><div class="detail-text">${esc(o.notes||'No notes.')}</div></div>${isURL(o.url)?`<button class="btn secondary" style="margin-top:10px" onclick="window.open('${esc(o.url)}','_blank')">Open Vendor / Product Page</button>`:''}</div>
   <div class="detail-card"><div class="section-tools"><h3>Files / Order Screenshots / Invoice</h3><button class="icon-btn" onclick="chooseAttachments('order',${id})">+ Upload</button></div><div class="attach-drop" onclick="chooseAttachments('order',${id})" ondragover="event.preventDefault()" ondrop="handleEntityDrop(event,'order',${id})">Drop order screenshots, invoices, receipts or tracking documents here</div><div id="attachments-order-${id}"></div></div></div>
-  <div><div class="detail-card"><div class="section-tools"><h3>Aircraft System</h3><button class="icon-btn" onclick="openOrderModal(${id})">Change</button></div><div class="kv"><span>${esc(typeof orderSystemName==='function'?(orderSystemName(o)||'Unassigned'):(o.system||pr?.system||p?.system||'Unassigned'))}</span><b>${o.system?'Directly assigned':'Inherited from linked record'}</b></div></div><div class="detail-card entity-link-card ${pr?'':'entity-link-empty'}" onclick="${pr?`openProjectDetail(${pr.id})`:`openOrderProjectLinkModal(${id})`}"><div class="section-tools"><h3>Linked Project</h3><button class="icon-btn" onclick="event.stopPropagation();openOrderProjectLinkModal(${id})">${pr?'Change':'+ Link'}</button></div>${pr?`<div class="kv"><span>${esc(pr.title)}</span>${pill(pr.status)}</div>`:'<div class="muted">No project linked. Click anywhere in this card to choose one.</div>'}</div><div class="detail-card entity-link-card ${p?'':'entity-link-empty'}" onclick="${p?`openPartDetail(${p.id})`:`openOrderPartLinkModal(${id})`}"><div class="section-tools"><h3>Linked Part</h3><button class="icon-btn" onclick="event.stopPropagation();openOrderPartLinkModal(${id})">${p?'Change':'+ Link'}</button></div>${p?`<div class="kv"><span>${esc(p.name)}</span><span>${pill(p.status)}<br><small>${esc((typeof partOnOrderQty==='function'?partOnOrderQty(p.id):0)+' '+(p.unit||'ea'))} on order</small></span></div>`:'<div class="muted">No inventory part linked. Click anywhere in this card to choose or create one.</div>'}</div><div class="detail-card"><div class="section-tools"><h3>Order Updates</h3><button class="icon-btn" onclick="addEntityUpdate('order',${id})">+ Update</button></div>${o.updates.length?`<div class="timeline">${[...o.updates].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(u=>`<div class="timeline-item"><div class="timeline-date">${esc(u.date)}</div><div class="timeline-body">${esc(u.text)}</div></div>`).join('')}</div>`:'<div class="muted">No updates.</div>'}</div>${o.status!=='Received'&&o.status!=='Cancelled'?`<div class="detail-card"><button class="btn success" onclick="receiveOrder(${id})">Receive ${orderRemainingQty(o)} ${esc(o.unit||'ea')}${o.partId?' into Inventory':''}</button>${o.partId?'':'<div class="tiny muted" style="margin-top:8px">Link or create an inventory part first if this item should increase inventory.</div>'}</div>`:''}</div></div>`,true);renderAttachments('order',id)
+  <div><div class="detail-card"><div class="section-tools"><h3>Aircraft System</h3><button class="icon-btn" onclick="openOrderModal(${id})">Change</button></div><div class="kv"><span>${esc(typeof orderSystemName==='function'?(orderSystemName(o)||'Unassigned'):(o.system||pr?.system||p?.system||'Unassigned'))}</span><b>${o.system?'Directly assigned':'Inherited from linked record'}</b></div></div>${orderProjectLinksHTML(o,id)}<div class="detail-card entity-link-card ${p?'':'entity-link-empty'}" onclick="${p?`openPartDetail(${p.id})`:`openOrderPartLinkModal(${id})`}"><div class="section-tools"><h3>Linked Part</h3><button class="icon-btn" onclick="event.stopPropagation();openOrderPartLinkModal(${id})">${p?'Change':'+ Link'}</button></div>${p?`<div class="kv"><span>${esc(p.name)}</span><span>${pill(p.status)}<br><small>${esc((typeof partOnOrderQty==='function'?partOnOrderQty(p.id):0)+' '+(p.unit||'ea'))} on order</small></span></div>`:'<div class="muted">No inventory part linked. Click anywhere in this card to choose or create one.</div>'}</div><div class="detail-card"><div class="section-tools"><h3>Order Updates</h3><button class="icon-btn" onclick="addEntityUpdate('order',${id})">+ Update</button></div>${o.updates.length?`<div class="timeline">${[...o.updates].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(u=>`<div class="timeline-item"><div class="timeline-date">${esc(u.date)}</div><div class="timeline-body">${esc(u.text)}</div></div>`).join('')}</div>`:'<div class="muted">No updates.</div>'}</div>${o.status!=='Received'&&o.status!=='Cancelled'?`<div class="detail-card"><button class="btn success" onclick="receiveOrder(${id})">Receive ${orderRemainingQty(o)} ${esc(o.unit||'ea')}${o.partId?' into Inventory':''}</button>${o.partId?'':'<div class="tiny muted" style="margin-top:8px">Link or create an inventory part first if this item should increase inventory.</div>'}</div>`:''}</div></div>`,true);renderAttachments('order',id)
 }
