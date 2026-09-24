@@ -22,7 +22,7 @@
       String(a.item||'').localeCompare(String(b.item||'')));
   const deps=b=>rows(b.dependencies).length?b.dependencies:
     (b.orderId!=null?[{orderId:b.orderId,requiredQty:b.requiredQty}]:[]);
-  const mode=b=>b.mode==='any'?'any':'all';
+  const mode=b=>b?.mode==='any'?'any':'all';
   const waiting=p=>rows(p?.orderBlockers).filter(b=>b.status==='waiting'&&b.holdsProject!==false);
   const isHeld=s=>s==='Held Up'||s==='Blocked';
   const pending=()=>!!window.atomicReceiptOutbox?.hasPending?.();
