@@ -2,7 +2,7 @@ name: Verify Atomic Inventory Expansion
 
 on:
   push:
-    branches: ["atomic-inventory-adjustments-v5.19.23"]
+    branches: ["atomic-*"]
   pull_request:
     branches: ["main"]
 
