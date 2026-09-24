@@ -642,4 +642,127 @@ function deletedTestFixture(){
   assert.equal(h.oldSaveCount(),0);
 }
 
+
+const ADJUST_OPT='n594zs_atomic_adjustments_opt_in_v1';
+
+// Atomic manual adjustments use the SAME replay-safe journal as receipts,
+// without accidentally enabling the existing receipt opt-in.
+{
+  const h=makeHarness({enabled:false});
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('adjustment'),false);
+  h.localStorage.setItem(ADJUST_OPT,'1');
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('adjustment'),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),false,'adjustment opt-in enabled receipts');
+  const adjust=tx=>tx.update('part',21,p=>{
+    p.inventoryAdjustments=[{id:501,date:'2026-09-24',delta:-1,reason:'Count correction',notes:'Fixture'}];
+  });
+  h.ctx.atomicReceiptOutbox.stageAdjustment(adjust,'Inventory count corrected');
+  const journal=JSON.parse(h.localStorage.getItem(OUTBOX));
+  assert.equal(journal.operationKind,'adjustment');
+  assert.equal(journal.changes.length,1);
+  assert.equal(journal.changes[0].record_type,'part');
+  assert.equal(journal.changes[0].data.inventoryAdjustments[0].delta,-1);
+  assert.equal(h.localStorage.getItem(PENDING),'1');
+  const first=await h.ctx.saveCloudState();
+  assert.equal(first.applied.length,0);
+  assert.equal(h.rpcCalls.length,1);
+  assert.equal(h.rpcCalls[0].changes.length,1);
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+  assert.equal(h.ctx.cloudRecordVersions.get('part:21'),3);
+  h.ctx.atomicReceiptOutbox.stageAdjustment(tx=>tx.update('part',21,p=>{
+    p.inventoryAdjustments.push({id:502,date:'2026-09-24',delta:1,reason:'Reversal',reverses:501});
+  }),'Adjustment reversed');
+  await h.ctx.saveCloudState();
+  assert.equal(h.rpcCalls.length,2);
+  assert.equal(h.db.parts[0].inventoryAdjustments.length,2);
+  assert.equal(h.ctx.cloudRecordVersions.get('part:21'),4);
+  assert.equal(h.db.parts[0].stockQty,0,'manual adjustment mutated stock baseline');
+}
+
+// Strict scope: an adjustment may append exactly ONE Part history entry
+// and must not silently modify part metadata or unrelated workspace data.
+for(const work of [
+  tx=>tx.update('part',21,p=>{p.stockQty=99}),
+  tx=>tx.update('part',21,p=>{p.inventoryAdjustments=[{id:601,delta:1},{id:602,delta:2}]}),
+  tx=>{tx.update('part',21,p=>{p.inventoryAdjustments=[{id:601,delta:1}]});tx.update('order',31,o=>{o.receivedQty=2})},
+  tx=>{tx.update('part',21,p=>{p.inventoryAdjustments=[{id:601,delta:1}]});throw new Error('unrelated workspace edit')},
+  tx=>tx.update('part',21,p=>{p.inventoryAdjustments=[{id:601,delta:0}]}),
+]){
+  const h=makeHarness({enabled:false});
+  h.localStorage.setItem(ADJUST_OPT,'1');
+  const before=structuredClone(h.db);
+  // A normal code path uses only tx.updates; reject mixed/wrong effects.
+  const candidate=work.toString().includes('unrelated workspace edit')?
+    tx=>{tx.update('part',21,p=>{p.inventoryAdjustments=[{id:601,delta:1}]});h.db.settings.showCosts=false}:work;
+  assert.throws(()=>h.ctx.atomicReceiptOutbox.stageAdjustment(candidate,'Invalid adjustment'),
+    /Atomic adjustment/);
+  assert.deepEqual(h.db,before);
+  assert.equal(h.saved.length,0);
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+}
+
+// An adjustment with pending sync refuses a second receipt or adjustment.
+// A storage failure never leaves a local physical count change.
+{
+  const h=makeHarness({enabled:false});
+  h.localStorage.setItem(ADJUST_OPT,'1');
+  const work=tx=>tx.update('part',21,p=>{p.inventoryAdjustments=[{id:701,delta:2}]});
+  h.ctx.atomicReceiptOutbox.stageAdjustment(work,'Found two');
+  assert.throws(()=>h.ctx.atomicReceiptOutbox.stageAdjustment(work,'Duplicate'),/still pending/);
+  assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(receiptWork,'Receipt blocked'),/still pending/);
+  assert.equal(h.db.parts[0].inventoryAdjustments.length,1);
+}
+{
+  const h=makeHarness({enabled:false,failKey:OUTBOX});
+  h.localStorage.setItem(ADJUST_OPT,'1');
+  const before=structuredClone(h.db);
+  assert.throws(()=>h.ctx.atomicReceiptOutbox.stageAdjustment(
+    tx=>tx.update('part',21,p=>{p.inventoryAdjustments=[{id:801,delta:1}]}),'Storage failure'
+  ),/Storage quota exhausted/);
+  assert.deepEqual(h.db,before);
+  assert.equal(h.saved.length,0);
+  assert.equal(h.rpcCalls.length,0);
+}
+
+// Offline journal survives a reload and replays exactly once after reconnect.
+// A version conflict leaves it intact for explicit cloud comparison.
+{
+  const h=makeHarness({enabled:false,online:false});
+  h.localStorage.setItem(ADJUST_OPT,'1');
+  h.ctx.atomicReceiptOutbox.stageAdjustment(
+    tx=>tx.update('part',21,p=>{p.inventoryAdjustments=[{id:901,delta:-1}]}),'Offline correction'
+  );
+  const offline=await h.ctx.saveCloudState();
+  assert.equal(offline.pending,true);
+  assert.equal(h.rpcCalls.length,0);
+  const seed={db:{parts:[{id:21,name:'TEST WASHER',stockQty:0,status:'Order',unit:'ea'}],
+     orders:[{id:31,item:'TEST WASHER',partId:21,qty:4,receivedQty:0,inventoryApplied:false,status:'Ordered',updates:[]}],
+     projects:[],settings:{showCosts:true},logs:[],docs:[],checklists:[]},
+     storage:h.localStorage.dump()};
+  const recovered=makeHarness({enabled:false,seed});
+  await recovered.ctx.atomicReceiptOutbox.recoverLocal();
+  assert.equal(recovered.db.parts[0].inventoryAdjustments.length,1);
+  await recovered.ctx.saveCloudState();
+  assert.equal(recovered.rpcCalls.length,1);
+  assert.equal(recovered.db.parts[0].inventoryAdjustments.length,1);
+  assert.equal(recovered.localStorage.getItem(OUTBOX),null);
+}
+{
+  const h=makeHarness({enabled:false,onRpc:()=>({data:{
+    applied:[],conflicts:[{record_type:'part',record_id:'21',cloud_version:7}],replayed:false
+  },error:null})});
+  h.localStorage.setItem(ADJUST_OPT,'1');
+  h.ctx.atomicReceiptOutbox.stageAdjustment(
+    tx=>tx.update('part',21,p=>{p.inventoryAdjustments=[{id:902,delta:-1}]}),'Conflicting correction'
+  );
+  const blocked=await h.ctx.saveCloudState();
+  assert.equal(blocked.pending,true);
+  assert.equal(JSON.parse(h.localStorage.getItem(OUTBOX)).blocked,true);
+  assert.equal(h.rpcCalls.length,1);
+  const reviewed=await h.ctx.atomicReceiptOutbox.reviewConflict();
+  assert.equal(reviewed.resolved,true,'exact cloud-match review failed');
+  assert.equal(h.rpcCalls.length,1,'review accidentally re-applied adjustment');
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+}
+
 console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
