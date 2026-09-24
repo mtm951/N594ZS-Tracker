@@ -223,7 +223,7 @@ function removeOrderProjectLink(orderId,pid){
   const project=projectById(pid);
   const relatedBlockers=arr(project?.orderBlockers).filter(b=>b.status==='waiting'&&
     (Number(b.orderId)===Number(orderId)||arr(b.dependencies).some(dep=>Number(dep.orderId)===Number(orderId))));
-  const warning=relatedBlockers.length?'\nThis project still has '+relatedBlockers.length+' waiting blocker dependency'+(relatedBlockers.length===1?'':'ies')+' on this order. Removing the link will NOT delete or resolve the blocker. Review it separately.':'';
+  const warning=relatedBlockers.length?'\nThis project still has '+relatedBlockers.length+' waiting blocker '+(relatedBlockers.length===1?'dependency':'dependencies')+' on this order. Removing the link will NOT delete or resolve the blocker. Review it separately.':'';
   if(!confirm(text+warning))return;
   try{commitOrderProjectLinks(orderId,d=>{
     const remaining=orderProjectIds(d).filter(x=>Number(x)!==Number(pid));
