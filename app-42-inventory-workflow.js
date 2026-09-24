@@ -153,7 +153,7 @@
     var p=partById(Number(partId));if(!p)return;
     var delta=Number(val('iaDelta'));if(!Number.isFinite(delta)||delta===0)return alert('Enter a non-zero quantity change.');
     if(delta<0){var on=partAvailable(p);if(on!==null&&on+delta<0&&!confirm('This adjustment will make calculated inventory negative. Save it anyway?'))return;}
-    const entry={id:uid(),date:val('iaDate')||today(),delta,reason:val('iaReason')||'Adjustment',notes:val('iaNotes')||''};
+    const entry={id:uid(),date:val('iaDate')||today(),delta,reason:val('iaReason')||'Adjustment',notes:val('iaNotes')||'',reverses:null};
     try{persistInventoryAdjustment(p.id,entry,'Inventory adjustment recorded.')}
     catch(error){alert('Adjustment was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.');return}
     openPartDetail(p.id);
