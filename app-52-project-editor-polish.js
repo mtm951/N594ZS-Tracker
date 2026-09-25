@@ -139,7 +139,8 @@
     .workflow-deps .chip{width:100%;box-sizing:border-box;border-radius:12px;min-height:48px;padding:10px 12px;justify-content:flex-start;font-size:12px;line-height:1.3}
     .workflow-deps .chip input{flex:0 0 auto;width:18px;height:18px;margin:0 8px 0 0}
     .project-trigger-field select,.project-trigger-field input{width:100%}
-    .project-trigger-custom{box-sizing:border-box}
+    .project-readiness-hint{margin-top:8px;padding:8px 10px;border-left:3px solid #2d7fd1;background:#f2f8fd;color:#25486d;font-size:12px;line-height:1.4}
+    .project-trigger-field .warning{font-size:12px;line-height:1.4}
     .project-field-clickable{position:relative;cursor:pointer;transition:border-color .15s,background .15s}
     .project-field-clickable:hover{border-color:#8fb5d3;background:#f1f7fb}
     .project-field-clickable:focus{outline:3px solid rgba(45,127,209,.18);outline-offset:2px}
