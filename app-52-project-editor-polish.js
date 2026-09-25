@@ -1,74 +1,87 @@
 'use strict';
-// ---------- V5.10.6 PROJECT EDITOR POLISH ----------
+// ---------- V5.19.31 LINK PROJECT READINESS TO CANONICAL PHASES ----------
 // Full-width dependency choices, reusable Due/Trigger presets, and quicker field editing.
 
 (function(){
   if(window.__n594zsProjectEditorPolishInstalled)return;
   window.__n594zsProjectEditorPolishInstalled=true;
 
-  const A=v=>Array.isArray(v)?v:[];
   const T=v=>String(v??'').trim();
 
-  const COMMON_TRIGGERS=[
-    'Before Engine Start',
-    'Before Flight',
-    'First Flight',
-    'Return to Service',
-    'Annual / Condition Inspection',
-    'Next Maintenance',
-    'As Needed',
-    'Deferred / Later'
-  ];
-
-  function triggerChoices(current=''){
-    const out=[];
-    const add=v=>{const s=T(v);if(s&&!out.some(x=>x.toLowerCase()===s.toLowerCase()))out.push(s)};
-    COMMON_TRIGGERS.forEach(add);
-    A(db.projects).map(p=>p.trigger).filter(Boolean).forEach(add);
-    add(current);
-    return out;
+  // WORKFLOW_PHASES is the one canonical source for the *actual* Readiness
+  // lists. The old trigger preset menu was just text and never moved a
+  // Project into the corresponding Readiness list.
+  function canonicalReadinessTrigger(id){
+    return {
+      'build':'','engine-start':'Before Engine Start',
+      'ground':'Before Ground Test','flight':'Before Flight',
+      'rts':'Before Return to Service','later':'Deferred / Later'
+    }[id]??'';
   }
-
-  function triggerSelectHTML(current){
-    const cur=T(current);
-    const opts=triggerChoices(cur).map(v=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(v)}</option>`).join('');
-    const known=triggerChoices(cur).some(v=>v===cur);
-    return `<label>Due / trigger</label>
-      <select id="prTriggerPreset" onchange="projectTriggerPresetChanged()">
-        <option value="" ${!cur?'selected':''}>— No trigger —</option>
-        ${opts}
-        <option value="__custom__" ${cur&&!known?'selected':''}>+ Add new trigger…</option>
-      </select>
-      <input id="prTrigger" type="hidden" value="${esc(cur)}">
-      <input id="prTriggerCustom" class="project-trigger-custom" value="${cur&&!known?esc(cur):''}" placeholder="Type a new trigger…" oninput="projectTriggerCustomChanged()" style="display:${cur&&!known?'block':'none'};margin-top:8px">`;
+  function triggerIsStageText(value,phase){
+    const text=T(value).toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ');
+    if(!text)return true;
+    const aliases={
+      'build':['installation / build','installation','build'],
+      'engine-start':['before engine start','before first engine start',
+        'before first start','first engine run','before engine run'],
+      'ground':['before ground test','before ground testing',
+        'engine run / ground test','ground test','ground testing'],
+      'flight':['before flight','preflight','before first flight','first flight'],
+      'rts':['before return to service','return to service',
+        'return to service closeout','before return to flight'],
+      'later':['deferred / later','later / optional','later','as needed',
+        'optional / mission dependent']
+    };
+    return (aliases[phase]||[]).includes(text);
   }
-
-  window.projectTriggerPresetChanged=function(){
-    const preset=document.getElementById('prTriggerPreset');
-    const hidden=document.getElementById('prTrigger');
-    const custom=document.getElementById('prTriggerCustom');
-    if(!preset||!hidden||!custom)return;
-    if(preset.value==='__custom__'){
-      custom.style.display='block';
-      hidden.value=custom.value;
-      setTimeout(()=>custom.focus(),0);
-    }else{
-      custom.style.display='none';
-      hidden.value=preset.value;
-    }
+  function linkedReadinessPhaseName(id){
+    return typeof phaseLabel==='function'?phaseLabel(id):
+      (typeof WORKFLOW_PHASES!=='undefined'?
+        WORKFLOW_PHASES.find(p=>p.id===id)?.label:'')||'Installation / Build';
+  }
+  window.projectReadinessStageChanged=function(){
+    const phase=document.getElementById('prPhase');
+    const trigger=document.getElementById('prTrigger');
+    const note=document.getElementById('prTriggerNote');
+    const hint=document.getElementById('prReadinessLinkHint');
+    if(!phase||!trigger||!note)return;
+    // A deliberately entered custom deadline remains untouched. Otherwise,
+    // set the historic trigger text so old dashboard/priority filters still
+    // recognize "Before Flight" etc as well as the true phase relationship.
+    trigger.value=T(note.value)||canonicalReadinessTrigger(phase.value);
+    if(hint)hint.textContent='Linked to Readiness → '+linkedReadinessPhaseName(phase.value)+
+      '. Save the project to update its actual Readiness list.';
   };
-
-  window.projectTriggerCustomChanged=function(){
-    const hidden=document.getElementById('prTrigger'),custom=document.getElementById('prTriggerCustom');
-    if(hidden&&custom)hidden.value=custom.value;
-  };
+  window.projectReadinessNoteChanged=window.projectReadinessStageChanged;
 
   function upgradeProjectTriggerField(){
-    const old=document.getElementById('prTrigger');if(!old)return;
-    const holder=old.parentElement;if(!holder)return;
-    const current=old.value||'';
+    const old=document.getElementById('prTrigger');
+    const phase=document.getElementById('prPhase');
+    if(!old||!phase)return;
+    const holder=old.parentElement;
+    if(!holder||holder.querySelector?.('#prReadinessSelectSlot'))return;
+    const stageParent=phase.parentElement;
+    const current=T(old.value);
+    const existingNote=triggerIsStageText(current,phase.value)?'':current;
     holder.classList.add('project-trigger-field');
-    holder.innerHTML=triggerSelectHTML(current);
+    holder.innerHTML='<label for="prPhase">Readiness list / when required</label>'+
+      '<div id="prReadinessSelectSlot"></div>'+
+      '<div class="project-readiness-hint" id="prReadinessLinkHint">'+
+        'Linked to Readiness → '+esc(linkedReadinessPhaseName(phase.value))+
+        '. Save the project to update its actual Readiness list.</div>'+
+      '<input id="prTrigger" type="hidden" value="'+esc(current)+'">'+
+      '<label for="prTriggerNote" style="margin-top:11px">Additional due / trigger note (optional)</label>'+
+      '<input id="prTriggerNote" value="'+esc(existingNote)+'"'+
+      ' placeholder="e.g. Before first test flight"'+
+      ' oninput="projectReadinessNoteChanged()">'+
+      '<div class="tiny muted" style="margin-top:5px">The Readiness selection controls where the project appears. Additional notes do not change that list.</div>';
+    // Move—not duplicate—the real workflow phase control. app-20-workflow
+    // still reads #prPhase when saving and its normal Readiness gates use
+    // the resulting project.phase. Leave all other workflow fields intact.
+    document.getElementById('prReadinessSelectSlot')?.appendChild(phase);
+    stageParent?.remove();
+    phase.addEventListener('change',window.projectReadinessStageChanged);
   }
 
   const openProjectModalPolishBase=window.openProjectModal;
