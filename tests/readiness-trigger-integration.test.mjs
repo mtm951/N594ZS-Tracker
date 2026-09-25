@@ -158,15 +158,21 @@ function harness(project){
 // A contradictory legacy custom trigger is visible, not silently migrated
 // to a different Readiness list. The user can explicitly correct the phase.
 {
-  const h=harness({phase:'build',trigger:'Before flight'});
+  const h=harness({phase:'later',trigger:'Before flight'});
   h.ctx.openProjectModal(104);
-  assert.equal(h.nodes.prPhase.value,'build');
-  assert.equal(h.nodes.prTriggerNote.value,'Before flight');
-  assert.equal(h.db.projects[0].phase,'build');
+  assert.equal(h.nodes.prPhase.value,'later');
+  assert.equal(h.nodes.prTriggerNote.value,'',
+    'a known Readiness label must not masquerade as a custom deadline');
+  assert.match(h.holder.innerHTML,/Your saved trigger says Before flight/);
+  assert.match(h.holder.innerHTML,/currently in Later \/ Optional/);
+  assert.equal(h.db.projects[0].phase,'later','opening the editor must not silently reassign an old Project');
   h.nodes.prPhase.value='flight';h.nodes.prPhase.handlers.change();
+  assert.equal(h.nodes.prTrigger.value,'Before Flight');
   h.ctx.saveProject(104);
   assert.equal(h.db.projects[0].phase,'flight');
-  assert.equal(h.db.projects[0].trigger,'Before flight');
+  assert.equal(h.db.projects[0].trigger,'Before Flight');
+  h.ctx.openPhaseProjects('flight');
+  assert.match(h.modal(),/Resolve airspeed indicator issue/);
 }
 
 // New projects also select the same canonical phase list and are available
