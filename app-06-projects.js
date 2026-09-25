@@ -13,6 +13,11 @@ function openProjectModal(id=null){
 }
 function saveProject(id){
   const o={title:val('prTitle'),system:val('prSystem')||'General',priority:val('prPriority'),status:val('prStatus'),trigger:val('prTrigger'),percent:Math.max(0,Math.min(100,num(val('prPercent')))),summary:val('prSummary'),plan:val('prPlan'),blockers:val('prBlockers'),nextStep:val('prNext')};
+  // Store the selected canonical Readiness stage with the trigger in the
+  // SAME Project write. app-20 still supplies the remaining workflow fields,
+  // but a cross-device reader must never receive a new trigger and old phase.
+  const stage=document.getElementById('prPhase')?.value;
+  if(['build','engine-start','ground','flight','rts','later'].includes(stage))o.phase=stage;
   if(!o.title)return alert('Project title is required.');
   const current=id?projectById(id):null;
   if(id&&o.status==='Done'&&current&&current.status!=='Done'){
