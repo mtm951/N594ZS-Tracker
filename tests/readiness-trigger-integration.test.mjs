@@ -197,4 +197,50 @@ function harness(project){
 assert.match(workflow,/title="Open this Readiness list"/);
 assert.match(workflow,/openPhaseProjects/);
 
+// The original Project save writes BOTH fields together before the older
+// workflow decoration performs its follow-up save. A phone/cloud reader must
+// not observe a "Before Flight" trigger paired with an old Later/Optional
+// phase from the first Project write.
+{
+  const core=fs.readFileSync(new URL('../app-06-projects.js',import.meta.url),'utf8');
+  const store=fs.readFileSync(new URL('../app-17a-data-store.js',import.meta.url),'utf8');
+  const db={projects:[{id:104,title:'Resolve airspeed indicator issue',
+      phase:'later',trigger:'Before flight',priority:'Low',status:'Open',
+      percent:33,partsUsed:[],updates:[]}],
+    parts:[],orders:[],logs:[],docs:[],checklists:[]};
+  const values={
+    prTitle:'Resolve airspeed indicator issue',prSystem:'Panel / Avionics',
+    prPriority:'Low',prStatus:'Open',prPhase:'flight',prPercent:'33',
+    prTrigger:'Before Flight',prSummary:'ASI indication is not trusted.',
+    prPlan:'Troubleshoot',prBlockers:'',prNext:'Verify operation'
+  };
+  const snapshots=[];
+  const ctx={window:null,db,console,JSON,Map,Set,Array,Math,Date,
+    Number,String,Object,Promise,structuredClone,
+    RECORD_ARRAYS:{project:'projects'},
+    document:{getElementById:id=>values[id]?{value:values[id]}:null},
+    val:id=>values[id]||'',num:x=>Number(x)||0,arr:x=>Array.isArray(x)?x:[],
+    uid:()=>999,
+    projectById:id=>db.projects.find(p=>String(p.id)===String(id)),
+    closeModal:()=>{},
+    saveDB:()=>snapshots.push(structuredClone(db)),
+    alert:message=>{throw Error(message)}
+  };
+  ctx.window=ctx;
+  vm.createContext(ctx);
+  vm.runInContext(store,ctx,{filename:'app-17a-data-store.js'});
+  vm.runInContext(core,ctx,{filename:'app-06-projects.js'});
+  ctx.saveProject(104);
+  assert.equal(snapshots.length,1);
+  assert.equal(snapshots[0].projects[0].trigger,'Before Flight');
+  assert.equal(snapshots[0].projects[0].phase,'flight');
+  assert.equal(db.projects[0].phase,'flight');
+  // Old, non-Readiness forms preserve the project's existing phase.
+  delete values.prPhase;
+  values.prTrigger='Inspection due within 14 days';
+  ctx.saveProject(104);
+  assert.equal(snapshots[1].projects[0].phase,'flight');
+  assert.equal(snapshots[1].projects[0].trigger,'Inspection due within 14 days');
+}
+
 console.log('Canonical Readiness dropdown, legacy notes, phase-save and actual-list integration tests passed');
