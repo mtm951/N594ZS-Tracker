@@ -45,7 +45,9 @@
     const trigger=document.getElementById('prTrigger');
     const note=document.getElementById('prTriggerNote');
     const hint=document.getElementById('prReadinessLinkHint');
+    const mismatch=document.getElementById('prReadinessMismatch');
     if(!phase||!trigger||!note)return;
+    if(mismatch)mismatch.style.display='none';
     // A deliberately entered custom deadline remains untouched. Otherwise,
     // set the historic trigger text so old dashboard/priority filters still
     // recognize "Before Flight" etc as well as the true phase relationship.
@@ -63,10 +65,16 @@
     if(!holder||holder.querySelector?.('#prReadinessSelectSlot'))return;
     const stageParent=phase.parentElement;
     const current=T(old.value);
-    const existingNote=triggerIsStageText(current,phase.value)?'':current;
+    const namedStage=current&&typeof WORKFLOW_PHASES!=='undefined'
+      ?WORKFLOW_PHASES.find(x=>triggerIsStageText(current,x.id))?.id:null;
+    const existingNote=namedStage?'':current;
+    const mismatch=!!namedStage&&namedStage!==phase.value;
     holder.classList.add('project-trigger-field');
     holder.innerHTML='<label for="prPhase">Readiness list / when required</label>'+
       '<div id="prReadinessSelectSlot"></div>'+
+      (mismatch?'<div id="prReadinessMismatch" class="warning" style="margin-top:8px">'+
+        'Your saved trigger says '+esc(current)+', but this project is currently in '+
+        esc(linkedReadinessPhaseName(phase.value))+'. Choose the correct Readiness list above and save to reconcile them.</div>':'')+
       '<div class="project-readiness-hint" id="prReadinessLinkHint">'+
         'Linked to Readiness → '+esc(linkedReadinessPhaseName(phase.value))+
         '. Save the project to update its actual Readiness list.</div>'+
