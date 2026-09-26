@@ -22,7 +22,7 @@ function purchaseFilterActive(filters){
   return Object.values(filters).some(v=>!!String(v||'').trim());
 }
 function purchaseFilterDate(p){
-  return purchaseDateISO(p?.orderDate||p?.shipDate||'');
+  return purchaseDateISO(p?.shipDate||p?.orderDate||'');
 }
 function purchaseInvoiceEconomicCost(invoice){
   // Gift cards and reward points are PAYMENT, not a reduction in aircraft cost.
@@ -87,7 +87,6 @@ function purchaseFilteredFinancialSummary(allPurchases,allInvoices,matching,filt
       estimated:inv.totalIsQuotedEstimate===true||inv.totalIsQuotedEstimate==='true',
       sourcePartial:!!inv.partialItems,selectedLineCount:selectedLines.length});
   }
-  const matchedInvoices=new Set(invoiceRows.map(x=>x.id));
   const uninvoiced=selected.filter(p=>!invoiceByNo.has(String(p.invoice||'')));
   return {
     selected,invoiceRows,active,lineSpecific,filters:{...filters},
@@ -135,6 +134,7 @@ function purchaseRefreshMetricTiles(){
     if(s.lineSpecific&&s.allocatedInvoices)parts.push(s.allocatedInvoices+' invoice(s) allocated proportionally for matching items.');
     else if(s.allocatedInvoices)parts.push(s.allocatedInvoices+' mixed / partial invoice(s) allocated.');
     if(s.unbilledCount)parts.push(s.unbilledCount+' line(s) without matched invoice totals; '+fmtMoney(s.unbilledSubtotal)+' in item subtotals only.');
+    if(s.sourceOnlyInvoices)parts.push(s.sourceOnlyInvoices+' invoice-only record(s) have no item rows on this page.');
     if(s.quotedInvoices)parts.push(s.quotedInvoices+' owner-paid order estimate(s), final totals not verified.');
     if(s.unpriced)parts.push(s.unpriced+' line(s) without verified item pricing.');
     note.textContent=parts.join(' ');
