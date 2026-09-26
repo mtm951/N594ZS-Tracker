@@ -112,7 +112,7 @@
     vendorDrillVendor=String(vendor||'');
     const s=scopeData(),lines=s.selected.filter(p=>p.vendor===vendorDrillVendor);
     const vScope=purchaseFilteredFinancialSummary(db.purchases,db.invoices,lines,{...s.filters,vendor:vendorDrillVendor});
-    const invoices=vScope.invoiceRows.sort((a,b)=>String(date(b.invoice)).localeCompare(String(date(a.invoice)));
+    const invoices=vScope.invoiceRows.sort((a,b)=>String(date(b.invoice)).localeCompare(String(date(a.invoice))));
     openShell(vendorDrillVendor,scopeHeader(),'<div class="summary-strip">'+
       '<div class="summary-cell"><div class="lab">Matching lines</div><div class="val">'+lines.length+'</div></div>'+
       '<div class="summary-cell"><div class="lab">Invoices</div><div class="val">'+vScope.invoices+'</div></div>'+
