@@ -14,7 +14,15 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.33** (complete cloud pagination; PR #11 merged September 26). Confirm current main-branch Pages Actions before reporting deployment.
+- Current release: **v5.19.34** (stable popup/unsaved-edit protection; PR #12 merged September 26). Confirm current main-branch Pages Actions before reporting deployment.
+
+## v5.19.34 stable popups and unsaved-form protection (September 26)
+
+- Owner screenshot still displayed v5.19.32 after v5.19.33 was already deployed; old **already-open browser tabs do not hot-swap app code**, even though cloud *data* syncs live. Existing **System → GitHub / Deployment → Force Latest Version** safely checks pending cloud writes, clears old N594ZS caches/service workers, reloads with a cache-busting URL. Ensure status is Synced, not Conflict/Pending, before forcing an update. New version after release should be v5.19.34. Do not assume owner device has upgraded until checked.
+- Owner reports modal popups unexpectedly/easily closing during entry (Project PTT example); root code had duplicate document-level Escape/backdrop dismissal listeners (app-03-core, app-15-init) and specialized app-35 backdrop and popstate guards **only** for order receiving, leaving Project/Purchase/other forms exposed.
+- PR #12, merge SHA `48d2a907a0e18ed62eebeae553fff220a250166a`, reuses existing `app-35-navigation-ux.js` rather than adding another UI layer. All popups now ignore backdrop taps, blur focused inputs instead of closing on first Escape, guard entered input/select/textarea values and ask for confirmation before discarding via explicit X, in-app Back, Cancel or browser history Back; unsolicited history events while actively editing preserve popup. Existing save-success `closeModal()` remains automatic without a confirmation. Preserve old receipt popstate race protection. Existing duplicate Escape/backdrop handlers are intercepted by capture-phase handlers, not removed (fallback if navigation module absent).
+- `tests/order-modal-navigation.test.mjs` updated with genuine new expected behavior: ordinary popup backdrop no longer closes, Project notes survive inadvertent Escape/popstate, dirty X/Back/Cancel require confirmation, confirmed exit closes, programmatic saves still close. Branch CI `36267184907` and PR CI `36267270672` succeeded. No production cloud data modifications; this release only changes UI JavaScript, version tags, service-worker shell.
+- Acceptance: After Force Latest, verify footer v5.19.34; open PTT project/Edit fields, enter temporary notes (do **not** save), click outside the modal (must stay open), press Escape while field focused (must only blur), click X then choose Stay/Cancel (draft remains), finally click X and confirm discard (closes). Test same with Purchase and Order edits. Do not run Repair Safe Links if still on v5.19.32 truncated load; v5.19.33+ cloud loader is required.
 
 ## v5.19.33 complete cloud pagination / false integrity alerts (September 26)
 
