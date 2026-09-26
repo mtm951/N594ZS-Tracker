@@ -70,7 +70,7 @@ function harness(){
     setItem:(key,val)=>saved.set(key,val)
   },document,console,db,Intl,Map,Set,Array,Number,String,Date,JSON,
   val:id=>String(nodes.get(id)?.value||''),
-  num:x=>Number(x)||0,esc:x=>String(x??''),pill:x=>String(x),
+  num:x=>Number(x)||0,esc:x=>String(x??''),pill:x=>String(x),unique:x=>[...new Set(x)],
   partAvailable:p=>p.stockQty,partConsumedQty:()=>0,partOnOrderQty:()=>0,
   fmtMoney:v=>'$'+Number(v).toFixed(2),projectCost:()=>0,
   orderLinkedToProject:()=>false,isClosedOrder:()=>false,
