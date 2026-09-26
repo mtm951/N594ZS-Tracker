@@ -143,11 +143,16 @@ function consumeWork(installed=true){
     new Set(['part','project','log','purchase']));
   assert.equal(pending.changes.find(x=>x.record_type==='log').expected_version,0);
   assert.equal(pending.before.find(x=>x.key==='log:888').data,null);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',889),false);
+  assert.throws(()=>h.ctx.trackerStore.update('log',888,d=>{d.work='bad mutation'}),/pending/i);
+  assert.equal(h.db.logs[0].work,'Used test hardware');
   assert.equal(h.saves.length,1);
   await h.ctx.saveCloudState();
   assert.equal(h.rpcCalls.length,1,'linked records split into multiple cloud writes');
   assert.equal(h.rpcCalls[0].changes.length,4);
   assert.equal(h.localStorage.getItem(KEY),null);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),false);
   assert.equal(h.ctx.cloudRecordVersions.get('log:888'),1);
   await h.ctx.saveCloudState();
   assert.equal(h.rpcCalls.length,1,'repeated sync duplicated a consumption');
@@ -172,6 +177,34 @@ function consumeWork(installed=true){
   await restored.ctx.saveCloudState();
   assert.equal(restored.rpcCalls.length,1);
   assert.equal(restored.localStorage.getItem(KEY),null);
+}
+
+// Regression for the real-world offline failure: a user edited the newly
+// staged Work Log while the operation was pending. Recovery must reject the
+// mismatch without altering any local records or clearing the journal.
+{
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stageConsumption(consumeWork(),'Offline use',META);
+  const staged=JSON.parse(h.localStorage.getItem(KEY)).changes
+    .find(x=>x.record_type==='log').data;
+  h.db.logs[0].work+='\\nOffline test notes added while pending';
+  const before=structuredClone(h.db);
+  await assert.rejects(h.ctx.atomicReceiptOutbox.recoverLocal(),
+    /pending atomic Work Log was edited locally/i);
+  assert.deepEqual(h.db,before,'Recovery must preserve the divergent local note');
+  assert.ok(h.localStorage.getItem(KEY),'Recovery cleared an unacknowledged journal');
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),true);
+  // The owner can compare the already-downloaded safety copy and restore the
+  // original staged text in the pre-update tab. Once exact, replay is safe.
+  h.db.logs[0].work=staged.work;
+  assert.equal(await h.ctx.atomicReceiptOutbox.recoverLocal(),false);
+  h.ctx.navigator.onLine=true;
+  const applied=await h.ctx.saveCloudState();
+  assert.equal(h.rpcCalls.length,1);
+  assert.equal(h.localStorage.getItem(KEY),null);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),false);
+  assert.equal(h.ctx.trackerStore.update('log',888,d=>{d.work+=' after sync'},{persist:false}).work,
+    'Used test hardware after sync');
 }
 
 // Even when Part stockQty does not change, its version is included as a
