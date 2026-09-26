@@ -626,6 +626,80 @@
     toast('Pending atomic receipt safety download started. Keep the file separate from your core backup.','good');
     return record;
   }
+  // An older app may have allowed a TEXT-ONLY edit to a newly staged Log.
+  // Provide a deliberately manual, backup-first escape hatch. Never guess
+  // about edited quantities, consumed items, project links or source stock.
+  function textOnlyPendingLogDrift(e){
+    if(e?.operationKind!=='consumption')return null;
+    const logs=e.changes.filter(x=>x.record_type==='log');
+    if(logs.length!==1||Number(logs[0].expected_version)!==0)return null;
+    const r=logs[0],k=key('log',r.record_id);
+    const prior=e.before.find(x=>x.key===k);
+    if(!prior||prior.data!==null)return null;
+    const now=arr(db.logs).find(x=>String(x.id)===String(r.record_id));
+    if(!now||stable(now)===stable(r.data))return null;
+    const stripNotes=source=>{
+      const value=copy(source);
+      for(const field of ['work','observations','notes','blockers','nextStep'])delete value[field];
+      return stable(value);
+    };
+    return stripNotes(now)===stripNotes(r.data)?{log:r,now}:null;
+  }
+  async function restorePendingWorkLog(){
+    let e;
+    try{
+      e=read();
+      if(!e)throw new Error('There is no pending atomic transaction.');
+      validateIdentity(e);
+    }catch(error){alert(error.message||String(error));return false}
+    const candidate=textOnlyPendingLogDrift(e);
+    if(!candidate){
+      alert('No eligible text-only pending Work Log mismatch was found. If the transaction still cannot sync, export its safety copy and request supervised review. No records were changed.');
+      return false;
+    }
+    const current=snapshot();
+    for(const r of e.changes){
+      if(r.record_type==='log')continue;
+      const k=key(r.record_type,r.record_id),now=current.get(k)?.data??null;
+      const original=e.before.find(x=>x.key===k);
+      if(!original||(stable(now)!==stable(r.data)&&stable(now)!==stable(original.data??null))){
+        alert('Another member of this atomic operation changed after staging. No automatic local repair is safe. Export the safety copy and request supervised review.');
+        return false;
+      }
+    }
+    if(!confirm('This pending Work Log contains additional TEXT entered after the atomic operation. A safety copy will be downloaded before restoring its original staged text. Continue?'))return false;
+    let safety;
+    try{safety=exportPendingJournal()}catch(error){
+      alert('Safety export failed; no Work Log was changed: '+(error?.message||String(error)));
+      return false;
+    }
+    if(!safety?.journal){
+      alert('Safety copy could not be verified; no Work Log was changed.');
+      return false;
+    }
+    if(!confirm('Confirm the Pending Atomic Safety Copy has been SAVED and retained. Restoring replaces ONLY this Work Log’s post-staging text with its original journal version. The extra text remains in the downloaded copy and can be re-entered AFTER successful sync. Proceed?'))return false;
+    const idx=db.logs.findIndex(x=>String(x.id)===String(candidate.log.record_id));
+    if(idx<0)return false;
+    const previous=copy(db.logs[idx]);
+    db.logs[idx]=copy(candidate.log.data);
+    try{
+      if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});
+      else{
+        const json=JSON.stringify(db);localStorage.setItem(DB_KEY,json);
+        if(localStorage.getItem(DB_KEY)!==json)throw new Error('Browser cache verification failed.');
+      }
+      localStorage.setItem(PENDING,'1');
+      cloudDirty=true;
+    }catch(error){
+      db.logs[idx]=previous;
+      alert('The local staged-text restore could not be saved. Original local text was retained; keep your safety file. '+(error?.message||String(error)));
+      return false;
+    }
+    renderAll();
+    openSettings();
+    toast('Original staged Work Log text restored locally. Use Retry Pending only after checking the safety copy.','good');
+    return true;
+  }
   function openSettings(){
     let e=null,corrupt='';
     try{e=read()}catch(err){corrupt=err.message}
@@ -644,6 +718,7 @@
       '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Separate opt-in; test on a disposable Part. Receipts and adjustments share one durable journal, so a second operation cannot overtake an unsynced first.</div></div>'+
       '<div class="detail-section"><b>Atomic Reserve → Use: '+(consumptionEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental; independent opt-in. A Part, Project, new Work Log and linked Purchase credits save together.</div></div>'+
       '<div class="modal-actions">'+
+      (textOnlyPendingLogDrift(e)?'<button class="secondary" onclick="atomicReceiptOutbox.restorePendingWorkLog()">Backup and Restore Staged Work Log Text</button>':'')+
       (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">'+
         (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
       '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable Receipt Testing')+'</button>'+ 
@@ -754,6 +829,6 @@
   };
   window.atomicReceiptOutbox=Object.freeze({
     enabled,adjustmentsEnabled,consumptionEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,flush,recoverLocal,
-    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,exportPendingJournal
+    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,exportPendingJournal,restorePendingWorkLog
   });
 })();
