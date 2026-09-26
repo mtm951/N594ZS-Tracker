@@ -219,7 +219,7 @@
     const btn=e.target.closest?.('button[onclick]');
     if(!btn||!popupOpen()||btn.hasAttribute?.('data-modal-close'))return;
     const code=String(btn.getAttribute?.('onclick')||'').trim();
-    if(!/^closeModal\\(\\);?$/.test(code))return;
+    if(!/^closeModal\(\);?$/.test(code))return;
     if(!confirmDiscardModalEdits()){
       e.preventDefault();e.stopImmediatePropagation();
     }
