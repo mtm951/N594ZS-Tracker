@@ -34,6 +34,21 @@
     if(localStorage.getItem(KEY)!==json)throw new Error('Browser did not retain the receipt journal.');
   }
   function pending(){return !!localStorage.getItem(KEY)}
+  // An existing Work Log referenced by an unacknowledged atomic journal must
+  // not be edited: it would prevent recoverLocal() from validating the
+  // original staged payload. An unreadable or foreign journal fails closed.
+  function isPendingRecord(type,id){
+    if(!pending())return false;
+    try{
+      const e=read();
+      if(e.workspaceId!==cloudWorkspaceId||e.userId!==cloudSession?.user?.id)
+        return type==='log';
+      return e.changes.some(r=>r.record_type===type&&String(r.record_id)===String(id));
+    }catch(error){
+      console.warn('Atomic journal unreadable during pending record check',error);
+      return type==='log';
+    }
+  }
   function enabled(){return localStorage.getItem(OPT)==='1'}
   function adjustmentsEnabled(){return localStorage.getItem(ADJUST_OPT)==='1'}
   function consumptionEnabled(){return localStorage.getItem(CONSUME_OPT)==='1'}
@@ -300,7 +315,9 @@
       if(stable(now)===stable(r.data))continue;
       if(original===null){
         if(r.record_type!=='log'||now!==null)
-          throw new Error('Atomic recovery found an unexpected new record: '+k);
+          throw new Error(r.record_type==='log'&&now!==null?
+            'Pending atomic Work Log was edited locally after staging: '+k+'. Export the safety copy and review its journal before retrying.':
+            'Atomic recovery found an unexpected new record: '+k);
       }else if(stable(now)!==stable(original))
         throw new Error('A pending atomic operation has newer local edits. Do not reload cloud data.');
       const arrayName={part:'parts',order:'orders',project:'projects',log:'logs',purchase:'purchases'}[r.record_type];
@@ -618,6 +635,7 @@
     const detail=e?'<div class="notice"><b>Pending '+(e.operationKind==='adjustment'?'adjustment':e.operationKind==='consumption'?'consumption':'receipt')+'</b><br>Operation '+esc(e.operationId)+
       '<br>Created '+esc(e.createdAt)+(e.blocked?'<br><b>Version conflict — no automatic retry.</b>':'')+
       '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
+      (e?.changes.some(r=>r.record_type==='log')?'<div class="notice"><b>Pending Work Log protected.</b> Do not edit, delete or adjust its consumed items until the transaction is acknowledged. Export the Pending Atomic Safety Copy before supervised recovery.</div>':'')+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
     openModal(modalHeader('Atomic inventory testing','One pending atomic operation per device; experimental')+
       '<div class="notice">Order receipts, manual Part adjustments and Reserve → Use have separate opt-ins. Enabled operations share one durable, idempotent cloud transaction journal. All other tracker workflows still use normal sync.</div>'+
@@ -735,7 +753,7 @@
     return originalStatus(label,kind);
   };
   window.atomicReceiptOutbox=Object.freeze({
-    enabled,adjustmentsEnabled,consumptionEnabled,shouldHandle,hasPending:pending,stage,stageAdjustment,stageConsumption,flush,recoverLocal,
+    enabled,adjustmentsEnabled,consumptionEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,flush,recoverLocal,
     openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,exportPendingJournal
   });
 })();
