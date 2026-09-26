@@ -36,13 +36,49 @@ function buildCloudRecordMap(){
   Object.entries(RECORD_ARRAYS).forEach(([type,key])=>arr(db[key]).forEach(item=>m.set(cloudRecordKey(type,item.id),{record_type:type,record_id:String(item.id),data:clone(item)})));
   return m;
 }
+// PostgREST commonly caps an unpaginated select at 1,000 rows. Never mark
+// a truncated workspace Synced: incomplete imports create false missing links.
+// Read a stable, explicit ordering and verify every page against exact count.
+async function cloudReadAllTrackerRecords({columns,types=null,activeOnly=false,pageSize=500}={}){
+  if(!supa||!cloudWorkspaceId)throw new Error('Cloud workspace is not connected.');
+  const PAGE=Math.max(1,Math.min(500,Number(pageSize)||500));
+  let lastError=null;
+  for(let attempt=0;attempt<2;attempt++){
+    const all=[],seen=new Set();let total=null,failed=false;
+    try{
+      for(let offset=0;offset===0||offset<total;offset+=PAGE){
+        let query=supa.from('tracker_records')
+          .select(columns||'record_type,record_id,data,deleted_at,record_version',{count:'exact'})
+          .eq('workspace_id',cloudWorkspaceId);
+        if(types?.length)query=query.in('record_type',types);
+        if(activeOnly)query=query.is('deleted_at',null);
+        const {data,error,count}=await query.order('record_type',{ascending:true})
+          .order('record_id',{ascending:true}).range(offset,offset+PAGE-1);
+        if(error)throw error;
+        if(!Number.isSafeInteger(count)||count<0)throw new Error('Cloud returned no verifiable record count.');
+        if(total===null)total=count;
+        if(count!==total){failed=true;throw new Error('Cloud records changed while loading; retrying complete read.');}
+        if(total===0)return [];
+        if(!Array.isArray(data)||!data.length)throw new Error('Cloud returned an incomplete page.');
+        for(const row of data){
+          const key=cloudRecordKey(row.record_type,row.record_id);
+          if(seen.has(key))throw new Error('Duplicate cloud record between pages: '+key);
+          seen.add(key);all.push(row);
+        }
+      }
+      if(all.length!==total)throw new Error('Cloud record count mismatch: '+all.length+' of '+total+'.');
+      return all;
+    }catch(error){lastError=error;if(attempt===1)break;}
+  }
+  throw lastError||new Error('Could not verify a complete cloud record download.');
+}
+window.cloudReadAllTrackerRecords=cloudReadAllTrackerRecords;
 function snapshotFromRows(rows){const m=new Map();for(const r of rows||[]){if(r.deleted_at||!SYNC_RECORD_TYPES.has(r.record_type))continue;m.set(cloudRecordKey(r.record_type,r.record_id),cloudStableJSON(r.data))}return m}
 function versionsFromRows(rows){const m=new Map();for(const r of rows||[]){if(!SYNC_RECORD_TYPES.has(r.record_type))continue;m.set(cloudRecordKey(r.record_type,r.record_id),Number(r.record_version)||0)}return m}
 async function refreshCloudRecordVersions(keys=null){
   if(!supa||!cloudWorkspaceId)return cloudRecordVersions;
   const wanted=keys?new Set([...keys]):null;
-  const {data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,record_version,deleted_at').eq('workspace_id',cloudWorkspaceId).in('record_type',[...SYNC_RECORD_TYPES]);
-  if(error)throw error;
+  const rows=await cloudReadAllTrackerRecords({columns:'record_type,record_id,record_version,deleted_at',types:[...SYNC_RECORD_TYPES]});
   for(const row of rows||[]){
     const key=cloudRecordKey(row.record_type,row.record_id);
     if(!wanted||wanted.has(key))cloudRecordVersions.set(key,Number(row.record_version)||0);
@@ -77,8 +113,7 @@ loadCloudState=async function(silent=false){
   if(navigator.onLine&&canCloudEdit()&&localStorage.getItem(CLOUD_PENDING_KEY)==='1'&&cloudRecordSnapshot.size){await saveCloudState();}
   cloudLoading=true;
   try{
-    let {data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client,record_version').eq('workspace_id',cloudWorkspaceId).is('deleted_at',null);
-    if(error)throw error;
+    let rows=await cloudReadAllTrackerRecords({columns:'record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client,record_version',activeOnly:true});
     if(!rows?.length){
       const legacy=await supa.from('app_state').select('data').eq('workspace_id',cloudWorkspaceId).maybeSingle();
       if(legacy.error)throw legacy.error;
@@ -87,8 +122,7 @@ loadCloudState=async function(silent=false){
       normalizeDB();
       await upsertAllCloudRecords();
       await supa.from('app_state').update({data:{migratedTo:'tracker_records',migratedAt:new Date().toISOString()},updated_by:cloudSession.user.id,updated_at:new Date().toISOString()}).eq('workspace_id',cloudWorkspaceId);
-      ({data:rows,error}=await supa.from('tracker_records').select('record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client,record_version').eq('workspace_id',cloudWorkspaceId).is('deleted_at',null));
-      if(error)throw error;
+      rows=await cloudReadAllTrackerRecords({columns:'record_type,record_id,data,deleted_at,updated_at,updated_by,updated_client,record_version',activeOnly:true});
       if(!silent)toast('Shared workspace upgraded to record-level sync.','good');
     }
     db=assembleCloudDB(rows||[]);
