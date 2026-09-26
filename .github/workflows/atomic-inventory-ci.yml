@@ -2,7 +2,7 @@ name: Verify Atomic Inventory Expansion
 
 on:
   push:
-    branches: ["atomic-*", "linked-*", "multi-*", "blocker-*", "simple-*", "orders-*", "readiness-*", "purchase-*"]
+    branches: ["atomic-*", "linked-*", "multi-*", "blocker-*", "simple-*", "orders-*", "readiness-*", "purchase-*", "cloud-*"]
   pull_request:
     branches: ["main"]
 
