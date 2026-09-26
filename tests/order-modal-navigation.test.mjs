@@ -4,9 +4,9 @@ import vm from 'node:vm';
 
 const source=fs.readFileSync(new URL('../app-35-navigation-ux.js',import.meta.url),'utf8');
 
-function createHarness(){
+function createHarness({confirmResult=true}={}){
   const listeners={popstate:[],click:[],focusin:[],input:[],keydown:[]};
-  const tasks=new Map(),backEvents=[];
+  const tasks=new Map(),backEvents=[],confirms=[];
   let nextTimer=0;
   const elements=new Map();
   function makeElement(id=''){
@@ -53,6 +53,7 @@ function createHarness(){
   };
   const ctx={
     console,document:doc,history,currentPage:'dashboard',
+    confirm(message){confirms.push(message);return confirmResult;},
     navigator:{standalone:false},MutationObserver:class{observe(){}},
     setTimeout(fn){const id=++nextTimer;tasks.set(id,fn);return id},
     clearTimeout(id){tasks.delete(id)},
@@ -73,7 +74,7 @@ function createHarness(){
     for(const fn of listeners[type]||[]){fn(e);if(e.stopped)break}
     return e;
   }
-  return {ctx,modal,history,flushTimers,flushBack,tasks,backEvents,dispatchDocument};
+  return {ctx,modal,history,flushTimers,flushBack,tasks,backEvents,confirms,dispatchDocument};
 }
 
 // Reproduce the reported disappearance: saving the new order closes one popup
@@ -171,15 +172,71 @@ function createHarness(){
   assert.equal(h.modal.classList.contains('open'),false,'explicit in-app Back was blocked');
 }
 
-// The same backdrop gesture on an ordinary non-receipt detail should retain
-// normal behavior, so the guard is limited to receiving forms.
+// Every popup, not just receipt, must ignore stray backdrop clicks.
 {
   const h=createHarness();
-  h.ctx.openModal('Regular order details');
+  h.ctx.openModal('Project form');
   h.ctx.document.addEventListener('click',e=>{if(e.target===h.modal)h.ctx.closeModal()});
   const e=h.dispatchDocument('click',h.modal);
-  assert.equal(e.stopped,false);
+  assert.equal(e.prevented,true);
+  assert.equal(e.stopped,true);
+  assert.equal(h.modal.classList.contains('open'),true);
+}
+
+// A user-entered Project field is protected even if focus leaves the editor.
+{
+  const h=createHarness({confirmResult:false});
+  h.ctx.openModal('Repair Co-Pilot PTT <textarea id="projectNotes"></textarea>');
+  const input={tagName:'TEXTAREA',value:'Initial notes',_inModal:true,
+    blur(){h.ctx.document.activeElement=null}};
+  h.ctx.document.activeElement=input;
+  h.dispatchDocument('focusin',input);
+  input.value='Added important PTT wire-routing notes';
+  h.dispatchDocument('input',input);
+  assert.equal(h.ctx.n594zsModalHasUnsavedEdits(),true);
+  const esc=h.dispatchDocument('keydown',input,{key:'Escape'});
+  assert.equal(esc.stopped,true);
+  assert.equal(h.modal.classList.contains('open'),true);
+  assert.equal(h.ctx.document.activeElement,null,'First Escape must only blur editor');
+
+  // A deliberate X/Back after editing must ask before discarding.
+  h.ctx.trackerBack();
+  assert.equal(h.confirms.length,1);
+  assert.equal(h.backEvents.length,0);
+  assert.equal(h.modal.classList.contains('open'),true);
+  // Second Escape while unfocused must also be protected.
+  h.dispatchDocument('keydown',h.modal,{key:'Escape'});
+  assert.equal(h.confirms.length,2);
+  assert.equal(h.modal.classList.contains('open'),true);
+  // Background popstate asks as well and restores the modal state if declined.
+  h.history.back();h.flushBack();
+  assert.equal(h.confirms.length,3);
+  assert.equal(h.history.state.n594zsKind,'modal');
+  assert.equal(h.modal.classList.contains('open'),true);
+  // Switching away from a dirty form via a direct Cancel button must be confirmed.
+  const cancel={_inModal:true,closest:selector=>selector==='button[onclick]'?{
+    hasAttribute:()=>false,getAttribute:()=> 'closeModal()'}:null};
+  const cancelEvent=h.dispatchDocument('click',cancel);
+  assert.equal(cancelEvent.stopped,true);
+  assert.equal(h.confirms.length,4);
+  assert.equal(h.modal.classList.contains('open'),true);
+  // Saving a form uses programmatic closeModal and must not trigger the guard.
+  h.ctx.closeModal();
+  assert.equal(h.modal.classList.contains('open'),false);
+  assert.equal(h.confirms.length,4);
+}
+
+// A deliberate exit must still be available after confirming unsaved changes.
+{
+  const h=createHarness({confirmResult:true});
+  h.ctx.openModal('Edit Purchase');
+  const input={tagName:'INPUT',value:'old',_inModal:true};
+  h.dispatchDocument('focusin',input);
+  input.value='new';h.dispatchDocument('input',input);
+  assert.equal(h.ctx.n594zsModalHasUnsavedEdits(),true);
+  h.ctx.trackerBack();h.flushBack();
+  assert.equal(h.confirms.length,1);
   assert.equal(h.modal.classList.contains('open'),false);
 }
 
-console.log('order receipt popup navigation race regression tests passed');
+console.log('PASS: order modal navigation and universal project/order/purchase draft protection');
