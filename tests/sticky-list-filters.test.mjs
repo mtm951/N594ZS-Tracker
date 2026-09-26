@@ -5,6 +5,7 @@ import vm from 'node:vm';
 // Run real app-05 project/parts renderers against a fake DOM and a shared
 // browser-tab session store. No cloud data is accessed or written.
 const src=fs.readFileSync(new URL('../app-05-views.js',import.meta.url),'utf8');
+const core=fs.readFileSync(new URL('../app-03-core.js',import.meta.url),'utf8');
 const saved=new Map();
 function harness(){
   const nodes=new Map();
@@ -84,6 +85,12 @@ function harness(){
   context.systemNames=()=>['Electrical','Fuel'];
   vm.createContext(context);
   vm.runInContext(src,context,{filename:'app-05-views.js'});
+  // Exercise the real dashboard Active/Done quick-link, not a simulated override.
+  for(const name of ['setControl','openProjectsView']){
+    const fn=core.split('\n').find(line=>line.startsWith('function '+name+'('));
+    assert.ok(fn,'Missing production helper '+name);
+    vm.runInContext(fn,context,{filename:'app-03-core.js'});
+  }
   return {ctx:context,db,nodes};
 }
 const h=harness();
