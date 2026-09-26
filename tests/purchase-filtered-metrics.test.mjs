@@ -73,7 +73,9 @@ const document={
   querySelectorAll:()=>[]
 };
 let modal='';
-const ctx={window:null,document,console,db,purchaseViewMode:'parts',Map,Set,JSON,Math,Number,String,Date,Array,
+const purchaseSession=new Map();
+const sessionStorage={getItem:k=>purchaseSession.get(k)||null,setItem:(k,v)=>purchaseSession.set(k,String(v))};
+const ctx={window:null,document,console,db,purchaseViewMode:'parts',sessionStorage,Map,Set,JSON,Math,Number,String,Date,Array,
   arr:x=>Array.isArray(x)?x:[],num:x=>Number(x)||0,
   val:id=>String(byId[id]?.value||''),esc:x=>String(x??''),
   pill:x=>String(x),fmtMoney:x=>'$'+(Number(x)||0).toFixed(2),
@@ -151,6 +153,8 @@ ctx.purchaseRefreshMetricTiles();
 moneyEq(Number(tiles[3].b.textContent.replace(/[^0-9.-]/g,'')),49.68);
 byId.purchaseSearch.value='fuel';
 ctx.renderPurchaseRows();
+assert.equal(JSON.parse(purchaseSession.get('n594zs_purchase_filters_v1')).search,'fuel');
+assert.equal(JSON.parse(purchaseSession.get('n594zs_purchase_filters_v1')).vendor,'Amazon');
 assert.equal(tiles[0].b.textContent,1);
 assert.equal(tiles[1].b.textContent,1);
 moneyEq(Number(tiles[3].b.textContent.replace(/[^0-9.-]/g,'')),21.60);
@@ -173,5 +177,7 @@ ctx.purchaseClearFilters();
 assert.equal(byId.purchaseVendor.value,'');
 assert.equal(byId.purchaseSearch.value,'');
 assert.equal(byId.purchaseFrom.value,'');
+assert.equal(JSON.parse(purchaseSession.get('n594zs_purchase_filters_v1')).vendor,'');
+assert.equal(JSON.parse(purchaseSession.get('n594zs_purchase_filters_v1')).search,'');
 assert.equal(JSON.stringify(db),before);
 console.log('PASS: real Purchases summary/drilldown modules, broad and narrow combined filters, refund/gift-card allocation, six live cards and scoped modal.');

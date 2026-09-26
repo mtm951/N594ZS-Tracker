@@ -6,6 +6,16 @@ function purchaseVendorCount(){return new Set(arr(db.purchases).map(x=>x.vendor)
 
 // Filters remain local UI state; reading purchase data never mutates cloud records.
 const purchaseSavedFilters={search:'',vendor:'',disposition:'',system:'',from:'',to:''};
+const PURCHASE_FILTER_SESSION_KEY='n594zs_purchase_filters_v1';
+try{
+  const cached=JSON.parse(sessionStorage.getItem(PURCHASE_FILTER_SESSION_KEY)||'null');
+  if(cached&&typeof cached==='object')for(const key of Object.keys(purchaseSavedFilters))
+    if(typeof cached[key]==='string')purchaseSavedFilters[key]=cached[key];
+}catch(e){console.warn('Purchase filter session restore unavailable',e)}
+function purchasePersistFilterSession(){
+  try{sessionStorage.setItem(PURCHASE_FILTER_SESSION_KEY,JSON.stringify(purchaseSavedFilters))}
+  catch(e){console.warn('Purchase filter session save unavailable',e)}
+}
 function purchaseReadFilters(){
   if(!document.querySelector('#page-purchases .purchase-controls'))return {...purchaseSavedFilters};
   return {
@@ -16,6 +26,7 @@ function purchaseReadFilters(){
 }
 function purchaseRememberFilters(){
   Object.assign(purchaseSavedFilters,purchaseReadFilters());
+  purchasePersistFilterSession();
   return {...purchaseSavedFilters};
 }
 function purchaseFilterActive(filters){
@@ -146,6 +157,7 @@ window.purchaseClearFilters=function(){
     const el=document.getElementById(id);if(el)el.value='';
   }
   Object.keys(purchaseSavedFilters).forEach(k=>purchaseSavedFilters[k]='');
+  purchasePersistFilterSession();
   renderPurchaseRows();
 };
 
