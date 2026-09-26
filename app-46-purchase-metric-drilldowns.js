@@ -33,6 +33,24 @@
     if(r.sourcePartial)notes.push('Partial source line capture');
     return notes.length?'<div class="task-note">'+safe(notes.join(' · '))+'</div>':'';
   }
+  window.openPurchaseInvoiceFromMetric=function(id){
+    const inv=(Array.isArray(db?.invoices)?db.invoices:[]).find(x=>no(x)===String(id));
+    if(!inv)return;
+    const items=(Array.isArray(db?.purchases)?db.purchases:[]).filter(p=>String(p.invoice||'')===String(id));
+    if(items.length)return openInvoiceGroup(id);
+    const cost=purchaseInvoiceEconomicCost(inv);
+    openShell('Invoice / Order '+id,'Source totals · no captured purchase item rows',
+      '<div class="notice">This invoice has a stored total but no individually captured item lines. It is included in broad vendor/date invoice totals and excluded from item-only searches.</div>'+
+      '<div class="summary-strip">'+
+      '<div class="summary-cell"><div class="lab">Vendor</div><div class="val">'+safe(inv.vendor||'Unknown')+'</div></div>'+
+      '<div class="summary-cell"><div class="lab">Date</div><div class="val">'+safe(date(inv)||'Unknown')+'</div></div>'+
+      '<div class="summary-cell"><div class="lab">Recorded invoice cost</div><div class="val">'+money(cost)+'</div></div></div>'+
+      (inv.totalIsQuotedEstimate?'<div class="notice">Order acknowledgment estimate: final settled amount is not documented.</div>':'')+
+      (inv.notes?'<div class="detail-card"><h3>Source notes</h3><p>'+safe(inv.notes)+'</p></div>':'')+
+      '<div class="detail-card"><h3>Source files</h3><div id="attachments-purchase-invoice-'+safe(id)+'"></div></div>',
+      '<button class="secondary" onclick="closeModal()">Close</button>');
+    if(typeof renderAttachments==='function')renderAttachments('purchase-invoice',String(id));
+  };
   function metricTileSetup(){
     const page=document.getElementById('page-purchases');if(!page)return;
     const tiles=[...page.querySelectorAll('.purchase-metrics > div')];
@@ -104,9 +122,9 @@
       '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Vendor</th><th>Invoice / order</th><th>Matching lines</th><th>Selected cost</th></tr></thead><tbody>'+
       rows.map(r=>{
         const inv=r.invoice,linked=matchedPurchaseForInvoice(r.id);
-        return '<tr '+(linked.length?'class="click-row" data-invoice="'+enc(r.id)+'"':'')+'><td>'+safe(date(inv)||'—')+'</td><td><b>'+safe(inv.vendor||linked[0]?.vendor||'—')+'</b></td><td><b>'+safe(r.id||'—')+'</b>'+invoiceNote(r)+'</td><td>'+linked.length+'</td><td><b>'+money(r.cost)+'</b>'+(r.allocated?'<div class="task-note">Original invoice cost '+money(r.fullCost)+'</div>':'')+'</td></tr>';
+        return '<tr class="click-row" data-invoice="'+enc(r.id)+'"><td>'+safe(date(inv)||'—')+'</td><td><b>'+safe(inv.vendor||linked[0]?.vendor||'—')+'</b></td><td><b>'+safe(r.id||'—')+'</b>'+invoiceNote(r)+'</td><td>'+linked.length+'</td><td><b>'+money(r.cost)+'</b>'+(r.allocated?'<div class="task-note">Original invoice cost '+money(r.fullCost)+'</div>':'')+'</td></tr>';
       }).join('')+'</tbody></table></div>';
-    box.querySelectorAll('[data-invoice]').forEach(el=>el.addEventListener('click',()=>openInvoiceGroup(decodeURIComponent(el.dataset.invoice))));
+    box.querySelectorAll('[data-invoice]').forEach(el=>el.addEventListener('click',()=>openPurchaseInvoiceFromMetric(decodeURIComponent(el.dataset.invoice))));
   };
   window.openPurchaseVendorDrilldown=function(vendor){
     vendorDrillVendor=String(vendor||'');
@@ -119,11 +137,11 @@
       '<div class="summary-cell"><div class="lab">Invoice-backed cost</div><div class="val">'+money(vScope.spend)+'</div></div>'+
       '<div class="summary-cell"><div class="lab">Gross item subtotal</div><div class="val">'+money(vScope.itemSubtotal)+'</div></div></div>'+
       '<div class="detail-card"><h3>Matching invoices</h3>'+
-      (invoices.map(r=>'<div class="kv '+(!r.sourceOnly?'click-row':'')+'" '+(!r.sourceOnly?'data-invoice="'+enc(r.id)+'"':'')+'><div><b>'+safe(r.id)+'</b><div class="task-note">'+safe(date(r.invoice)||'Unknown date')+'</div>'+invoiceNote(r)+'</div><b>'+money(r.cost)+'</b></div>').join('')||'<div class="empty">No invoice records in this scope.</div>')+'</div>'+
+      (invoices.map(r=>'<div class="kv click-row" data-invoice="'+enc(r.id)+'"><div><b>'+safe(r.id)+'</b><div class="task-note">'+safe(date(r.invoice)||'Unknown date')+'</div>'+invoiceNote(r)+'</div><b>'+money(r.cost)+'</b></div>').join('')||'<div class="empty">No invoice records in this scope.</div>')+'</div>'+
       '<div class="detail-card"><h3>Matching purchase lines</h3>'+lines.sort((a,b)=>String(b.shipDate||'').localeCompare(String(a.shipDate||''))).map(p=>'<div class="kv click-row" data-purchase-id="'+safe(p.id)+'"><div><b>'+safe(p.pn||'No PN')+' • '+safe(p.description||'Purchase')+'</b><div class="task-note">'+safe(p.shipDate||'Unknown date')+' • '+safe(p.disposition||'Unknown')+'</div></div><b>'+(p.priceKnown===false?'Not shown':money(lineTotal(p)))+'</b></div>').join('')+'</div>',
       '<button class="secondary" onclick="openPurchaseMetricDrilldown(\'vendors\')">← Vendors</button><button class="secondary" onclick="closeModal()">Close</button>');
     const box=document.getElementById('modalBox');
-    box?.querySelectorAll('[data-invoice]').forEach(el=>el.addEventListener('click',()=>openInvoiceGroup(decodeURIComponent(el.dataset.invoice))));
+    box?.querySelectorAll('[data-invoice]').forEach(el=>el.addEventListener('click',()=>openPurchaseInvoiceFromMetric(decodeURIComponent(el.dataset.invoice))));
     box?.querySelectorAll('[data-purchase-id]').forEach(el=>el.addEventListener('click',()=>openPurchaseDetail(el.dataset.purchaseId)));
   };
   const renderBase=window.renderPurchases;
