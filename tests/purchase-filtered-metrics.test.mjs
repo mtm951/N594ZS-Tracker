@@ -73,7 +73,7 @@ const document={
   querySelectorAll:()=>[]
 };
 let modal='';
-const ctx={window:null,document,console,db,Map,Set,JSON,Math,Number,String,Date,Array,
+const ctx={window:null,document,console,db,purchaseViewMode:'parts',Map,Set,JSON,Math,Number,String,Date,Array,
   arr:x=>Array.isArray(x)?x:[],num:x=>Number(x)||0,
   val:id=>String(byId[id]?.value||''),esc:x=>String(x??''),
   pill:x=>String(x),fmtMoney:x=>'$'+(Number(x)||0).toFixed(2),
