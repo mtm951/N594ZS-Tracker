@@ -25,7 +25,7 @@ const deleted=Array.from({length:4},(_,i)=>({
   deleted_at:'2025-01-01T00:00:00Z'
 }));
 const dataset=[...active,...deleted].map((r,i)=>({
-  deleted_at:null,record_version:i+1,updated_client:'remote-device',
+  workspace_id:'workspace',deleted_at:null,record_version:i+1,updated_client:'remote-device',
   updated_at:'2026-09-26T00:00:00Z',...r
 }));
 let malformed=false,requests=[],writes=0,rendered=0,syncLabel='',pending=false;
