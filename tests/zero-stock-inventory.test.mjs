@@ -100,7 +100,7 @@ const order={id:100,item:'TEST ZERO PART',partId:null,projectId:null,qty:4,unit:
   vendor:'Amazon',status:'Ordered',updates:[],receivedQty:0,inventoryApplied:false};
 db.orders.push(order);
 ctx.openOrderPartLinkModal(100);
-assert.match(modalHTML.at(-1),/zero on hand/i);
+assert.match(modalHTML.at(-1),/0 on hand/i);
 controls.olPart=initial.id;ctx.saveOrderPartLink(100);
 assert.equal(order.partId,initial.id);
 assert.equal(initial.stockQty,0);
