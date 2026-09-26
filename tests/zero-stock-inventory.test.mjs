@@ -48,6 +48,7 @@ const ctx={
   orderById:x=>db.orders.find(o=>Number(o.id)===Number(x)),
   partName:x=>db.parts.find(p=>Number(p.id)===Number(x))?.name||'Unlinked',
   partConsumedQty:()=>0,partAvailable:p=>p.stockQty===''?null:Number(p.stockQty),
+  orderTotal:o=>Number(o.qty||0)*Number(o.unitPrice||0)+Number(o.shipping||0)+Number(o.tax||0),
   currentDetail:null,renderAttachments:()=>{},openPurchaseModal:()=>{},
   openModal:html=>{modalHTML.push(html)},closeModal:()=>{},
   saveDB:msg=>{saved.push(msg);ctx.normalizeDB()},
