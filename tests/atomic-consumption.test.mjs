@@ -56,7 +56,7 @@ function makeHarness({db:input=null,stored=null,online=true,failKey=null,onRpc=n
   };
   const localStorage=memory(stored||{[OPT]:'1',[SNAP]:JSON.stringify(snapshot),
     [VERS]:JSON.stringify(versions)},failKey);
-  const rpcCalls=[],saves=[],alerts=[],statuses=[];
+  const rpcCalls=[],saves=[],alerts=[],statuses=[],downloads=[];
   const ctx={
     console:{...console,warn(){}},JSON,Date,Map,Set,Array,Object,String,Number,Boolean,Math,Promise,Error,
     structuredClone,window:null,db,
@@ -94,7 +94,7 @@ function makeHarness({db:input=null,stored=null,online=true,failKey=null,onRpc=n
     persistBrowserData:async data=>{localStorage.setItem('test-cache',JSON.stringify(data))},
     renderAll:()=>{},alert:x=>alerts.push(String(x)),confirm:()=>true,
     modalHeader:()=>'',openModal:()=>{},esc:String,today:()=> '2026-09-24',
-    downloadJSON:()=>{},document:{querySelector:()=>null},
+    downloadJSON:(record,name)=>downloads.push({record:structuredClone(record),name}),document:{querySelector:()=>null},
     saveCloudState:async()=>{localStorage.removeItem(PENDING);return {applied:[]}},
     loadCloudState:async()=>{},forceCloudReload:async()=>{},
     openCloudAccount:()=>{},cloudSignOut:async()=>{}
@@ -103,7 +103,7 @@ function makeHarness({db:input=null,stored=null,online=true,failKey=null,onRpc=n
   vm.createContext(ctx);
   vm.runInContext(storeCode,ctx,{filename:'app-17a-data-store.js'});
   vm.runInContext(outboxCode,ctx,{filename:'app-66-atomic-receipt-outbox.js'});
-  return {ctx,db,localStorage,rpcCalls,saves,alerts,statuses};
+  return {ctx,db,localStorage,rpcCalls,saves,alerts,statuses,downloads};
 }
 const META={mode:'reserved',partId:21,projectId:41,reservationId:501,
   logId:888,consumedItemId:901,projectPartId:902,qty:2};
@@ -143,11 +143,16 @@ function consumeWork(installed=true){
     new Set(['part','project','log','purchase']));
   assert.equal(pending.changes.find(x=>x.record_type==='log').expected_version,0);
   assert.equal(pending.before.find(x=>x.key==='log:888').data,null);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',889),false);
+  assert.throws(()=>h.ctx.trackerStore.update('log',888,d=>{d.work='bad mutation'}),/pending/i);
+  assert.equal(h.db.logs[0].work,'Used test hardware');
   assert.equal(h.saves.length,1);
   await h.ctx.saveCloudState();
   assert.equal(h.rpcCalls.length,1,'linked records split into multiple cloud writes');
   assert.equal(h.rpcCalls[0].changes.length,4);
   assert.equal(h.localStorage.getItem(KEY),null);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),false);
   assert.equal(h.ctx.cloudRecordVersions.get('log:888'),1);
   await h.ctx.saveCloudState();
   assert.equal(h.rpcCalls.length,1,'repeated sync duplicated a consumption');
@@ -172,6 +177,79 @@ function consumeWork(installed=true){
   await restored.ctx.saveCloudState();
   assert.equal(restored.rpcCalls.length,1);
   assert.equal(restored.localStorage.getItem(KEY),null);
+}
+
+// Regression for the real-world offline failure: a user edited the newly
+// staged Work Log while the operation was pending. Recovery must reject the
+// mismatch without altering any local records or clearing the journal.
+{
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stageConsumption(consumeWork(),'Offline use',META);
+  const staged=JSON.parse(h.localStorage.getItem(KEY)).changes
+    .find(x=>x.record_type==='log').data;
+  h.db.logs[0].work+='\\nOffline test notes added while pending';
+  const before=structuredClone(h.db);
+  await assert.rejects(h.ctx.atomicReceiptOutbox.recoverLocal(),
+    /pending atomic Work Log was edited locally/i);
+  assert.deepEqual(h.db,before,'Recovery must preserve the divergent local note');
+  assert.ok(h.localStorage.getItem(KEY),'Recovery cleared an unacknowledged journal');
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),true);
+  // The owner can compare the already-downloaded safety copy and restore the
+  // original staged text in the pre-update tab. Once exact, replay is safe.
+  h.db.logs[0].work=staged.work;
+  assert.equal(await h.ctx.atomicReceiptOutbox.recoverLocal(),false);
+  h.ctx.navigator.onLine=true;
+  const applied=await h.ctx.saveCloudState();
+  assert.equal(h.rpcCalls.length,1);
+  assert.equal(h.localStorage.getItem(KEY),null);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),false);
+  assert.equal(h.ctx.trackerStore.update('log',888,d=>{d.work+=' after sync'},{persist:false}).work,
+    'Used test hardware after sync');
+}
+
+// Newer UI offers a BACKUP-FIRST recovery path for the pre-lock case where
+// only log TEXT was edited after staging; no consumed items or quantities can
+// be silently adjusted, and no RPC runs until the owner explicitly retries.
+{
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stageConsumption(consumeWork(),'Offline use',META);
+  const queued=h.localStorage.getItem(KEY);
+  const staged=JSON.parse(queued).changes.find(x=>x.record_type==='log').data;
+  h.db.logs[0].work+='\\nOwner note written while offline';
+  const extra=h.db.logs[0].work,previousPart=structuredClone(h.db.parts[0]);
+  const previousProject=structuredClone(h.db.projects[0]);
+  assert.equal(await h.ctx.atomicReceiptOutbox.restorePendingWorkLog(),true);
+  assert.equal(h.downloads.length,1,'Text restore did not back up local edits first');
+  assert.match(h.downloads[0].record.localRecords.find(x=>x.record_type==='log').data.work,/Owner note/);
+  assert.equal(h.db.logs[0].work,staged.work);
+  assert.deepEqual(h.db.parts[0],previousPart);
+  assert.deepEqual(h.db.projects[0],previousProject);
+  assert.equal(h.localStorage.getItem(KEY),queued,'Repair changed pending operation ID or payload');
+  assert.equal(h.rpcCalls.length,0,'Local repair unexpectedly submitted a cloud transaction');
+  h.ctx.navigator.onLine=true;
+  await h.ctx.saveCloudState();
+  assert.equal(h.rpcCalls.length,1);
+  assert.equal(h.localStorage.getItem(KEY),null);
+  assert.equal(h.ctx.atomicReceiptOutbox.isPendingRecord('log',888),false);
+  assert.match(extra,/Owner note/);
+}
+{
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stageConsumption(consumeWork(),'Offline use',META);
+  h.db.logs[0].consumedParts[0].qty=99;
+  assert.equal(await h.ctx.atomicReceiptOutbox.restorePendingWorkLog(),false);
+  assert.equal(h.db.logs[0].consumedParts[0].qty,99,'Structural mismatch was silently overwritten');
+  assert.equal(h.downloads.length,0,'Unsafe structural drift offered text-only repair');
+  assert.ok(h.localStorage.getItem(KEY));
+}
+{
+  const h=makeHarness({online:false});
+  h.ctx.atomicReceiptOutbox.stageConsumption(consumeWork(),'Offline use',META);
+  h.db.logs[0].work+='\\nKept on cancel';
+  h.ctx.confirm=()=>false;
+  assert.equal(await h.ctx.atomicReceiptOutbox.restorePendingWorkLog(),false);
+  assert.equal(h.downloads.length,0);
+  assert.match(h.db.logs[0].work,/Kept on cancel/);
 }
 
 // Even when Part stockQty does not change, its version is included as a

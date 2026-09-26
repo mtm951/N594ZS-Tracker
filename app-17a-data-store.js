@@ -135,6 +135,8 @@
 
     const recordId=(id!==undefined&&id!==null&&id!=='')?id:next.id;
     if(recordId===undefined||recordId===null||recordId==='')throw new Error('Record id is required for '+type+'.');
+    if(type==='log'&&window.atomicReceiptOutbox?.isPendingRecord?.('log',recordId))
+      throw new Error('Cannot modify a Work Log while its atomic transaction is pending. Keep the pending journal and synchronize it first.');
     if(next.id!==undefined&&next.id!==null&&next.id!==''&&!sameId(next.id,recordId)){
       throw new Error('Record id mismatch for '+type+': '+String(recordId));
     }
@@ -160,6 +162,8 @@
   function remove(type,id,options={}){
     const info=resolveType(type);
     if(info.kind==='singleton')throw new Error('Singleton records cannot be removed.');
+    if(type==='log'&&window.atomicReceiptOutbox?.isPendingRecord?.('log',id))
+      throw new Error('Cannot delete a Work Log while its atomic transaction is pending. Keep the pending journal and synchronize it first.');
     const rows=db[info.key],index=rows.findIndex(row=>sameId(row?.id,id));
     if(index<0)return false;
     rows.splice(index,1);
