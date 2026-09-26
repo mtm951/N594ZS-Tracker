@@ -14,7 +14,15 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.31**, pending verification of main-branch Pages deployment at time of writing; verify current `index.html` and Actions on every session.
+- Current release: **v5.19.32** (filtered Purchases totals; PR #10 merged September 26). Check current main-branch Pages Actions before reporting deployment.
+
+## v5.19.32 filtered Purchases dashboard (September 26)
+
+- PR #10 merged at main `cbf576dcf8b6968236d364112cd36d566784c6bb`; branch `purchase-filtered-metrics-v5.19.32`. CI branch run `36264097570` and PR run `36265013635` completed success. Check main Pages deployment independently.
+- User requested the Purchases headline cards **follow current vendor and other filters**. Added six live cards: line count, invoice count, vendor count, Actual Invoiced Spend, Disposition Unknown, Item Subtotal. Filters include vendor, search, disposition, system and purchase-date From/To. UI filters survive page re-renders; Show All clears them.
+- Main implementation: `app-25-multivendor.js` owns `purchaseFilteredFinancialSummary`, `purchaseCurrentSummary`, filter controls and tile updates. `app-46-purchase-metric-drilldowns.js` opens scoped clickable cards and invoice/line/vendor details, preserving snapshot of current UI scope. `app-23-wb-purchases.js` aggregates part-history groups from matching rows only and restricts clicked part history to matching rows. `tests/purchase-filtered-metrics.test.mjs` runs real summary and drilldown modules in disposable VM with mixed Amazon/personal invoices, gift card/rewards/refunds, item allocation, unpriced lines, source-only invoices, and combined filters.
+- Accounting semantics: gift cards and rewards used as payment are added back to checkout Grand Total, recorded refunds deducted. For mixed invoices, known non-aircraft lines excluded from aircraft scope by ratio; search/system/disposition allocate invoice-backed costs proportionally by matching item gross line costs. A note exposes estimated vendor acknowledgments, missing/unpriced line cost, mixed/partial allocations. No live Supabase records were modified as part of this UI release.
+- Regression tests pass. Owner device acceptance / visual inspection still required: select Amazon and another vendor, then combine date + search; confirm all six cards and clickable drilldowns agree, and compare mixed-invoice allocations. Do not assume this new release is installed on phone until app version reads v5.19.32 and Synced.
 
 ## v5.19.31 canonical Readiness stage selector in Project editor (September 25)
 
