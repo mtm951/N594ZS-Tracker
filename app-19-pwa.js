@@ -62,6 +62,25 @@ async function forceLatestAppVersion(){
       if(trackerHasPendingCloudChanges())
         throw new Error('Changes are still unsynced. The update was cancelled to protect them.');
     }
+    const freshUrl=new URL(window.location.href);
+    freshUrl.hash='';
+    freshUrl.searchParams.set('forceUpdate',String(Date.now()));
+    trackerUpdateFeedback('Checking the latest published version…',true);
+    let controller=null;
+    try{
+      controller=typeof AbortController==='function'?new AbortController():null;
+      const opts={cache:'no-store',credentials:'same-origin'};
+      if(controller)opts.signal=controller.signal;
+      const response=await trackerUpdateWithTimeout(fetch(freshUrl.toString(),opts),8000,'App download');
+      if(!response.ok)throw new Error('Server returned HTTP '+response.status);
+      // GitHub Pages HTML must carry a versioned JavaScript entry point.
+      // Do not reload into a broken/stale non-tracker response.
+      if(typeof response.text==='function'){
+        const html=await trackerUpdateWithTimeout(response.text(),4000,'Release verification');
+        if(!html.includes('app-01-seed.js?v='))
+          throw new Error('The server response does not contain the tracker release.');
+      }
+    }finally{if(controller)controller.abort()}
     // The older updater waited indefinitely when a stale service worker
     // or cache subsystem stalled. Cache cleanup is best effort; never erase
     // browser storage or IndexedDB, which may hold local tracker recovery.
@@ -80,25 +99,6 @@ async function forceLatestAppVersion(){
           k=>k.startsWith('n594zs-')).map(k=>caches.delete(k))),3000,'App cache cleanup');
       }catch(e){console.warn('App cache cleanup skipped',e)}
     }
-    const freshUrl=new URL(window.location.href);
-    freshUrl.hash='';
-    freshUrl.searchParams.set('forceUpdate',String(Date.now()));
-    trackerUpdateFeedback('Checking the latest published version…',true);
-    let controller=null;
-    try{
-      controller=typeof AbortController==='function'?new AbortController():null;
-      const opts={cache:'no-store',credentials:'same-origin'};
-      if(controller)opts.signal=controller.signal;
-      const response=await trackerUpdateWithTimeout(fetch(freshUrl.toString(),opts),8000,'App download');
-      if(!response.ok)throw new Error('Server returned HTTP '+response.status);
-      // GitHub Pages HTML must carry a versioned JavaScript entry point.
-      // Do not reload into a broken/stale non-tracker response.
-      if(typeof response.text==='function'){
-        const html=await trackerUpdateWithTimeout(response.text(),4000,'Release verification');
-        if(!/app-01-seed\\.js\\?v=/.test(html))
-          throw new Error('The server response does not contain the tracker release.');
-      }
-    }finally{if(controller)controller.abort()}
     trackerUpdateFeedback('Latest version found. Reloading now…',true);
     window.location.replace(freshUrl.toString());
     return true;
