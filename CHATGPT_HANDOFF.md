@@ -14,7 +14,13 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.35** (sticky per-tab list filters and improved Force Latest updater; PR #13 merged September 26). Confirm main-branch GitHub Pages deployment before reporting success.
+- Current release: **v5.19.36** (runtime-correct version footer; PR #14 merged September 26). Confirm main-branch GitHub Pages deployment before reporting success.
+
+## v5.19.36 true runtime version footer (September 26)
+
+- User reported STILL seeing `v5.19.32` even after visiting cache-busted root and v5.19.35 successful deployment. Inspection found the concrete root cause: `index.html` FOOTER WAS HARDCODED to `N594ZS Tracker v5.19.32 • Purchases metrics follow your filters …` despite actual canonical `const APP_VERSION='5.19.35'` in `app-01-seed.js` and successful GitHub Pages deployments. The footer's .32 did **not** prove the browser was loading .32. Previous guidance incorrectly assumed all .32 footer screenshots were stale app shells. We cannot remotely verify the exact browser's loaded code, but the hardcoded footer unequivocally misreported the version in the published source.
+- Fix PR #14 merged at `ae8c748781cc76fb8e99f3e0bff146814c90a41d`; `index.html` footer now has `<span id="appVersionFooter">Version loading…</span>` and updates to the **actual loaded** `APP_VERSION` immediately after `app-01-seed.js` executes. Do not hardcode UI version strings again. If entry JS doesn't load, footer visibly says 'Version unavailable'. Set APP_VERSION/script query/SW cache to v5.19.36. Regression `tests/release-indicator.test.mjs` proves footer dynamically tracks running versions old, current and future, entry query matches canonical version, and rejects hardcoded version in footer. Branch CI `36269008068` and PR CI `36269057979` passed. Confirm main GitHub Pages Actions run `36269104653` after deploy.
+- After v5.19.36 load, footer reliably tells which JS actually ran. If user still sees `v5.19.32`, ask to compare Settings → GitHub / Deployment App version, and evaluate tab cache/SW using browser site storage *without deleting local unsynced data*. If footer shows v5.19.36 but filters still reset, debug UI filter behavior separately from deployment/caching. Main v5.19.35 already persists Projects/Parts/Purchases filters per tab. No production Supabase data edits in this release.
 
 ## v5.19.35 persistent UI filters and improved Force Latest (September 26)
 
