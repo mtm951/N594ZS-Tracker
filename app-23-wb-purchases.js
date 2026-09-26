@@ -144,7 +144,7 @@ function renderPurchaseRows(){const box=document.getElementById('purchaseRows');
   }
 }
 function openPartPurchaseHistory(key){const items=db.purchases.filter(p=>purchaseMatches(p)&&(p.pn||p.description)===key).sort((a,b)=>(b.shipDate||'').localeCompare(a.shipDate||''));if(!items.length)return;const first=items[0],qty=items.reduce((s,x)=>s+num(x.qty),0),spend=items.reduce((s,x)=>s+purchaseLineTotal(x),0);openModal(`${modalHeader(first.pn||'Purchase History',first.description)}<div class="summary-strip"><div class="summary-cell"><div class="lab">Purchased</div><div class="val">${qty}</div></div><div class="summary-cell"><div class="lab">Transactions</div><div class="val">${items.length}</div></div><div class="summary-cell"><div class="lab">Last price</div><div class="val">${fmtMoney(first.unitPrice)}</div></div><div class="summary-cell"><div class="lab">Total spend</div><div class="val">${fmtMoney(spend)}</div></div></div><div class="detail-card"><div class="section-tools"><h3>Purchase History</h3><button class="primary" onclick="createReorderFromPurchase('${esc(first.id)}')">Create Reorder</button></div>${items.map(p=>`<div class="kv click-row" onclick="openPurchaseDetail('${esc(p.id)}')"><div><b>${esc(p.shipDate||'Unknown date')} • Invoice ${esc(p.invoice||'—')}</b><div class="task-note">Qty ${p.qty} @ ${fmtMoney(p.unitPrice)} • ${esc(p.disposition)}</div></div><span>${fmtMoney(purchaseLineTotal(p))}</span></div>`).join('')}</div>`,true)}
-function openPurchaseDetail(id){const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;const linked=p.inventoryPartId?partById(Number(p.inventoryPartId)):null,pr=p.projectId?projectById(Number(p.projectId)):null,eq=p.equipmentId&&typeof equipmentById==='function'?equipmentById(Number(p.equipmentId)):(typeof equipmentById==='function'?db.equipment?.find(e=>String(e.purchaseId||'')===String(p.id)):null),inv=typeof invoiceRecord==='function'&&p.invoice?invoiceRecord(p.invoice):null;openModal(`${modalHeader(p.pn||'Purchase',p.description)}<div class="summary-strip"><div class="summary-cell"><div class="lab">Date</div><div class="val">${esc(p.shipDate||'—')}</div></div><div class="summary-cell"><div class="lab">Qty</div><div class="val">${p.qty}</div></div><div class="summary-cell"><div class="lab">Unit price</div><div class="val">${fmtMoney(p.unitPrice)}</div></div><div class="summary-cell"><div class="lab">Line total</div><div class="val">${fmtMoney(purchaseLineTotal(p))}</div></div></div><div class="detail-grid"><div><div class="detail-card"><div class="section-tools"><h3>Purchase Record</h3><button class="icon-btn" onclick="openPurchaseModal('${esc(p.id)}')">Edit</button></div><div class="kv"><span>Vendor</span><b>${esc(p.vendor)}</b></div><div class="kv"><span>Order</span><b>${esc(p.order||'—')}</b></div><div class="kv"><span>Invoice</span><button class="linkbtn" onclick="openInvoiceGroup('${esc(p.invoice)}')">${esc(p.invoice||'—')}</button></div><div class="kv"><span>System</span><b>${esc(p.system)}</b></div><div class="kv"><span>Disposition</span><b>${esc(p.disposition)}</b></div><div class="kv"><span>Qty remaining</span><b>${p.remainingQty===''?'Unknown':esc(p.remainingQty)}</b></div><div class="detail-section"><label>Notes</label><div class="detail-text">${esc(p.notes||'No notes.')}</div></div></div></div><div><div class="detail-card"><h3>Links / Actions</h3>${pr?`<div class="kv click-row" onclick="openProjectDetail(${pr.id})"><span>Project</span><b>${esc(pr.title)}</b></div>`:'<div class="kv"><span>Project</span><b>Not linked</b></div>'}${linked?`<div class="kv click-row" onclick="openPartDetail(${linked.id})"><span>Inventory / part</span><b>${esc(linked.name)}</b></div>`:'<div class="kv"><span>Inventory / part</span><b>Not linked</b></div>'}${eq?`<div class="kv click-row" onclick="openComponentView('equipment',${eq.id})"><span>Equipment / component</span><b>${esc(eq.name)}</b></div>`:`<div class="kv"><span>Equipment</span><b>${p.trackAsEquipment?'Link pending':'Not tracked as equipment'}</b></div>`}${inv?`<div class="kv"><span>Invoice record</span><b>${esc(inv.invoice||p.invoice)}</b></div>`:''}<div class="action-row" style="margin-top:12px"><button class="primary" onclick="createReorderFromPurchase('${esc(p.id)}')">Create Reorder</button><button class="secondary" onclick="applyPurchaseToInventory('${esc(p.id)}')" ${p.inventoryApplied?'disabled':''}>${p.inventoryApplied?'Inventory Linked':'Link Inventory'}</button>${!eq?`<button class="secondary" onclick="trackPurchaseAsEquipment('${esc(p.id)}')">Track as Equipment</button>`:''}</div></div></div></div>`,true)}
+function openPurchaseDetail(id){const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;const linked=p.inventoryPartId?partById(Number(p.inventoryPartId)):null,pr=p.projectId?projectById(Number(p.projectId)):null,eq=p.equipmentId&&typeof equipmentById==='function'?equipmentById(Number(p.equipmentId)):(typeof equipmentById==='function'?db.equipment?.find(e=>String(e.purchaseId||'')===String(p.id)):null),inv=typeof invoiceRecord==='function'&&p.invoice?invoiceRecord(p.invoice):null;openModal(`${modalHeader(p.pn||'Purchase',p.description)}<div class="summary-strip"><div class="summary-cell"><div class="lab">Date</div><div class="val">${esc(p.shipDate||'—')}</div></div><div class="summary-cell"><div class="lab">Qty</div><div class="val">${p.qty}</div></div><div class="summary-cell"><div class="lab">Unit price</div><div class="val">${fmtMoney(p.unitPrice)}</div></div><div class="summary-cell"><div class="lab">Line total</div><div class="val">${fmtMoney(purchaseLineTotal(p))}</div></div></div><div class="detail-grid"><div><div class="detail-card"><div class="section-tools"><h3>Purchase Record</h3><button class="icon-btn" onclick="openPurchaseModal('${esc(p.id)}')">Edit</button></div><div class="kv"><span>Vendor</span><b>${esc(p.vendor)}</b></div><div class="kv"><span>Order</span><b>${esc(p.order||'—')}</b></div><div class="kv"><span>Invoice</span><button class="linkbtn" onclick="openInvoiceGroup('${esc(p.invoice)}')">${esc(p.invoice||'—')}</button></div><div class="kv"><span>System</span><b>${esc(p.system)}</b></div><div class="kv"><span>Disposition</span><b>${esc(p.disposition)}</b></div><div class="kv"><span>Qty remaining</span><b>${p.remainingQty===''?'Unknown':esc(p.remainingQty)}</b></div><div class="detail-section"><label>Notes</label><div class="detail-text">${esc(p.notes||'No notes.')}</div></div></div></div><div><div class="detail-card"><h3>Links / Actions</h3>${pr?`<div class="kv click-row" onclick="openProjectDetail(${pr.id})"><span>Project</span><b>${esc(pr.title)}</b></div>`:'<div class="kv"><span>Project</span><b>Not linked</b></div>'}${linked?`<div class="kv click-row" onclick="openPartDetail(${linked.id})"><span>Inventory / part</span><b>${esc(linked.name)}</b></div>`:'<div class="kv"><span>Inventory / part</span><b>Not linked</b></div>'}${eq?`<div class="kv click-row" onclick="openComponentView('equipment',${eq.id})"><span>Equipment / component</span><b>${esc(eq.name)}</b></div>`:`<div class="kv"><span>Equipment</span><b>${p.trackAsEquipment?'Link pending':'Not tracked as equipment'}</b></div>`}${inv?`<div class="kv"><span>Invoice record</span><b>${esc(inv.invoice||p.invoice)}</b></div>`:''}<div class="action-row" style="margin-top:12px"><button class="primary" onclick="createReorderFromPurchase('${esc(p.id)}')">Create Reorder</button><button class="secondary" onclick="openPurchaseInventoryLinkModal('${esc(p.id)}')">${p.inventoryApplied&&linked?'Part Linked':linked?'Change Part Link':'Link Part (0 OK)'}</button>${!p.inventoryApplied&&p.disposition!=='Installed'?`<button class="secondary" onclick="applyPurchaseToInventory('${esc(p.id)}')">Record Stock Received</button>`:''}${!eq?`<button class="secondary" onclick="trackPurchaseAsEquipment('${esc(p.id)}')">Track as Equipment</button>`:''}</div></div></div></div>`,true)}
 function openPurchaseModal(id=null){const p=id?db.purchases.find(x=>String(x.id)===String(id)):{id:null,vendor:'Aircraft Spruce',order:'',invoice:'',shipDate:today(),pn:'',description:'',qty:1,unitPrice:'',disposition:'Unknown',remainingQty:'',location:'',projectId:null,system:'General',notes:''};if(!p)return;openModal(`${modalHeader(id?'Edit Purchase':'Add Purchase')}<div class="form-grid">${field('Vendor','puVendor',p.vendor)}${field('Ship date','puDate',p.shipDate,'date')}${field('Order','puOrder',p.order)}${field('Invoice','puInvoice',p.invoice)}${field('Part number','puPN',p.pn)}${field('Quantity','puQty',p.qty,'number','step="any"')}${field('Unit price','puPrice',p.unitPrice,'number','step="0.01" min="0"')}<div><label>System</label><select id="puSystem">${systemOptions(p.system)}</select></div><div><label>Disposition</label><select id="puDisposition">${['Unknown','On Hand','Installed','Consumed','Returned','Sold'].map(x=>`<option ${p.disposition===x?'selected':''}>${x}</option>`).join('')}</select></div>${field('Quantity remaining','puRemaining',p.remainingQty,'number','step="any" min="0"')}${field('Storage / installed location','puLocation',p.location)}<div class="full"><label>Linked project</label><select id="puProject">${projectOptions(p.projectId)}</select></div>${textareaField('Description','puDescription',p.description)}${textareaField('Notes','puNotes',p.notes)}<div class="full"><label style="text-transform:none;letter-spacing:0;display:flex;align-items:flex-start;gap:9px;cursor:pointer"><input id="puTrackEquipment" type="checkbox" ${p.trackAsEquipment?'checked':''} style="width:auto;margin-top:3px"><span><b>Track as equipment / major component</b><small style="display:block;margin-top:3px;color:var(--muted);font-weight:600">Automatically links this purchase to its inventory/component and Equipment record. Use for engines, avionics, tanks, propellers and other lifecycle-tracked hardware.</small></span></label></div></div><div class="modal-actions"><button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="savePurchase('${esc(p.id||'')}')">Save Purchase</button></div>`)}
 function savePurchase(id){
   const old=id?db.purchases.find(x=>String(x.id)===String(id)):null,pn=val('puPN').trim(),description=val('puDescription').trim();
@@ -157,6 +157,95 @@ function savePurchase(id){
 }
 function openInvoiceGroup(invoice){const items=db.purchases.filter(x=>String(x.invoice)===String(invoice));if(!items.length)return;const total=items.reduce((s,x)=>s+purchaseLineTotal(x),0),order=[...new Set(items.map(x=>x.order).filter(Boolean))].join(', ');openModal(`${modalHeader(`Invoice ${invoice}`,`${items[0].vendor||'Vendor'}${order?' • Order '+order:''}`)}<div class="summary-strip"><div class="summary-cell"><div class="lab">Ship date</div><div class="val">${esc(items[0].shipDate||'—')}</div></div><div class="summary-cell"><div class="lab">Line items</div><div class="val">${items.length}</div></div><div class="summary-cell"><div class="lab">Line subtotal</div><div class="val">${fmtMoney(total)}</div></div><div class="summary-cell"><div class="lab">Original invoice</div><div class="val">Attach below</div></div></div><div class="detail-card"><h3>Items</h3>${items.map(p=>`<div class="kv click-row" onclick="openPurchaseDetail('${esc(p.id)}')"><div><b>${esc(p.pn||'—')} • ${esc(p.description)}</b><div class="task-note">Qty ${p.qty} @ ${fmtMoney(p.unitPrice)}</div></div><span>${fmtMoney(purchaseLineTotal(p))}</span></div>`).join('')}</div>${/^\d+$/.test(String(invoice))?`<div class="detail-card"><div class="section-tools"><h3>Invoice PDF / Receipt</h3><button class="icon-btn" onclick="chooseAttachments('purchase-invoice',${Number(invoice)})">+ Upload Invoice</button></div><div class="attach-drop" onclick="chooseAttachments('purchase-invoice',${Number(invoice)})" ondragover="event.preventDefault()" ondrop="handleEntityDrop(event,'purchase-invoice',${Number(invoice)})">Drop the original invoice PDF, receipt or screenshot here</div><div id="attachments-purchase-invoice-${Number(invoice)}"></div></div>`:'<div class="notice">Invoice attachment is available for numeric invoice IDs.</div>'}`,true);if(/^\d+$/.test(String(invoice)))renderAttachments('purchase-invoice',Number(invoice))}
 function createReorderFromPurchase(id){const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;const part=p.inventoryPartId?partById(Number(p.inventoryPartId)):db.parts.find(x=>x.partNo&&p.pn&&x.partNo.toLowerCase()===p.pn.toLowerCase());const oid=uid();db.orders.push({id:oid,item:p.description||p.pn,partId:part?.id||null,projectId:p.projectId||null,system:p.system||part?.system||'',qty:1,unit:part?.unit||'ea',vendor:p.vendor||'Aircraft Spruce',url:part?.url||'',unitPrice:p.unitPrice||'',shipping:'',tax:'',status:'Need to Order',orderedDate:'',eta:'',receivedDate:'',tracking:'',blockerReason:'',notes:`Reorder from purchase history${p.pn?` • PN ${p.pn}`:''}${p.invoice?` • prior invoice ${p.invoice}`:''}. Verify current specification and price before ordering.`,updates:[],inventoryApplied:false});saveDB('Reorder created.');openOrderDetail(oid)}
+
+// Linking a purchase or order to inventory is a relationship, NOT a receipt.
+// A Part with zero stock is a normal record, including while items are on order.
+function openPurchaseInventoryLinkModal(id){
+  const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
+  const linked=p.inventoryPartId?partById(Number(p.inventoryPartId)):null;
+  if(p.inventoryApplied&&!linked){
+    alert('This purchase is marked as already applied to stock, but its linked Part is missing. Resolve Data Integrity before changing its inventory link.');return;
+  }
+  const locked=!!p.inventoryApplied;
+  openModal(modalHeader('Link Purchase to Inventory',p.description)+
+    '<div class="notice" style="margin-bottom:12px"><b>Zero on hand is valid.</b> This link does not add stock. A separate receipt is required when the items physically arrive.</div>'+
+    '<div class="form-grid"><div class="full"><label>Existing inventory Part</label><select id="pilPart" '+(locked?'disabled':'')+'>'+partOptions(p.inventoryPartId)+'</select>'+
+    '<small>Existing Parts with 0 on hand are included. Multiple invoices/orders may link to the same Part.</small></div></div>'+
+    '<div class="modal-actions"><button class="secondary" id="pilBack">Back</button>'+
+    (!locked?'<button class="secondary" id="pilNew">Create New Part (0 On Hand)</button><button class="primary" id="pilSave">Link Existing Part</button>':
+      '<button class="primary" id="pilDone">Already credited — Part link locked</button>')+'</div>');
+  document.getElementById('pilBack')?.addEventListener('click',()=>openPurchaseDetail(id));
+  document.getElementById('pilDone')?.addEventListener('click',()=>openPurchaseDetail(id));
+  document.getElementById('pilNew')?.addEventListener('click',()=>openCreateZeroStockPartFromPurchase(id));
+  document.getElementById('pilSave')?.addEventListener('click',()=>savePurchaseInventoryPartLink(id));
+}
+function savePurchaseInventoryPartLink(id){
+  const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
+  const chosen=selectedNumber('pilPart'),part=chosen?partById(chosen):null;
+  if(!part)return alert('Choose an existing Part, including a zero-stock Part, or create a new one.');
+  const old=p.inventoryPartId?partById(Number(p.inventoryPartId)):null;
+  if(p.inventoryApplied&&(!old||String(old.id)!==String(part.id)))
+    return alert('Previously credited stock must not be reassigned from this screen.');
+  if(p.equipmentId&&old&&String(old.id)!==String(part.id))
+    return alert('This purchase is linked to Equipment. Review that relationship before changing its Part.');
+  if(old&&String(old.id)!==String(part.id))
+    old.purchaseIds=arr(old.purchaseIds).filter(x=>String(x)!==String(p.id));
+  p.inventoryPartId=part.id;
+  part.purchaseIds=arr(part.purchaseIds);
+  if(!part.purchaseIds.some(x=>String(x)===String(p.id)))part.purchaseIds.push(String(p.id));
+  part.linkedProjectIds=arr(part.linkedProjectIds);
+  if(p.projectId&&!part.linkedProjectIds.some(x=>Number(x)===Number(p.projectId)))
+    part.linkedProjectIds.push(Number(p.projectId));
+  if(typeof window.reconcilePurchaseLinks==='function')
+    window.reconcilePurchaseLinks(p,{suppressCreate:true});
+  saveDB('Purchase linked to inventory Part; on-hand stock has not changed.');
+  openPurchaseDetail(id);
+}
+function openCreateZeroStockPartFromPurchase(id){
+  const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
+  if(p.inventoryPartId)return openPurchaseInventoryLinkModal(id);
+  if(p.inventoryApplied)return alert('This purchase is already marked as applied to stock. Review its existing inventory link.');
+  openModal(modalHeader('Create Zero-Stock Inventory Part',p.description)+
+    '<div class="notice" style="margin-bottom:12px">Starting on hand: <b>0</b>. This only creates and links the Part. It does not receive the purchase or increase physical inventory.</div>'+
+    '<div class="form-grid"><div class="full"><label>Part / material name</label><input id="plName" value="'+esc(p.description||p.pn||'')+'"></div>'+
+    field('Part number / specification','plPN',p.pn||'')+
+    '<div><label>System</label><select id="plSystem">'+systemOptions(p.system||'General')+'</select></div>'+
+    field('Unit','plUnit',p.unit||'ea')+field('Vendor','plVendor',p.vendor||'')+
+    field('Expected unit cost','plCost',p.unitPrice||'','number','step="0.01" min="0"')+
+    textareaField('Part notes','plNotes','Created at zero on hand from purchase '+(p.invoice||p.order||p.id)+'. Awaiting receipt.')+
+    '</div><div class="modal-actions"><button class="secondary" id="plBack">Back to Part Picker</button>'+
+    '<button class="primary" id="plSave">Create & Link (0 On Hand)</button></div>');
+  document.getElementById('plBack')?.addEventListener('click',()=>openPurchaseInventoryLinkModal(id));
+  document.getElementById('plSave')?.addEventListener('click',()=>saveZeroStockPartForPurchase(id));
+}
+function saveZeroStockPartForPurchase(id){
+  const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
+  if(p.inventoryApplied||p.inventoryPartId)
+    return alert('This purchase is already linked or applied. Check its existing inventory Part.');
+  const name=val('plName').trim(),pn=val('plPN').trim();
+  if(!name)return alert('Enter a Part name.');
+  const matches=arr(db.parts).filter(x=>pn&&x.partNo&&String(x.partNo).trim().toLowerCase()===pn.toLowerCase());
+  if(matches.length){
+    alert('A Part with this part number already exists. Link that existing Part rather than creating a duplicate.');
+    return openPurchaseInventoryLinkModal(id);
+  }
+  const sameName=arr(db.parts).some(x=>String(x.name||'').trim().toLowerCase()===name.toLowerCase()
+    &&String(x.vendor||'').trim().toLowerCase()===val('plVendor').trim().toLowerCase());
+  if(sameName&&!confirm('A Part with this name and vendor already exists. Create a DIFFERENT zero-stock Part?'))return;
+  const pid=uid();
+  const part={id:pid,name,partNo:pn,system:val('plSystem')||p.system||'General',unit:val('plUnit')||'ea',
+    stockQty:0,minQty:'',status:'Order',vendor:val('plVendor'),url:p.productUrl||'',
+    unitCost:val('plCost'),location:'',purchaseDate:'',notes:val('plNotes'),
+    linkedProjectIds:p.projectId?[Number(p.projectId)]:[],
+    purchaseIds:[String(p.id)],updates:[],inventoryAdjustments:[]};
+  db.parts.push(part);
+  p.inventoryPartId=pid;
+  // inventoryApplied deliberately remains false: linking is not receiving.
+  if(typeof window.reconcilePurchaseLinks==='function')
+    window.reconcilePurchaseLinks(p,{suppressCreate:true});
+  saveDB('Part created with zero on hand and linked. Record delivery separately.');
+  openPurchaseDetail(id);
+}
 function applyPurchaseToInventory(id){
   const p=db.purchases.find(x=>String(x.id)===String(id));if(!p||p.inventoryApplied)return;
   if(typeof window.reconcilePurchaseLinks==='function'){

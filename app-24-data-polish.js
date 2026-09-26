@@ -64,9 +64,22 @@ function ensurePurchaseInInventory(p,qty=purchaseRemainingQty(p)){
 }
 applyPurchaseToInventory=function(id){
   const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
-  if(p.inventoryApplied)return toast('This purchase is already linked to inventory.','good');
-  const qty=purchaseRemainingQty(p);if(qty<=0)return alert('Set a positive remaining quantity before adding this purchase to inventory.');
-  ensurePurchaseInInventory(p,qty);saveDB(`${qty} added to inventory.`);openPurchaseDetail(id);
+  if(p.inventoryApplied)return toast('This purchase has already been applied to stock.','good');
+  const qty=purchaseRemainingQty(p);
+  if(!Number.isFinite(qty)||qty<0)return alert('Received quantity must be zero or greater.');
+  if(qty===0||p.disposition==='Installed'){
+    // Zero on hand is a valid inventory LINK but cannot be a receipt.
+    openPurchaseInventoryLinkModal(id);return;
+  }
+  const part=p.inventoryPartId?partById(Number(p.inventoryPartId)):null;
+  if(!part){
+    alert('Link this purchase to an existing or new zero-stock Part first. Linking alone will NOT receive stock.');
+    openPurchaseInventoryLinkModal(id);return;
+  }
+  if(!confirm('Record '+qty+' '+(part.unit||'ea')+' of '+part.name+' as physically received? This is separate from linking an order/purchase and increases On Hand.'))return;
+  ensurePurchaseInInventory(p,qty);
+  saveDB(qty+' received into inventory.');
+  openPurchaseDetail(id);
 };
 
 // One-at-a-time reconciliation flow for historical purchase records.
@@ -80,14 +93,22 @@ function openPurchaseReconcile(startId=null){
   if(startId){const i=rows.findIndex(x=>String(x.id)===String(startId));if(i>0)rows=[...rows.slice(i),...rows.slice(0,i)]}
   const p=rows[0];if(!p){toast('Purchase history is fully reconciled.','good');renderPurchases();return}
   const remaining=rows.length;
-  openModal(`${modalHeader('Reconcile Purchase',`${remaining} historical line${remaining===1?'':'s'} still unknown`)}<div class="detail-card"><div class="kv"><span>Date</span><b>${esc(p.shipDate||'Unknown')}</b></div><div class="kv"><span>Invoice</span><b>${esc(p.invoice||'—')}</b></div><div class="kv"><span>Part number</span><b>${esc(p.pn||'—')}</b></div><div class="detail-section"><label>Description</label><div class="detail-text"><b>${esc(p.description)}</b></div></div><div class="kv"><span>Purchased</span><b>${p.qty} @ ${fmtMoney(p.unitPrice)}</b></div><div class="kv"><span>System</span><b>${esc(p.system||'General')}</b></div></div><div class="notice" style="margin-top:10px">Choose what happened to this purchase. If some or all of it is still physically on hand, enter the quantity below. Choosing <b>On Hand</b> now creates or updates the matching Parts inventory record automatically.</div><div style="margin-top:10px"><label>Quantity still on hand</label><input id="reconcileRemaining" type="number" min="0" step="any" value="${esc(p.qty)}"></div><div class="modal-actions" style="flex-wrap:wrap"><button class="secondary" onclick="skipPurchaseReconcile('${esc(p.id)}')">Skip</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Returned')">Returned</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Sold')">Sold</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Consumed')">Consumed</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Installed')">Installed</button><button class="primary" onclick="setPurchaseDisposition('${esc(p.id)}','On Hand')">On Hand</button></div>`);
+  openModal(`${modalHeader('Reconcile Purchase',`${remaining} historical line${remaining===1?'':'s'} still unknown`)}<div class="detail-card"><div class="kv"><span>Date</span><b>${esc(p.shipDate||'Unknown')}</b></div><div class="kv"><span>Invoice</span><b>${esc(p.invoice||'—')}</b></div><div class="kv"><span>Part number</span><b>${esc(p.pn||'—')}</b></div><div class="detail-section"><label>Description</label><div class="detail-text"><b>${esc(p.description)}</b></div></div><div class="kv"><span>Purchased</span><b>${p.qty} @ ${fmtMoney(p.unitPrice)}</b></div><div class="kv"><span>System</span><b>${esc(p.system||'General')}</b></div></div><div class="notice" style="margin-top:10px">Choose what happened to this purchase. If some or all of it is still physically on hand, enter the quantity below. Choosing <b>On Hand</b> with a positive quantity credits inventory. Enter <b>0</b> to link or create an inventory Part without receiving any stock.</div><div style="margin-top:10px"><label>Quantity still on hand</label><input id="reconcileRemaining" type="number" min="0" step="any" value="${esc(p.qty)}"></div><div class="modal-actions" style="flex-wrap:wrap"><button class="secondary" onclick="skipPurchaseReconcile('${esc(p.id)}')">Skip</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Returned')">Returned</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Sold')">Sold</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Consumed')">Consumed</button><button onclick="setPurchaseDisposition('${esc(p.id)}','Installed')">Installed</button><button class="primary" onclick="setPurchaseDisposition('${esc(p.id)}','On Hand')">On Hand</button></div>`);
 }
 function setPurchaseDisposition(id,disposition){
   const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
   if(disposition==='On Hand'){
     const qty=val('reconcileRemaining')===''?num(p.qty):num(val('reconcileRemaining'));
-    if(qty<=0)return alert('Enter the quantity that is still on hand.');
-    p.disposition='On Hand';p.remainingQty=qty;ensurePurchaseInInventory(p,qty);
+    if(!Number.isFinite(qty)||qty<0)return alert('Enter a quantity of zero or greater.');
+    p.disposition='On Hand';p.remainingQty=qty;
+    if(qty===0){
+      // Disposition and Part identity may be known before inventory arrives.
+      // Never manufacture a stock receipt or set inventoryApplied for zero.
+      saveDB('Purchase recorded with zero on hand; link its inventory Part.');
+      openPurchaseInventoryLinkModal(id);
+      return;
+    }
+    ensurePurchaseInInventory(p,qty);
   }else{
     p.disposition=disposition;p.remainingQty=0;
   }
