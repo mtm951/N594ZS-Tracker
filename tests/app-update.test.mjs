@@ -150,4 +150,53 @@ function makeHarness({online=true,pending=false,confirmResult=true,saveClears=tr
   assert.equal(h.replacements.length,0);
 }
 
+// A stale SW API must not leave the update button hanging indefinitely.
+{
+  const h=makeHarness();
+  h.context.navigator.serviceWorker.getRegistrations=()=>new Promise(()=>{});
+  h.context.setTimeout=(fn,ms)=>ms===3000?(queueMicrotask(fn),0):setTimeout(fn,ms);
+  h.context.clearTimeout=id=>clearTimeout(id);
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,true,'Timed-out service-worker cleanup must not block a verified reload');
+  assert.equal(h.replacements.length,1);
+}
+
+// Network preflight is time-bounded and fails safely with a visible error.
+{
+  const h=makeHarness();
+  h.context.fetch=()=>new Promise(()=>{});
+  h.context.setTimeout=(fn,ms)=>ms===8000?(queueMicrotask(fn),0):setTimeout(fn,ms);
+  h.context.clearTimeout=id=>clearTimeout(id);
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,false);
+  assert.equal(h.replacements.length,0);
+  assert.ok(h.alerts.some(x=>/timed out/i.test(x)));
+}
+
+// An untrusted/non-tracker HTML response must never replace a working session.
+{
+  const h=makeHarness();
+  h.context.fetch=async()=>({ok:true,status:200,text:async()=>'<h1>Not a tracker page</h1>'});
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,false);
+  assert.equal(h.deletedCaches.length,0);
+  assert.equal(h.replacements.length,0);
+  assert.ok(h.alerts.some(x=>/tracker release/i.test(x)));
+}
+
+// A valid latest tracker HTML produces a genuine forceUpdate navigation.
+{
+  const h=makeHarness();
+  const updates=[],buttons=[{disabled:false,textContent:''}],labels=[{textContent:''}];
+  h.context.document.querySelectorAll=selector=>selector==='[data-tracker-update-button]'?buttons:
+    selector==='[data-tracker-update-status]'?labels:[];
+  h.context.fetch=async()=>({ok:true,status:200,text:async()=>
+    '<script src="app-01-seed.js?v=5.19.35"></script>'});
+  const result=await h.context.forceLatestAppVersion();
+  assert.equal(result,true);
+  assert.equal(h.replacements.length,1);
+  assert.match(labels[0].textContent,/Reloading/i,'No visible update progress');
+  assert.equal(buttons[0].disabled,true);
+}
+
 console.log('force latest app version regression tests passed');
