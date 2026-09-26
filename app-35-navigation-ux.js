@@ -58,6 +58,8 @@
   let pendingProgrammaticBackSerial=null;
   let explicitModalBackRequested=false;
   let receiptLastEditAt=0;
+  let modalEditorBaselines=new WeakMap();
+  let modifiedEditors=new Set();
   let depth=Number(history.state?.n594zsDepth||0);
   const navToBase=navTo;
   const openModalBase=openModal;
@@ -73,6 +75,45 @@
   }
   function receiptEditing(){
     return receiptInput(document.activeElement)||receiptOpen()&&receiptLastEditAt>0&&Date.now()-receiptLastEditAt<3000;
+  }
+  // Every editor is protected, not just the receiving-quantity form. Tracking
+  // starts when an actual input is focused/changed, avoiding false dirty
+  // prompts for read-only detail windows and auto-populated form defaults.
+  function isModalEditor(el){
+    return popupOpen()&&!!el&&modal.contains(el)&&!el.disabled&&!el.readOnly&&
+      (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName||'')||el.isContentEditable===true)&&
+      String(el.type||'').toLowerCase()!=='file';
+  }
+  function editorValue(el){
+    if(el.isContentEditable)return String(el.textContent||'');
+    if(el.type==='checkbox'||el.type==='radio')return !!el.checked;
+    if(el.multiple&&el.selectedOptions)return [...el.selectedOptions].map(x=>x.value).join('\\u001f');
+    return String(el.value??'');
+  }
+  function rememberEditor(el){
+    if(isModalEditor(el)&&!modalEditorBaselines.has(el))
+      modalEditorBaselines.set(el,editorValue(el));
+  }
+  function updateEditorDirty(el){
+    if(!isModalEditor(el))return;
+    rememberEditor(el);
+    if(editorValue(el)!==modalEditorBaselines.get(el))modifiedEditors.add(el);
+    else modifiedEditors.delete(el);
+    if(receiptInput(el))receiptLastEditAt=Date.now();
+  }
+  function resetModalEditors(){
+    modalEditorBaselines=new WeakMap();
+    modifiedEditors=new Set();
+    receiptLastEditAt=0;
+  }
+  function hasUnsavedModalEdits(){return popupOpen()&&modifiedEditors.size>0}
+  function confirmDiscardModalEdits(){
+    return !hasUnsavedModalEdits()||window.confirm('Discard unsaved changes in this window?');
+  }
+  window.n594zsModalHasUnsavedEdits=hasUnsavedModalEdits;
+  function restoreActiveModalHistory(){
+    if(!stateIsModal())history.pushState(trackerState('modal',currentPage,depth),'');
+    updateControls();
   }
   function updateControls(){
     const popup=popupOpen();
@@ -102,7 +143,7 @@
   openModal=function(html,wide=false){
     clearTimeout(closeHistoryTimer);
     openModalBase(html,wide);
-    receiptLastEditAt=0;
+    resetModalEditors();
     modalOpenSerial++;
     if(!historyHandling&&!stateIsModal())history.pushState(trackerState('modal',currentPage,depth),'');
     updateControls();
@@ -110,6 +151,7 @@
 
   closeModal=function(){
     closeModalBase();
+    resetModalEditors();
     updateControls();
     // A normal programmatic close can immediately open another modal. Wait one turn;
     // only remove the modal history state if the popup genuinely stayed closed.
@@ -126,11 +168,12 @@
 
   function closeFromHistory(){
     historyHandling=true;
-    try{closeModalBase()}finally{historyHandling=false;updateControls()}
+    try{closeModalBase();resetModalEditors()}finally{historyHandling=false;updateControls()}
   }
 
   window.trackerBack=function(){
     if(popupOpen()){
+      if(!confirmDiscardModalEdits())return;
       if(stateIsModal()){
         explicitModalBackRequested=true;
         history.back();
@@ -148,26 +191,38 @@
   back.onclick=window.trackerBack;
   floatingClose.onclick=()=>window.trackerBack();
 
-  // A mobile keyboard can move the backdrop under the user's finger while
-  // editing a receiving quantity. A backdrop tap should dismiss the keyboard,
-  // not the unsaved receipt form. The form still has explicit Cancel and X.
+  // Backdrop clicks never close a popup. Scrolling and mobile keyboard
+  // resizing can otherwise discard a long Project, Purchase or Order form.
   document.addEventListener('click',e=>{
-    if(e.target!==modal||!receiptOpen())return;
+    if(e.target!==modal||!popupOpen())return;
     e.preventDefault();e.stopImmediatePropagation();
-    if(receiptInput(document.activeElement))document.activeElement.blur?.();
+    if(isModalEditor(document.activeElement))document.activeElement.blur?.();
   },true);
   document.addEventListener('focusin',e=>{
+    rememberEditor(e.target);
     if(receiptInput(e.target))receiptLastEditAt=Date.now();
   },true);
-  document.addEventListener('input',e=>{
-    if(receiptInput(e.target))receiptLastEditAt=Date.now();
-  },true);
-  // Escape from an active number/date editor dismisses that editor first.
-  // The duplicate legacy Escape handlers must not discard an in-progress form.
+  document.addEventListener('input',e=>updateEditorDirty(e.target),true);
+  document.addEventListener('change',e=>updateEditorDirty(e.target),true);
+  // The first Escape while typing closes the keyboard/editor, NOT the form.
+  // A second Escape or explicit X/Back uses the unsaved-changes safeguard.
+  // Capture prevents the duplicate legacy Escape listeners from bypassing it.
   document.addEventListener('keydown',e=>{
-    if(e.key!=='Escape'||!receiptInput(document.activeElement))return;
+    if(e.key!=='Escape'||!popupOpen())return;
     e.preventDefault();e.stopImmediatePropagation();
-    document.activeElement.blur?.();
+    if(isModalEditor(document.activeElement))document.activeElement.blur?.();
+    else window.trackerBack();
+  },true);
+  // Explicit Cancel/Close buttons may call closeModal() directly, bypassing
+  // trackerBack(). Protect entered data while preserving save-success closes.
+  document.addEventListener('click',e=>{
+    const btn=e.target.closest?.('button[onclick]');
+    if(!btn||!popupOpen()||btn.hasAttribute?.('data-modal-close'))return;
+    const code=String(btn.getAttribute?.('onclick')||'').trim();
+    if(!/^closeModal\\(\\);?$/.test(code))return;
+    if(!confirmDiscardModalEdits()){
+      e.preventDefault();e.stopImmediatePropagation();
+    }
   },true);
 
   // Intercept the small X buttons inside modal headers too, so all close buttons use the same history behavior.
@@ -197,9 +252,13 @@
       // Only a deliberate Back should dismiss a receipt that is being edited.
       // Unsolicited popstate (including a phone keyboard/browser interaction)
       // must not throw away the entered quantity. Restore one modal state.
-      if(!explicitBack&&receiptEditing()){
-        if(!stateIsModal())history.pushState(trackerState('modal',currentPage,depth),'');
-        updateControls();
+      if(!explicitBack&&(isModalEditor(document.activeElement)||receiptEditing())){
+        if(isModalEditor(document.activeElement))document.activeElement.blur?.();
+        restoreActiveModalHistory();
+        return;
+      }
+      if(!explicitBack&&!confirmDiscardModalEdits()){
+        restoreActiveModalHistory();
         return;
       }
       closeFromHistory();
