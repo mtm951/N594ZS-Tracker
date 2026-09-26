@@ -3,12 +3,12 @@ function partOnOrderQty(partId){
   return db.orders.filter(o=>o.partId===partId&&!o.inventoryApplied&&['Ordered','Backordered','Shipped'].includes(o.status)).reduce((sum,o)=>sum+(typeof orderRemainingQty==='function'?orderRemainingQty(o):num(o.qty)),0);
 }
 function openPartModal(id=null,projectId=null){
-  const p=id?partById(id):{name:'',partNo:'',system:'',unit:'ea',stockQty:'',minQty:'',status:'On Hand',vendor:'',url:'',unitCost:'',location:'',purchaseDate:'',notes:'',linkedProjectIds:projectId?[projectId]:[]};
+  const p=id?partById(id):{name:'',partNo:'',system:'',unit:'ea',stockQty:0,minQty:'',status:'On Hand',vendor:'',url:'',unitCost:'',location:'',purchaseDate:'',notes:'',linkedProjectIds:projectId?[projectId]:[]};
   openModal(`${modalHeader(id?'Edit Part':'Add Part')}<div class="form-grid">
     <div class="full"><label>Part / material name</label><input id="ptName" value="${esc(p.name)}"></div>
     ${field('Part number / specification','ptPN',p.partNo)}
     <div><label>System</label><select id="ptSystem">${systemOptions(p.system)}</select></div>
-    ${field('Unit','ptUnit',p.unit||'ea')}${field('Quantity on hand','ptStock',p.stockQty,'number','step="any"')}
+    ${field('Unit','ptUnit',p.unit||'ea')}${field('Quantity on hand','ptStock',p.stockQty,'number','step="any" min="0"')}<div class="full"><small>Zero is valid. Create the inventory record now, link an order to it, and keep On Hand at 0 until you receive stock.</small></div>
     ${field('Minimum / reorder qty','ptMin',p.minQty,'number','step="any"')}
     <div><label>Status</label><select id="ptStatus">${['On Hand','Installed','Verify','Need','Order','Backordered','Retired'].map(x=>`<option ${p.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${field('Vendor / source','ptVendor',p.vendor)}${field('Unit price','ptCost',p.unitCost,'number','step="0.01" min="0"')}
@@ -17,7 +17,7 @@ function openPartModal(id=null,projectId=null){
     ${textareaField('Notes / specifications','ptNotes',p.notes)}
   </div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deletePart(${id})">Delete</button>`:''}<button class="btn primary" onclick="savePart(${id||'null'},${projectId||'null'})">Save Part</button></div>`);
 }
-function savePart(id,projectId=null){const o={name:val('ptName'),partNo:val('ptPN'),system:val('ptSystem')||'General',unit:val('ptUnit')||'ea',stockQty:val('ptStock')===''?'':num(val('ptStock')),minQty:val('ptMin')===''?'':num(val('ptMin')),status:val('ptStatus'),vendor:val('ptVendor'),url:val('ptUrl'),unitCost:val('ptCost'),location:val('ptLocation'),purchaseDate:val('ptPurchase'),notes:val('ptNotes')};if(!o.name)return alert('Part name is required.');let pid=id;if(id)Object.assign(partById(id),o);else{pid=uid();db.parts.push({id:pid,...o,linkedProjectIds:projectId?[projectId]:[],updates:[]})}saveDB(id?'Part updated.':'Part added.');closeModal()}
+function savePart(id,projectId=null){const o={name:val('ptName'),partNo:val('ptPN'),system:val('ptSystem')||'General',unit:val('ptUnit')||'ea',stockQty:val('ptStock')===''?(id?'':0):num(val('ptStock')),minQty:val('ptMin')===''?'':num(val('ptMin')),status:val('ptStatus'),vendor:val('ptVendor'),url:val('ptUrl'),unitCost:val('ptCost'),location:val('ptLocation'),purchaseDate:val('ptPurchase'),notes:val('ptNotes')};if(!o.name)return alert('Part name is required.');if(o.stockQty!==''&&(!Number.isFinite(o.stockQty)||o.stockQty<0))return alert('On-hand quantity must be zero or greater.');let pid=id;if(id)Object.assign(partById(id),o);else{pid=uid();db.parts.push({id:pid,...o,linkedProjectIds:projectId?[projectId]:[],updates:[]})}saveDB(id?'Part updated.':'Part added.');closeModal()}
 function deletePart(id){if(!confirm('Delete this part record? Existing work-log and project references will keep their saved description, but the inventory link will be removed.'))return;db.parts=db.parts.filter(x=>x.id!==id);db.orders.forEach(o=>{if(o.partId===id)o.partId=null});db.projects.forEach(p=>p.partsUsed.forEach(x=>{if(x.partId===id)x.partId=null}));db.logs.forEach(l=>l.consumedParts.forEach(x=>{if(x.partId===id)x.partId=null}));db.docs.forEach(d=>{d.linkedPartIds=d.linkedPartIds.filter(x=>x!==id)});closeModal();saveDB('Part deleted.')}
 function openPartDetail(id){
   const p=partById(id);if(!p)return;currentDetail={type:'part',id};
