@@ -60,7 +60,7 @@ async function forceLatestAppVersion(){
       trackerUpdateFeedback('Saving pending cloud changes…',true);
       await trackerUpdateWithTimeout(window.saveCloudState(),8000,'Cloud save');
       if(trackerHasPendingCloudChanges())
-        throw new Error('Changes are still unsynced. The update was cancelled to protect them.');
+        throw new Error('There are still unsynced changes. The update was cancelled to protect them.');
     }
     const freshUrl=new URL(window.location.href);
     freshUrl.hash='';
