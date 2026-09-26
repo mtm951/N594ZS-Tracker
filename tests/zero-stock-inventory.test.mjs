@@ -136,7 +136,7 @@ const newPart=ctx.partById(p2.inventoryPartId);
 assert.equal(newPart.stockQty,0);
 assert.equal(newPart.status,'Order');
 assert.equal(p2.inventoryApplied,false);
-assert.deepEqual(newPart.purchaseIds,['p2']);
+assert.equal(JSON.stringify(newPart.purchaseIds),JSON.stringify(['p2']));
 // Repeated historical invoices with the same PN should link rather than create duplicates.
 const p3=purchase('p3','UNIQUE-ZERO',0);db.purchases.push(p3);
 const count=db.parts.length;
