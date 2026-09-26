@@ -31,7 +31,7 @@ const ctx={
   NAV:[['aircraft','Aircraft'],['orders','Orders']],RECORD_ARRAYS:{},
   SYNC_RECORD_TYPES:new Set(),SEED:{purchases:[],equipment:[]},
   blankCloudDB:()=>({}),normalizeDB:()=>{},
-  renderAircraft:()=>{},renderPurchases:()=>{},renderParts:()=>{},
+  renderAircraft:()=>{},renderPurchases:()=>{},renderParts:()=>{},renderSearchPage:()=>{},
   arr:x=>Array.isArray(x)?x:[],clone:x=>structuredClone(x),num:x=>Number(x)||0,
   unique:x=>[...new Set(x)],uid:()=>++id,nextNumericId:(xs,min)=>Math.max(min-1,...xs.map(x=>Number(x.id)||0))+1,
   val:k=>String(controls[k]??''),selectedNumber:k=>controls[k]?Number(controls[k]):null,
