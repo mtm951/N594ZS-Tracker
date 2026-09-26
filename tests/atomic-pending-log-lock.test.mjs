@@ -75,6 +75,17 @@ vm.runInContext(sourceStore,ctx,{filename:'app-17a-data-store.js'});
 vm.runInContext(sourceLogbook,ctx,{filename:'app-09-logbook.js'});
 vm.runInContext(sourceOutbox,ctx,{filename:'app-66-atomic-receipt-outbox.js'});
 
+// The guided recovery button appears ONLY for the legacy text-only drift,
+ // never for changes to actual consumed quantities.
+db.logs[0].work+='\\nExtra offline note';
+ctx.atomicReceiptOutbox.openSettings();
+assert.match(lastModal,/Backup and Restore Staged Work Log Text/);
+db.logs[0].consumedParts[0].qty=7;
+ctx.atomicReceiptOutbox.openSettings();
+assert.doesNotMatch(lastModal,/Backup and Restore Staged Work Log Text/);
+db.logs[0].consumedParts[0].qty=1;
+db.logs[0].work=pendingLog.work;
+
 // Precisely the new Work Log staged by the pending journal is frozen.
 assert.equal(ctx.atomicReceiptOutbox.hasPending(),true);
 assert.equal(ctx.atomicReceiptOutbox.isPendingRecord('log',888),true);
