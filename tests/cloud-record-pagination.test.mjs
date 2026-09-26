@@ -73,7 +73,7 @@ const ctx={
 ctx.window=ctx;ctx.window.addEventListener=()=>{};
 vm.createContext(ctx);
 vm.runInContext(source,ctx,{filename:'app-17-record-sync.js'});
-vm.runInContext("RECORD_ARRAYS.invoice='invoices';SYNC_RECORD_TYPES.add('invoice');RECORD_ARRAYS.purchase='purchases';SYNC_RECORD_TYPES.add('purchase');",ctx);
+vm.runInContext("RECORD_ARRAYS.invoice='invoices';SYNC_RECORD_TYPES.add('invoice');RECORD_ARRAYS.purchase='purchases';SYNC_RECORD_TYPES.add('purchase');const originalBlank=blankCloudDB;blankCloudDB=()=>({...originalBlank(),invoices:[],purchases:[]});",ctx);
 vm.runInContext(remoteFunction,ctx,{filename:'app-45-reliability.js'});
 
 // A full initial cloud read must page all 1,040 active records and may
