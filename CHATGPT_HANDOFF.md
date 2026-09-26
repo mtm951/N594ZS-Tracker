@@ -14,7 +14,15 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.32** (filtered Purchases totals; PR #10 merged September 26). Check current main-branch Pages Actions before reporting deployment.
+- Current release: **v5.19.33** (complete cloud pagination; PR #11 merged September 26). Confirm current main-branch Pages Actions before reporting deployment.
+
+## v5.19.33 complete cloud pagination / false integrity alerts (September 26)
+
+- Owner screenshot displayed v5.19.32 with **63 broken links / 75 review items** despite authoritative Supabase showing **1,040 active cloud records and ZERO actual missing purchase/part/equipment/invoice references** at time of audit. Root cause: `app-17-record-sync.js` requested `tracker_records` with an unpaginated Supabase/PostgREST select, silently capped at 1,000; browser falsely marked incomplete dataset Synced. The screenshot's earlier 384 purchases / 100 invoice count was also incomplete vs cloud 414 purchases / 109 invoices at that point. **Never advise Repair Safe Links on a truncated or out-of-sync browser dataset.**
+- Before any code changes, created cloud safety snapshot `b605653a-c281-49aa-887f-5ab30655be55` containing all 1,040 active records, no production aircraft record modifications. PR #11 merge commit `b52bea26026759bd0552df03fe166531d974e46f`; branch `cloud-pagination-v5.19.33`; branch CI `36266297187` and PR CI `36266352537` success.
+- In `app-17-record-sync.js`, new `cloudReadAllTrackerRecords` explicitly pages 500 records at a time, deterministic sort by record type/id, checks exact count and uniqueness, retries if the cloud data changes while loading, and FAILS CLOSED (never overwrites local DB or labels it Synced) on missing or truncated pages. Applied to initial cloud load, post-migration load, and record-version scans. `app-45-reliability.js` now uses full paged cloud reads for field-level conflict verification, including deleted records.
+- `tests/cloud-record-pagination.test.mjs` executes actual production loader with 1,040 active + 4 deleted synthetic records under simulated server 1,000-row cap, verifies complete purchase/part/invoice presence, all 1,044 remote versions and conflict rows, and tests incomplete-page fail-closed behavior with zero cloud writes. Bumped version and service-worker shell to v5.19.33.
+- Owner acceptance: Close Data Integrity modal, check current sync badge (should be Synced, NOT Conflict/Sync Pending), refresh to v5.19.33, allow full load to finish, reopen Data Integrity. Broken links should drop from 63 to zero if cloud remains unchanged. A residual smaller number of **review-only** warnings is expected for historical installed purchase lines without linked parts; 27 such unlinked lines were found in the canonical cloud. Do not mass-create inventory or mark stock from historical purchases without owner confirmation. Any remaining red broken links must be reviewed against current cloud data, not automatically repaired.
 
 ## v5.19.32 filtered Purchases dashboard (September 26)
 
