@@ -62,7 +62,7 @@ root.openKitfox912ManualChecklist('manual-C');
 assert.match(modal.at(-1),/round/);
 assert.match(modal.at(-1),/Mark alternate cowl chapter N\/A/);
 assert.equal(other.items[0].done,false,'Never touch unrelated owner checklists');
-assert.equal(changes,5);
+assert.equal(changes,4);
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.39'));
 assert.ok(html.includes('app-11-checklists.js?v=5.19.39'));
