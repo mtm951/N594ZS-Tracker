@@ -40,10 +40,15 @@ function renderChecklistRows(){
   });
   box.innerHTML=rows.map(c=>{
     const items=Array.isArray(c.items)?c.items:[];
-    const done=items.filter(i=>i.done).length,pct=items.length?Math.round(done/items.length*100):0;
+    const isManual=c.kitfoxManualPack==='kitfox-912-64825-000-dec2001';
+    const na=isManual?items.filter(i=>i.reviewStatus==='N/A').length:0;
+    const done=items.filter(i=>i.done).length+(isManual?na:0),
+      pct=items.length?Math.round(done/items.length*100):0;
     const inspectionMeta=c.inspectionMode?`<div class="task-meta"><span class="mini-badge">${esc(c.sourcePages?'POH '+c.sourcePages:'Source-backed')}</span>${Array.isArray(c.groupOrder)&&c.groupOrder.length?`<span class="mini-badge">${c.groupOrder.length} groups</span>`:''}<span class="mini-badge">click items for history & notes</span></div>`:'';
+    const manualMeta=c.kitfoxManualPack==='kitfox-912-64825-000-dec2001'
+      ?`<div class="task-meta"><span class="mini-badge">SkyStar 912 manual • Section ${esc(c.manualChapter)}</span><span class="mini-badge">p.${esc(c.sourcePages||'')}</span><span class="mini-badge">click to review steps, N/A and notes</span></div>`:'';
     return `<div class="checklist click-row" role="button" tabindex="0" data-checklist-id="${esc(String(c.id))}">
-      <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(checklistSystemName(c)||'Unassigned')} • ${esc(c.trigger||c.purpose)}</div>${inspectionMeta}</div>
+      <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(checklistSystemName(c)||'Unassigned')} • ${esc(c.trigger||c.purpose)}</div>${inspectionMeta}${manualMeta}</div>
       <div style="min-width:150px"><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted right">${pct}%</div></div></div>
     </div>`;
   }).join('')||'<div class="empty">No matching checklists.</div>';
@@ -86,6 +91,7 @@ function openChecklistDetail(id){
   const c=checklistById(id);
   if(!c){toast('Checklist record could not be found.','bad');return}
   if(isAnnualInspectionChecklist(c)&&typeof window.openAnnualInspectionChecklist==='function')return window.openAnnualInspectionChecklist(c.id);
+  if(c.kitfoxManualPack==='kitfox-912-64825-000-dec2001'&&typeof window.openKitfox912ManualChecklist==='function')return window.openKitfox912ManualChecklist(c.id);
 
   const items=arr(c.items),done=items.filter(i=>i.done).length,pct=items.length?Math.round(done/items.length*100):0;
   const pr=c.projectId?projectById(Number(c.projectId)):null;
