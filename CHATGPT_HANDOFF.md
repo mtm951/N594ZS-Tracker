@@ -42,6 +42,38 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.56 direct manufacturer source access (September 28)
+
+- PR #34 `v5.19.56: open source documents directly from checklist citations` merged to `main` at `6065911e3384f4dc1f9c8d750c2e23b10d0144c8`.
+- Final workflow run `36488732540` passed JavaScript syntax and the complete regression suite.
+- Generic checklist item **Source** buttons and the First Start / Ground Run recorder **Source** button now route through one source resolver in `app-13-attachments.js`.
+- Source resolution order:
+  1. attached tracker PDF + verified page mapping → open exact cited physical PDF page;
+  2. attached tracker PDF without mapping → open the attached PDF;
+  3. manufacturer `sourceUrl` / URL `location` → open manufacturer source directly;
+  4. no attachment or trustworthy URL → fall back to tracker Document record.
+- `openAttachmentPage(id,page,label)` now accepts the source-document label so the mobile in-app PDF.js viewer displays the correct manual title instead of always saying Kitfox.
+- Production Document 301 (**Rotax 912 ULS Installation Manual**, Ed.3/Rev.0) now stores verified 1-based physical PDF page starts:
+  - `10-10-00` → 31
+  - `24-00-00` → 45
+  - `61-00-00` → 67
+  - `73-00-00` → 101
+  - `78-00-00` → 165
+  - `79-00-00` → 179
+  - `80-00-00` → 207
+- Verified examples:
+  - `73-00-00 p.7` → physical PDF page **107**;
+  - `78-00-00 p.5` → page **169**;
+  - `10-10-00 p.12` → page **42**.
+- This gives exact in-app source jumps for many commissioning items covering Pre-Trial, fuel, electrical, propeller, exhaust and starter-interface references that cite the attached ROTAX Installation Manual.
+- URL-only manufacturer sources (current ROTAX OM, SI-912-018, EarthX, IVO) now open their manufacturer document directly when no private attachment exists.
+- Current ROTAX MML Ed.04/Rev.2 still falls back to its tracker Document record because the tracker has no private PDF attachment and no trustworthy current manufacturer URL stored. No stale Rev.1 URL was substituted.
+- Tests now verify chapter/page→physical-page mapping, mobile attached-PDF exact-page dispatch, manufacturer-URL opening, Document fallback, and that both checklist + recorder Source actions use the generic resolver.
+- No checklist completion state changed in this release.
+- Main verified after merge: `APP_VERSION='5.19.56'`, `app-11-checklists.js?v=5.19.56`, `app-13-attachments.js?v=5.19.56`, `app-70-first-start-recorder.js?v=5.19.56`, service-worker shell `n594zs-v5-19-56-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.56**. Open a source-backed checklist item citing **Rotax 912 ULS Installation Manual** (for example a fuel item on `73-00-00 p.7`) and press **Source**. On phone it should open the in-app PDF viewer directly at the mapped physical page. Also try an EarthX or IVO Source button and confirm it opens the manufacturer document directly.
+
 ## v5.19.55 Readiness Overview navigation fix (September 28)
 
 - Owner reported the **Readiness Overview** button inside commissioning gate modals did nothing.
