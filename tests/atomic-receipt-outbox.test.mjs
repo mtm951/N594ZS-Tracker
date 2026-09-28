@@ -29,7 +29,7 @@ function canonical(value){
   return value;
 }
 function stable(x){return JSON.stringify(canonical(x))}
-function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null,onCloudRead=null,confirmResult=true,receiptSaveError=null}={}){
+function makeHarness({online=true,enabled=true,cloudConnected=true,seed=null,failKey=null,onRpc=null,onCloudRead=null,confirmResult=true,receiptSaveError=null}={}){
   const before=seed?.db||{
     parts:[{id:21,name:'TEST WASHER',stockQty:0,status:'Order',unit:'ea'}],
     orders:[{id:31,item:'TEST WASHER',partId:21,qty:4,receivedQty:0,inventoryApplied:false,status:'Ordered',updates:[]}],
@@ -53,7 +53,7 @@ function makeHarness({online=true,enabled=true,seed=null,failKey=null,onRpc=null
     CLOUD_PENDING_KEY:PENDING,
     cloudRecordSnapshot:new Map(Object.entries(base)),
     cloudRecordVersions:new Map(Object.entries(versions)),
-    cloudSession:{user:{id:'user-1'}},cloudWorkspaceId:'workspace-1',
+    cloudSession:cloudConnected?{user:{id:'user-1'}}:null,cloudWorkspaceId:cloudConnected?'workspace-1':null,
     cloudDirty:false,
     supa:{rpc:async(name,args)=>{
       assert.equal(name,'sync_tracker_records_atomic');
@@ -119,27 +119,30 @@ function receiptWork(tx){
   tx.update('order',31,o=>{o.receivedQty+=2;o.updates.push({id:71,date:'2026-09-23',text:'Received 2 ea (partial receipt).'})});
 }
 
-// The real incident: an Order can say 2 received with no linked Part.
-// This must NOT count as an atomic Order+Part test. Reject the staged
-// order-only receipt and restore the original data before any local save.
+// A legitimate Order may have no linked inventory Part. In production this
+// is still journaled atomically as an Order-only receipt; it simply cannot
+// credit inventory that does not exist.
 {
   const source={
     parts:[{id:21,name:'TEST PART',stockQty:0,status:'On Hand',unit:'ea'}],
     orders:[{id:31,item:'TEST ITEM',partId:null,qty:4,receivedQty:0,inventoryApplied:false,status:'Ordered',updates:[]}],
     projects:[],settings:{showCosts:true},logs:[],docs:[],checklists:[]
   };
-  const h=makeHarness({seed:{db:source}});
-  const before=structuredClone(h.db);
+  const h=makeHarness({enabled:false,seed:{db:source}});
   const orderOnly=tx=>tx.update('order',31,o=>{
     o.receivedQty=2;o.updates.push({id:71,date:'2026-09-23',text:'Received 2 ea (partial receipt).'});
   });
-  assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(orderOnly,'Unlinked test receipt'),
-    /requires every received Order to have a linked Part/);
-  assert.deepEqual(h.db,before,'unlinked receipt mutated local records despite rejection');
-  assert.equal(h.saved.length,0,'unlinked receipt reached persistence');
-  assert.equal(h.rpcCalls.length,0,'unlinked receipt reached atomic RPC');
-  assert.equal(h.localStorage.getItem(OUTBOX),null,'unlinked receipt created a pending journal');
-  assert.equal(h.localStorage.getItem(PENDING),null,'unlinked receipt set the pending cloud flag');
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle(),true,'legacy opt-out disabled production receipts');
+  h.ctx.atomicReceiptOutbox.stage(orderOnly,'Unlinked production receipt');
+  const journal=JSON.parse(h.localStorage.getItem(OUTBOX));
+  assert.equal(journal.changes.length,1);
+  assert.equal(journal.changes[0].record_type,'order');
+  assert.equal(h.saved.length,1);
+  assert.equal(h.db.parts[0].stockQty,0,'order-only receipt credited unrelated stock');
+  await h.ctx.saveCloudState();
+  assert.equal(h.rpcCalls.length,1,'order-only receipt bypassed atomic RPC');
+  assert.equal(h.localStorage.getItem(OUTBOX),null);
+  assert.equal(h.db.orders[0].receivedQty,2);
 }
 
 // A part must not merely exist somewhere in inventory: the Order's linked
@@ -149,7 +152,7 @@ function receiptWork(tx){
   const before=structuredClone(h.db);
   const orderOnly=tx=>tx.update('order',31,o=>{o.receivedQty=2});
   assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(orderOnly,'Missing stock update'),
-    /requires every received Order to have a linked Part/);
+    /linked to inventory Part 21 but that Part was not updated/);
   assert.deepEqual(h.db,before);
   assert.equal(h.saved.length,0);
 }
@@ -279,11 +282,19 @@ function receiptWork(tx){
   await assert.rejects(h.ctx.loadCloudState(true),/different workspace or account/);
 }
 {
-  // Atomic support is OFF unless explicitly enabled on each device; it
-  // cannot unexpectedly replace the existing proven receipt pathway.
+  // v5.19.41: receipts are production-default in an authenticated workspace.
+  // The old per-device opt-in key must no longer disable them.
   const h=makeHarness({enabled:false});
-  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle(),false);
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle(),true);
   assert.equal(h.ctx.atomicReceiptOutbox.hasPending(),false);
+}
+{
+  // A genuinely local/unconnected tracker still falls back to the scoped
+  // local transaction path rather than trying to call a cloud RPC.
+  const h=makeHarness({enabled:false,cloudConnected:false});
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),false);
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle(),false);
 }
 {
   // Two triggers (the save timer and a reconnect) must not send the same
@@ -310,14 +321,14 @@ function receiptWork(tx){
 }
 
 {
-  // Disabling the experiment must not route a second receipt through the
-  // legacy sender while the first atomic receipt is still offline.
+  // An obsolete local "off" flag from older releases cannot bypass the
+  // production receipt path or overtake an offline pending operation.
   const h=makeHarness({online:false});
-  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Pending before opt-out');
+  h.ctx.atomicReceiptOutbox.stage(receiptWork,'Pending before legacy opt-out');
   h.localStorage.setItem(OPT,'0');
-  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),false);
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true);
   assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle(),true,
-    'an existing queued receipt must keep the protective receipt gate active');
+    'legacy receipt preference bypassed production protection');
   assert.throws(()=>h.ctx.atomicReceiptOutbox.stage(receiptWork,'Second receipt'),/earlier receipt is still pending/);
 }
 
@@ -400,11 +411,14 @@ function receiptWork(tx){
     storage:{[OPT]:'0',[OUTBOX]:JSON.stringify(operation),[PENDING]:'1'}
   }});
   h.ctx.atomicReceiptOutbox.openSettings();
+  assert.match(h.lastModal(),/Order receipts use the durable atomic transaction path automatically/);
+  assert.match(h.lastModal(),/Order receipts: Atomic protection active/);
+  assert.doesNotMatch(h.lastModal(),/Enable Receipt Testing|Turn Off for New Receipts/);
   assert.match(h.lastModal(),/no linked Part update/);
   assert.match(h.lastModal(),/Compare with Cloud Safely/);
   const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
   assert.equal(result.resolved,true);
-  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),false);
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true);
   assert.equal(h.db.parts[0].stockQty,0,'legacy order-only recovery credited inventory');
   assert.equal(h.db.orders[0].receivedQty,2,'legacy order-only recovery lost receipt quantity');
   assert.equal(h.rpcCalls.length,0);
@@ -645,14 +659,15 @@ function deletedTestFixture(){
 
 const ADJUST_OPT='n594zs_atomic_adjustments_opt_in_v1';
 
-// Atomic manual adjustments use the SAME replay-safe journal as receipts,
-// without accidentally enabling the existing receipt opt-in.
+// Atomic manual adjustments use the SAME replay-safe journal as production
+// receipts but remain a separate opt-in extension.
 {
   const h=makeHarness({enabled:false});
   assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('adjustment'),false);
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true,'production receipts were not active');
   h.localStorage.setItem(ADJUST_OPT,'1');
   assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('adjustment'),true);
-  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),false,'adjustment opt-in enabled receipts');
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true,'adjustment opt-in changed receipt availability');
   const adjust=tx=>tx.update('part',21,p=>{
     p.inventoryAdjustments=[{id:501,date:'2026-09-24',delta:-1,reason:'Count correction',notes:'Fixture'}];
   });
@@ -792,4 +807,4 @@ for(const work of [
   assert.equal(h.localStorage.getItem(OUTBOX),null);
 }
 
-console.log('opt-in atomic receipt journal, replay and crash recovery tests passed');
+console.log('production atomic receipt journal, replay and crash recovery tests passed');

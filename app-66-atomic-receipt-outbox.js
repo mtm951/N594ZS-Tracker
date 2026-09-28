@@ -1,12 +1,12 @@
-// ---------- v5.19.16 EXPERIMENTAL ATOMIC RECEIPT OUTBOX ----------
-// An opt-in, one-at-a-time, crash-recoverable queue for linked Order+Part
-// receipts. Enabled per device from Cloud Account. Existing sync stays the
-// default until cross-device failure testing proves this path end to end.
+// ---------- v5.19.41 PRODUCTION ATOMIC INVENTORY TRANSACTIONS ----------
+// Order receipts use the durable, one-at-a-time atomic journal automatically
+// whenever the tracker is connected to an authenticated cloud workspace.
+// Manual adjustments and Reserve -> Use remain separate opt-in extensions.
 (function(){
   'use strict';
   if(window.atomicReceiptOutbox)return;
   const KEY='n594zs_atomic_receipt_outbox_v1';
-  const OPT='n594zs_atomic_receipts_opt_in_v1';
+  const LEGACY_RECEIPT_OPT='n594zs_atomic_receipts_opt_in_v1';
   const ADJUST_OPT='n594zs_atomic_adjustments_opt_in_v1';
   const CONSUME_OPT='n594zs_atomic_consumption_opt_in_v1';
   const SNAP='n594zs_record_snapshot_v4';
@@ -49,13 +49,19 @@
       return type==='log';
     }
   }
-  function enabled(){return localStorage.getItem(OPT)==='1'}
+  function receiptReady(){return !!supa&&!!cloudSession&&!!cloudWorkspaceId}
+  // Kept as a public compatibility accessor. For receipts, "enabled" now
+  // means the authenticated production path is available; no device opt-in.
+  function enabled(){return receiptReady()}
   function adjustmentsEnabled(){return localStorage.getItem(ADJUST_OPT)==='1'}
   function consumptionEnabled(){return localStorage.getItem(CONSUME_OPT)==='1'}
   function shouldHandle(kind='receipt'){
     // Never bypass an earlier journal, regardless of which workflow created it.
-    const optedIn=kind==='adjustment'?adjustmentsEnabled():kind==='consumption'?consumptionEnabled():enabled();
-    return pending()||(kind==='receipt'?(optedIn&&!!supa&&!!cloudSession&&!!cloudWorkspaceId):optedIn);
+    if(pending())return true;
+    if(kind==='receipt')return receiptReady();
+    if(kind==='adjustment')return adjustmentsEnabled();
+    if(kind==='consumption')return consumptionEnabled();
+    return false;
   }
   function snapshot(){
     const out=new Map();
@@ -259,16 +265,18 @@
         validateConsumption(before,after,changes,touchedKeys,old,meta);
       }else if(!changes.some(r=>r.record_type==='order'))
         throw new Error('Receipt did not produce a changed Order record.');
-      // This opt-in path is specifically for an Order + Part transaction.
-      // A receipt without a linked Part can update only its Order and would
-      // give a misleading atomic-inventory test result. Check BEFORE writing
-      // the durable journal; the catch below restores the staged local DB.
+      // Production receipts may legitimately be Order-only when no inventory
+      // Part is linked. But if an Order DOES name a Part, that Part must be
+      // updated in this same operation so inventory can never be partially
+      // acknowledged separately from the receipt.
       for(const order of (adjustment||consumption?[]:changes.filter(r=>r.record_type==='order'))){
         const linkedId=order.data?.partId;
-        const partIncluded=linkedId&&changes.some(r=>r.record_type==='part'&&
+        if(!linkedId)continue;
+        const partIncluded=changes.some(r=>r.record_type==='part'&&
           String(r.record_id)===String(linkedId));
         if(!partIncluded)
-          throw new Error('Atomic inventory testing requires every received Order to have a linked Part updated by this receipt. Link or create a test Part BEFORE receiving. Linking it afterward does not credit an earlier receipt.');
+          throw new Error('Receipt for '+(order.data?.item||('Order '+order.record_id))+
+            ' is linked to inventory Part '+linkedId+' but that Part was not updated in the same atomic operation. Stop and review the order/part link before retrying.');
       }
       if(changes.length>50)throw new Error('A receipt can change at most 50 records.');
       const afterKeys=new Set(changes.map(r=>key(r.record_type,r.record_id)));
@@ -711,17 +719,16 @@
       '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
       (e?.changes.some(r=>r.record_type==='log')?'<div class="notice"><b>Pending Work Log protected.</b> Do not edit, delete or adjust its consumed items until the transaction is acknowledged. Export the Pending Atomic Safety Copy before supervised recovery.</div>':'')+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
-    openModal(modalHeader('Atomic inventory testing','One pending atomic operation per device; experimental')+
-      '<div class="notice">Order receipts, manual Part adjustments and Reserve → Use have separate opt-ins. Enabled operations share one durable, idempotent cloud transaction journal. All other tracker workflows still use normal sync.</div>'+
+    openModal(modalHeader('Inventory transaction safety','Production receipts • advanced recovery')+
+      '<div class="notice">Order receipts use the durable atomic transaction path automatically whenever this device is connected to an authenticated editable cloud workspace. Manual Part adjustments and Reserve → Use remain separate opt-in extensions for now. All enabled inventory operations share one idempotent journal, so one pending operation must finish before another can overtake it.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
-      '<div class="detail-section"><b>Atomic receipts: '+(enabled()?'Enabled':'Off')+'</b><div class="muted small">Enable for a temporary test order first. Pending operations cannot be discarded by reloading cloud data.</div></div>'+ 
-      '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Separate opt-in; test on a disposable Part. Receipts and adjustments share one durable journal, so a second operation cannot overtake an unsynced first.</div></div>'+
-      '<div class="detail-section"><b>Atomic Reserve → Use: '+(consumptionEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental; independent opt-in. A Part, Project, new Work Log and linked Purchase credits save together.</div></div>'+
+      '<div class="detail-section"><b>Order receipts: '+(enabled()?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">No testing toggle is required. Linked Order + Part changes commit together; legitimate unlinked Order-only receipts are also journaled as one operation. Pending operations cannot be discarded by reloading cloud data.</div></div>'+
+      '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental extension; test on a disposable Part. It shares the same durable journal as production receipts.</div></div>'+
+      '<div class="detail-section"><b>Atomic Reserve → Use: '+(consumptionEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental extension. A Part, Project, new Work Log and applicable Purchase credits save together.</div></div>'+
       '<div class="modal-actions">'+
       (textOnlyPendingLogDrift(e)?'<button class="secondary" onclick="atomicReceiptOutbox.restorePendingWorkLog()">Backup and Restore Staged Work Log Text</button>':'')+
       (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">'+
         (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
-      '<button class="secondary" onclick="atomicReceiptOutbox.toggle()">'+(enabled()?'Turn Off for New Receipts':'Enable Receipt Testing')+'</button>'+ 
       '<button class="secondary" onclick="atomicReceiptOutbox.toggleAdjustments()">'+(adjustmentsEnabled()?'Turn Off Atomic Adjustments':'Enable Atomic Adjustment Testing')+'</button>'+
       '<button class="secondary" onclick="atomicReceiptOutbox.toggleConsumption()">'+(consumptionEnabled()?'Turn Off Atomic Consumption':'Enable Atomic Reserve → Use Testing')+'</button>'+
       (e?(e.blocked?
@@ -729,12 +736,11 @@
         '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Receipt</button>'):'')+
       '<button class="secondary" onclick="openCloudAccount()">Back to Cloud Account</button></div>');
   }
+  // Compatibility shim for any older cached UI that still calls this method.
+  // Production receipts can no longer be disabled per device.
   function toggle(){
-    if(enabled()){localStorage.removeItem(OPT);toast('New receipts use normal sync. Existing queued receipts remain protected.','good')}
-    else{
-      if(!confirm('Enable experimental atomic order receipts on this device? Start with a disposable test order. Only one receipt can remain offline at a time.'))return;
-      localStorage.setItem(OPT,'1');
-    }
+    localStorage.removeItem(LEGACY_RECEIPT_OPT);
+    toast('Atomic order receipts are now automatic whenever cloud sync is connected.','good');
     openSettings();
   }
   function toggleAdjustments(){
@@ -817,7 +823,7 @@
     previousAccount();
     const buttons=document.querySelector('#modalBox .modal-actions');
     if(buttons)buttons.insertAdjacentHTML('afterbegin',
-      '<button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Atomic Inventory Testing'+(pending()?' • Pending':'')+'</button>');
+      '<button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Inventory Transaction Safety'+(pending()?' • Pending':'')+'</button>');
   };
   const originalStatus=window.cloudStatusLabel;
   window.cloudStatusLabel=function(label,kind){

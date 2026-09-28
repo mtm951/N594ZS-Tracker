@@ -6,7 +6,6 @@ const storeCode=fs.readFileSync(new URL('../app-17a-data-store.js',import.meta.u
 const outboxCode=fs.readFileSync(new URL('../app-66-atomic-receipt-outbox.js',import.meta.url),'utf8');
 const blockersCode=fs.readFileSync(new URL('../app-67-linked-order-blockers.js',import.meta.url),'utf8');
 const OUTBOX='n594zs_atomic_receipt_outbox_v1';
-const OPT='n594zs_atomic_receipts_opt_in_v1';
 const PENDING='n594zs_pending_cloud_v4';
 const SNAP='n594zs_record_snapshot_v4';
 const VERS='n594zs_record_versions_v1';
@@ -49,7 +48,7 @@ function harness(db=fixture(),{atomic=false,online=true,server=null}={}){
       const key=type+':'+row.id;base[key]=str(row);versions[key]=2;
     }
   }
-  const localStorage=storage(atomic?{[OPT]:'1',[SNAP]:JSON.stringify(base),[VERS]:JSON.stringify(versions)}:{});
+  const localStorage=storage(atomic?{[SNAP]:JSON.stringify(base),[VERS]:JSON.stringify(versions)}:{});
   const ctx={
     console,JSON,Date,Map,Set,Array,Object,String,Number,Boolean,Math,Promise,
     structuredClone,window:null,db,RECORD_ARRAYS:{part:'parts',order:'orders',project:'projects',log:'logs',purchase:'purchases'},
@@ -216,7 +215,7 @@ function receipt(h,qty,orderId=31){
   assert.deepEqual(h.db,before);
   assert.equal(h.saves(),0);
 }
-// Opt-in receipt uses the existing durable outbox to journal ALL THREE:
+// Production atomic receipt uses the durable outbox to journal ALL THREE:
 // Order, Part and newly resolved Project in one version-checked RPC.
 {
   const h=harness(fixture(),{atomic:true,online:false});

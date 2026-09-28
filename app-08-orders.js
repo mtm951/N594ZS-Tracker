@@ -274,14 +274,12 @@ function applyOrderReceipt(tx,orderId,qty,receiptDate=''){
   });
   return amount;
 }
-function openReceiveOrderModal(id){const o=orderById(id);if(!o)return;const remaining=orderRemainingQty(o);if(!remaining)return receiveOrder(id);const noPartWarning=o.partId?'':'<div class="warning" style="margin-top:10px"><b>No linked inventory Part.</b> This receipt updates the Order only and will not increase stock. For atomic Order + Part testing, cancel and link or create a test Part first. Linking afterward does not credit earlier receipts.</div>';openModal(`${modalHeader('Receive Order Item',o.item)}<div class="notice" data-receipt-editor="single">${esc(orderReceivedQty(o)+' of '+o.qty+' '+(o.unit||'ea'))} already received. ${esc(remaining+' '+(o.unit||'ea'))} remaining.</div>${noPartWarning}<div class="form-grid" style="margin-top:12px">${field('Quantity received now','orReceiveQty',remaining,'number',`step="any" inputmode="decimal" min="0.000001" max="${remaining}"`)}${field('Received date','orReceiveDate',today(),'date')}</div><div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail(${id})">Cancel</button><button class="btn success" onclick="savePartialOrderReceipt(${id})">Receive</button></div>`)}
-// v5.19.13: receipt updates use the scoped trackerStore transaction, not
-// captured live db rows. Cloud sync remains async until the new atomic RPC
-// is integrated with a durable browser-side operation queue.
+function openReceiveOrderModal(id){const o=orderById(id);if(!o)return;const remaining=orderRemainingQty(o);if(!remaining)return receiveOrder(id);const noPartWarning=o.partId?'':'<div class="warning" style="margin-top:10px"><b>No linked inventory Part.</b> This receipt updates the Order only and will not increase stock. The receipt is still transaction-journaled when cloud-connected, but there is no inventory quantity to credit. Linking a Part afterward does not retroactively credit earlier receipts.</div>';openModal(`${modalHeader('Receive Order Item',o.item)}<div class="notice" data-receipt-editor="single">${esc(orderReceivedQty(o)+' of '+o.qty+' '+(o.unit||'ea'))} already received. ${esc(remaining+' '+(o.unit||'ea'))} remaining.</div>${noPartWarning}<div class="form-grid" style="margin-top:12px">${field('Quantity received now','orReceiveQty',remaining,'number',`step="any" inputmode="decimal" min="0.000001" max="${remaining}"`)}${field('Received date','orReceiveDate',today(),'date')}</div><div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail(${id})">Cancel</button><button class="btn success" onclick="savePartialOrderReceipt(${id})">Receive</button></div>`)}
+// v5.19.41: cloud-connected receipts use the durable atomic journal by
+// default. A local-only/unconnected tracker still gets the same scoped
+// in-memory batch and one saveDB() persistence point.
 function runOrderReceiptBatch(work,message){
   try{
-    // Explicit per-device opt-in. All ordinary receipts continue through the
-    // existing tested local batch until atomic receipt testing is enabled.
     if(window.atomicReceiptOutbox?.shouldHandle())return window.atomicReceiptOutbox.stage(work,message);
     return trackerStore.batch(work,{message});
   }
