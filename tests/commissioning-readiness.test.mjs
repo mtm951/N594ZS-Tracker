@@ -31,7 +31,7 @@ const ctx={
   openModal:html=>{modal=html},
   closeModal(){},navTo(){},openChecklistDetail(){},
   pageTargets:[],
-  goToTrackerPageFromModal(page){this.pageTargets.push(page);return true},
+  goToTrackerPageFromModal(page){ctx.pageTargets.push(page);return true},
   renderReadiness(){},renderDashboard(){},
   setTimeout:fn=>{fn();return 1},
   document:{
