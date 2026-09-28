@@ -49,6 +49,35 @@ async function handleEntityDrop(event,type,id){event.preventDefault();event.stop
 async function saveSelectedFiles(type,id,files){if(!files.length)return;const tooLarge=files.find(f=>f.size>30*1024*1024);if(tooLarge)return alert(`Please keep each file under 30 MB. ${tooLarge.name} is too large.`);try{await addAttachments(type,id,files);toast(`${files.length} file${files.length===1?'':'s'} attached${cloudSession?' to shared storage':''}.`,'good');reopenDetail(type,id)}catch(e){alert('Could not save attachment: '+e.message)}}
 async function renderAttachments(type,id){const box=document.getElementById(`attachments-${type}-${id}`);if(!box)return;try{const files=(await getAttachments(type,id)).sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));if(!files.length){box.innerHTML='<div class="empty">No files attached yet.</div>';return}box.innerHTML=`<div class="attach-grid">${files.map(f=>{const arg=JSON.stringify(f.id);return `<div class="attach-card"><div class="attach-thumb" id="thumb-${String(f.id).replace(/[^a-zA-Z0-9_-]/g,'_')}">📎</div><div class="attach-name" title="${esc(f.name)}">${esc(f.name)}</div><div class="attach-meta">${formatBytes(f.size)} • ${esc((f.addedAt||'').slice(0,10))}${f.cloud?' • shared':''}</div><div class="action-row"><button class="icon-btn" onclick='openAttachment(${arg})'>Open</button><button class="icon-btn" onclick='downloadAttachment(${arg})'>Save</button><button class="icon-btn" onclick='deleteAttachment(${JSON.stringify(type)},${JSON.stringify(id)},${arg})'>✕</button></div></div>`}).join('')}</div>`;for(const f of files.filter(f=>f.type?.startsWith('image/'))){try{const file=await getAttachment(f.id);const u=URL.createObjectURL(file.blob);objectUrls.push(u);const el=document.getElementById('thumb-'+String(f.id).replace(/[^a-zA-Z0-9_-]/g,'_'));if(el)el.innerHTML=`<img src="${u}" alt="${esc(f.name)}">`}catch(_e){}}}catch(e){box.innerHTML=`<div class="danger-note">Could not load attachments: ${esc(e.message)}</div>`}}
 async function openAttachment(id){const f=await getAttachment(id);if(!f)return;const u=URL.createObjectURL(f.blob);objectUrls.push(u);window.open(u,'_blank')}
+async function openAttachmentPage(id,page=null){
+  const requested=Number(page),pageNo=Number.isFinite(requested)&&requested>0?Math.floor(requested):null;
+  // Open synchronously from the click so Safari/iOS does not treat the later
+  // authenticated Storage lookup as a popup.
+  const tab=window.open('about:blank','_blank');
+  if(tab)try{tab.opener=null}catch(_e){}
+  let url='',revoke=false;
+  try{
+    if(typeof id==='string'&&id.includes('/')&&supa&&cloudSession){
+      const {data,error}=await supa.storage.from(CLOUD_BUCKET).createSignedUrl(id,15*60);
+      if(error)throw error;
+      if(!data?.signedUrl)throw new Error('Storage did not return a signed file URL.');
+      url=data.signedUrl;
+    }else{
+      const f=await getAttachment(id);if(!f)throw new Error('Attachment was not found.');
+      url=URL.createObjectURL(f.blob);objectUrls.push(url);revoke=true;
+    }
+    const target=url+(pageNo?'#page='+pageNo:'');
+    if(tab)tab.location.href=target;else window.open(target,'_blank');
+    if(revoke)setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
+    return true;
+  }catch(error){
+    try{tab?.close()}catch(_e){}
+    console.warn('Could not open attachment page',error);
+    alert('Could not open the source file: '+(error?.message||String(error)));
+    return false;
+  }
+}
+window.openAttachmentPage=openAttachmentPage;
 async function downloadAttachment(id){const f=await getAttachment(id);if(!f)return;const u=URL.createObjectURL(f.blob),a=document.createElement('a');a.href=u;a.download=f.name||'attachment';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}
 async function deleteAttachment(type,entityId,id){if(!confirm('Delete this attached file?'))return;await removeAttachment(id);toast('Attachment deleted.');renderAttachments(type,entityId);renderStorageStats()}
 async function clearAllAttachments(){
