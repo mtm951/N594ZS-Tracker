@@ -21,7 +21,11 @@ function createHarness({confirmResult=true}={}){
       },
       setAttribute(){},
       contains(el){return !!el?._inModal},
-      querySelector(sel){return sel==='[data-receipt-editor]'&&this.innerHTML.includes('data-receipt-editor')?{}:null},
+      querySelector(sel){
+        if(sel==='[data-receipt-editor]'&&this.innerHTML.includes('data-receipt-editor'))return {};
+        if(sel==='[data-modal-back]'&&this.innerHTML.includes('data-modal-back'))return {};
+        return null;
+      },
       appendChild(node){if(node.id)elements.set(node.id,node)}
     };
   }
@@ -60,6 +64,12 @@ function createHarness({confirmResult=true}={}){
     addEventListener(type,fn){(listeners[type]??=[]).push(fn)},
     matchMedia:()=>({matches:false}),
     navTo:()=>{},
+    modalBackCalls:0,
+    modalBack(){
+      ctx.modalBackCalls++;
+      modal.innerHTML='First Start Gate';
+      modal.classList.add('open');
+    },
     openModal(html){modal.innerHTML=html;modal.classList.add('open')},
     closeModal(){modal.classList.remove('open')}
   };
@@ -107,6 +117,25 @@ function createHarness({confirmResult=true}={}){
   h.flushBack();
   assert.equal(h.modal.classList.contains('open'),true);
   assert.equal(h.history.state.n594zsKind,'modal');
+}
+
+// Nested detail popups must use the internal modal parent stack first.
+// Esc, the floating X and the header X all route through trackerBack().
+{
+  const h=createHarness();
+  h.ctx.openModal('Checklist detail <button data-modal-back="1"></button>');
+  const beforeHistory=h.history.state;
+  h.ctx.trackerBack();
+  assert.equal(h.ctx.modalBackCalls,1,'nested popup did not return to its parent');
+  assert.equal(h.modal.classList.contains('open'),true,'nested Back closed the popup entirely');
+  assert.equal(h.modal.innerHTML,'First Start Gate');
+  assert.equal(h.backEvents.length,0,'nested Back incorrectly touched browser history');
+  assert.equal(h.history.state,beforeHistory,'nested Back changed the page/modal history state');
+
+  // Once restored to the top-level gate popup, Back closes normally.
+  h.ctx.trackerBack();
+  h.flushBack();
+  assert.equal(h.modal.classList.contains('open'),false,'second Back did not close the top-level gate popup');
 }
 
 // Normal explicit browser/phone Back must still close an ordinary popup.

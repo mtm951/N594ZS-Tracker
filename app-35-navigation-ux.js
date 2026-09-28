@@ -69,6 +69,9 @@
   function popupOpen(){return !!modal?.classList.contains('open')}
   function trackerState(kind,page=currentPage,d=depth){return {n594zs:true,n594zsKind:kind,n594zsPage:page,n594zsDepth:d}}
   function stateIsModal(){return history.state?.n594zs===true&&history.state?.n594zsKind==='modal'}
+  function internalModalBackAvailable(){
+    return popupOpen()&&!!modal?.querySelector?.('[data-modal-back]')&&typeof modalBack==='function';
+  }
   function receiptOpen(){return popupOpen()&&!!modal.querySelector('[data-receipt-editor]')}
   function receiptInput(t){
     return receiptOpen()&&!!t&&modal.contains(t)&&/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName||'');
@@ -121,7 +124,7 @@
     const canHistoryBack=Number(history.state?.n594zsDepth||0)>0;
     const hasInternal=pageHistory.some(validPage);
     back.disabled=!popup&&!canHistoryBack&&!hasInternal;
-    back.title=popup?'Close current popup':((canHistoryBack||hasInternal)?'Previous tracker screen':'No previous tracker screen');
+    back.title=popup?(internalModalBackAvailable()?'Previous popup':'Close current popup'):((canHistoryBack||hasInternal)?'Previous tracker screen':'No previous tracker screen');
   }
 
   // Establish a tracker root state without changing the URL.
@@ -174,6 +177,12 @@
   window.trackerBack=function(){
     if(popupOpen()){
       if(!confirmDiscardModalEdits())return;
+      if(internalModalBackAvailable()){
+        modalBack();
+        resetModalEditors();
+        updateControls();
+        return;
+      }
       if(stateIsModal()){
         explicitModalBackRequested=true;
         history.back();

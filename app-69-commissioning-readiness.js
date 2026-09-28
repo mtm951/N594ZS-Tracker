@@ -97,7 +97,7 @@
       el.addEventListener('click',()=>openCommissioningGate(el.dataset.commissioningGate));
     });
     root?.querySelectorAll?.('[data-commissioning-checklist]').forEach(el=>{
-      if(el.dataset.commissioningBound)return;
+      if(el.hasAttribute('onclick')||el.dataset.commissioningBound)return;
       el.dataset.commissioningBound='1';
       el.addEventListener('click',()=>openChecklistDetail(el.dataset.commissioningChecklist));
     });
@@ -127,7 +127,7 @@
         <div><span>Packs involved</span><b>${info.rows.length}</b></div>
       </div>
       <div class="commissioning-pack-list">
-        ${info.rows.map(r=>`<button class="commissioning-pack-row ${r.open.length?'has-open':'is-complete'}" data-commissioning-checklist="${E(String(r.checklist.id))}">
+        ${info.rows.map(r=>`<button class="commissioning-pack-row ${r.open.length?'has-open':'is-complete'}" data-commissioning-checklist="${E(String(r.checklist.id))}" onclick="openChecklistDetail('${E(String(r.checklist.id))}')">
           <span class="commissioning-pack-main"><b>${E(r.checklist.name)}</b><small>${r.open.length?(E(r.next?.text||'Open item')+' • '+r.open.length+' open'):'All requirements for this gate complete'}</small></span>
           <span class="commissioning-pack-end"><strong>${r.done}/${r.total}</strong><span class="mini-progress"><i style="width:${r.pct}%"></i></span></span>
         </button>`).join('')||'<div class="empty">No commissioning requirements are assigned to this gate.</div>'}
@@ -165,7 +165,7 @@
       <div class="commissioning-gate-grid">${infos.map(gateCard).join('')}</div>
       <div class="commissioning-next">
         <div><span>Next gate</span><b>${E(next.gate.label)}</b><small>${next.clear?'All commissioning gates are complete.':next.open+' blocking item'+(next.open===1?'':'s')+' remain.'}</small></div>
-        ${nextRow?`<button class="primary" data-commissioning-checklist="${E(String(nextRow.checklist.id))}">Continue: ${E(nextRow.checklist.name)}</button>`:''}
+        ${nextRow?`<button class="primary" data-commissioning-checklist="${E(String(nextRow.checklist.id))}" onclick="openChecklistDetail('${E(String(nextRow.checklist.id))}')">Continue: ${E(nextRow.checklist.name)}</button>`:''}
       </div>
     </div>`;
   }
