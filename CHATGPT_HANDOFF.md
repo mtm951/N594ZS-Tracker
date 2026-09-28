@@ -35,6 +35,36 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.49 commissioning readiness dashboard / dependency gates (September 28)
+
+- PR #27 `v5.19.49: commissioning readiness gates` merged to `main` at `b638ed58a01121f1040cdb9d19c7b2385037988e`.
+- Final workflow run `36479435633` passed JavaScript syntax and the complete regression suite. New `tests/commissioning-readiness.test.mjs` proves cumulative gate math/dependencies; source-backed checklist, Kitfox manual/mobile viewer, atomic inventory, update/recovery and all existing workflow regressions remained green.
+- All 181 items in the eight commissioning checklists now carry explicit item-level `requiredBefore` metadata:
+  - `first-start` = must be complete before the first engine start;
+  - `full-power` = additional item that must be complete before the full-power ground-run gate;
+  - `flight` = additional item that must be complete before Flight Release.
+- Gates are intentionally **cumulative**. A First-Start blocker automatically remains a blocker for Full-Power and Flight Release.
+- Live production verification after merge:
+  - overall commissioning: **3 / 181 complete**;
+  - **First Start: 3 / 94** required items complete (**91 open**);
+  - **Full-Power Ground Run: 3 / 125** cumulative required items complete (**122 open**);
+  - **Flight Release: 3 / 181** cumulative required items complete (**178 open**);
+  - **0 untagged commissioning items**.
+- No completion/checkmark state was changed while adding gate metadata. The three complete items are still the owner’s original three completed Pre-Trial items.
+- New `app-69-commissioning-readiness.js` extends the existing Project Readiness page rather than creating a competing workflow:
+  - adds a **Commissioning Readiness** panel with overall 3/181-style progress;
+  - three live cards: **First Start**, **Full-Power Ground Run**, **Flight Release**;
+  - later cards show upstream dependency status when an earlier gate is still open;
+  - clicking a gate opens a checklist-by-checklist blocker breakdown;
+  - each pack row shows progress and the first unresolved item;
+  - **Continue** jumps directly into the next blocking checklist;
+  - dashboard gets a compact 912 Commissioning strip with live open counts.
+- Generic checklist UI now displays commissioning dependency badges directly on each source-backed item: **Before First Start**, **Before Full-Power**, or **Before Flight**. Commissioning checklist cards also show how many items belong to each gate.
+- This remains a workflow/readiness aid only. A green tracker Flight Release gate does not itself constitute an airworthiness approval, maintenance release, return-to-service signoff, or authorization to fly; actual N594ZS Operating Limitations and applicable legal authority still control.
+- Main verified after merge: `APP_VERSION='5.19.49'`, `app-11-checklists.js?v=5.19.49`, `app-69-commissioning-readiness.js?v=5.19.49`, service-worker shell `n594zs-v5-19-49-shell`.
+- Owner acceptance required: once Synced, refresh normally and confirm footer **v5.19.49**. Open **Readiness** and verify the Commissioning Readiness panel shows approximately **3/181 overall**, **3/94 First Start**, **3/125 Full-Power**, **3/181 Flight Release**. Click First Start and verify it opens the blocking checklist breakdown. Do not clear site data.
+
 ## v5.19.48 source-backed commissioning checklists + first-flight master gate (September 28)
 
 - PR #26 `v5.19.48: source-backed generic checklists` merged to `main` at `dfd1080b344dc42c186b3ba59c5ecf732628c786`.
