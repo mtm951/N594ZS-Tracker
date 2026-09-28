@@ -31,6 +31,21 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.45 direct Kitfox manual source-page access (September 28)
+
+- PR #23 `v5.19.45: direct private manual source-page links` merged to `main` at `dc2002cdad3989b94007f172af3534615a4290b9`.
+- PR workflow run `36467107441` passed JavaScript syntax and the complete regression suite. New coverage specifically passed `tests/kitfox-manual-ui.test.mjs` for checklist → attached PDF page routing and `tests/manual-source-page.test.mjs` for private signed-URL + `#page=N` behavior.
+- The existing cloud Document `1789567365526` (**Kitfox Model 4 912 Install Manual**) was already linked by all 13 A–M manual checklist records and already had the actual PDF attached in the private `n594zs-files` Supabase Storage bucket:
+  `n594zs/document/1789567365526/3e6793a7-2f8e-4133-bf53-a48d8cd76595__3_Newer_Engine_install_912_64825-000.pdf`.
+- v5.19.45 reuses that private attachment; the PDF is NOT published with the public GitHub Pages application. The bucket was verified `public=false`.
+- `app-13-attachments.js` adds `openAttachmentPage(id,page)`: cloud attachments receive a 15-minute authenticated signed URL and append `#page=<sourcePage>`; a blank tab opens synchronously before the async signing call to reduce Safari/iOS popup blocking. Local attachment fallback still uses a temporary blob URL.
+- `app-68-kitfox-manual-checklists.js` now resolves the linked source Document's expected PDF filename (then any attached PDF as fallback). Each manual checklist row gets **Open PDF p.X**, each chapter Source card gets **Open source PDF at this section**, and the review-note modal gets **Open source PDF p.X**. Lookup/open failures fall back to the tracker Document record instead of dead-ending.
+- No checklist review state was changed by this release. Post-change verification remained exactly **13 chapters / 159 items / 44 Verified / 115 Pending**, with all 13 chapters still linked to Document `1789567365526`.
+- One production Document metadata cleanup was intentionally made: only that Document's `location` field changed from Mike's obsolete local Windows Downloads path to **Private shared attachment in tracker storage**. Record version moved 1 → 2; no notes, project links, checklist statuses, or aircraft records were changed.
+- Main verified: `APP_VERSION='5.19.45'`; `app-13-attachments.js` and `app-68-kitfox-manual-checklists.js` are cache-busted to 5.19.45; service-worker shell is `n594zs-v5-19-45-shell`.
+- Owner acceptance required: once Synced, refresh normally and confirm footer **v5.19.45**. Open any Kitfox manual chapter and tap **Open PDF p.X**; verify the private manual opens and lands on (or very near, depending on the device PDF viewer) the requested source page. Do not clear site data.
+
 ## v5.19.44 Advanced / Troubleshooting UX cleanup (September 28)
 
 - PR #22 `v5.19.44: move recovery controls into Advanced / Troubleshooting` merged to `main` at `68a785ee7f422303f586cbf7ac4ae43ece417c86`.
