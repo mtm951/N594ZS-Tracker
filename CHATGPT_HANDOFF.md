@@ -28,6 +28,30 @@ This file exists to preserve development continuity across ChatGPT conversations
 - The owner has custom systems in several areas, so source steps may later be marked N/A by the owner and checked against the applicable custom/component instructions separately. Do not alter source-faithful wording merely to match custom hardware.
 
 
+
+## v5.19.42 complete atomic inventory coverage (September 28)
+
+- PR #20 `v5.19.42: complete atomic inventory coverage` merged to `main` at `24652700dc8fc944135393c5fdf1e2bc06364dc6`.
+- Final PR regression workflow run `36463323611` passed JavaScript syntax and the complete regression suite. New/updated coverage explicitly passed production atomic receipt replay/crash recovery, Reserve → Use, Assigned → Used, Quick Part Used, Work Log consumed-item additions, Purchase stock receipts, linked-order blockers, real Order receiving, sync/versioning, zero-stock linking/receiving, and existing Part stock-baseline protection.
+- Core physical-inventory mutations are now production-default atomic operations whenever the device is connected to an authenticated editable cloud workspace. The protected families are:
+  - Order receipts, including grouped receipts and receipt-driven Project blocker updates;
+  - manual inventory adjustments and reversals;
+  - Reserved → Used;
+  - Assigned → Used;
+  - Quick Part Used;
+  - adding an inventory-linked consumed item to an existing Work Log;
+  - Purchase → Stock Received for an already linked Part.
+- These workflows share the existing durable one-at-a-time browser journal and `sync_tracker_records_atomic` RPC. They retain operation-ID idempotency, expected-version checks, all-or-nothing server conflict handling, exact-cloud comparison/recovery, crash/reload recovery, and pending-Work-Log protection.
+- Old per-device receipt/adjustment/consumption testing toggles no longer control production routing. Compatibility shim methods remain only so older cached UI cannot disable the new production paths. The visible Cloud Account surface is **Inventory Transaction Safety**, not an experimental testing screen.
+- Legitimate unlinked Order-only receipts remain permitted and are atomically journaled as a one-record Order operation; they do not credit inventory. If an Order names a linked Part, that Part must be updated in the same transaction or staging fails closed.
+- Physical-use flows now preview Installed-Purchase provenance credits without side effects. An overdraw warning can be cancelled without having already materialized Purchase receipt history or changed Part stock.
+- Edit Part no longer rewrites an existing Part's recorded `stockQty` baseline. Existing stock corrections must use the permanent ± Adjust Inventory ledger. A brand-new Part may still be created with an initial on-hand quantity.
+- Purchase stock receipt deliberately requires an existing linked Part. Creating/linking a zero-stock Part stays separate from physically receiving quantity, preventing accidental identity creation + receipt double counting.
+- Single-record/custom-no-Part edits may still use `trackerStore.batch` rather than the cloud atomic journal because there is no multi-record inventory transaction to split. Removing a consumed-item row from a Work Log remains a single-record guarded edit.
+- No Supabase schema/function/policy changes and no production aircraft-record mutations were made for this release.
+- Release metadata: `APP_VERSION='5.19.42'`; changed modules `app-07-parts.js`, `app-09-logbook.js`, `app-24-data-polish.js`, `app-42-inventory-workflow.js`, and `app-66-atomic-receipt-outbox.js` are cache-busted to 5.19.42; service-worker shell is `n594zs-v5-19-42-shell`.
+- Owner acceptance: only update when the device reports Synced and no pending atomic transaction. Footer should read **v5.19.42**. Cloud Account → **Inventory Transaction Safety** should report Atomic protection active for Order receipts, Inventory adjustments, Part use / consumption, and Purchase stock receipts. Never clear site data to force the update.
+
 ## v5.19.41 production atomic order receipts (September 28)
 
 - PR #19 `v5.19.41: productionize atomic order receipts` merged to `main` at `ce1aa5e1731ce61422c9a7bff3ba9353d94883b7`.
