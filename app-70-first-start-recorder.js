@@ -1,5 +1,5 @@
 'use strict';
-// ---------- V5.19.51 FIRST START / GROUND RUN RECORDER ----------
+// ---------- V5.19.52 FIRST START / GROUND RUN RECORDER ----------
 // Structured commissioning session built on Runs/Tests + source-backed checklist + Squawks + Work Log.
 
 (function(){
@@ -125,10 +125,33 @@
   }
   function unresolvedStepCount(run){return A(sessionOf(run)?.steps).filter(s=>s.status!=='complete').length}
 
+  function setRecorderSaveState(text,kind=''){
+    const el=document.getElementById('crSaveState');if(!el)return;
+    el.textContent=text||'';el.classList.toggle('has-unsaved',kind==='unsaved');el.classList.toggle('is-saved',kind==='saved');
+  }
   window.queueCommissioningDraftSave=function(runId){
     if(String(runId)==='preview')return;
+    setRecorderSaveState('Unsaved changes • kept locally on this device','unsaved');
     clearTimeout(draftTimer);
     draftTimer=setTimeout(()=>writeDraft(runId,collectFields()),120);
+  };
+
+  window.saveCommissioningProgress=function(runId){
+    const run=runById(runId);if(!run||isFinal(run))return;
+    const m=collectFields(),cur=currentStep(run),at=nowISO();
+    try{
+      trackerStore.update('run',run.id,draft=>{
+        const cr=draft.commissioningRun= draft.commissioningRun||{};
+        cr.currentReadings={...m};
+        cr.lastSavedAt=at;
+        const step=A(cr.steps).find(x=>sameId(x.itemId,cur?.result?.itemId));
+        if(step&&step.status!=='complete')step.note=m.note||'';
+        if(m.tachStart!=='')draft.tachStart=m.tachStart;
+        if(m.tachEnd!=='')draft.tachEnd=m.tachEnd;
+      },{message:'Commissioning progress saved.'});
+      clearDraft(run.id);
+      setRecorderSaveState('Saved to Run/Test ✓','saved');
+    }catch(error){alert('Progress was not saved: '+(error?.message||String(error)))}
   };
 
   window.saveCommissioningMeasurement=function(runId){
@@ -380,8 +403,13 @@
           ${!preview&&!final&&!engineStarted?'<button class="danger" onclick="startCommissioningEngineTimer('+run.id+')">ENGINE STARTED — START TIMER</button>':''}
           ${!preview&&!final&&engineStarted&&!oilConfirmed?'<button class="primary" onclick="confirmCommissioningOilPressure('+run.id+')">Oil Pressure Confirmed</button>':''}
           ${!preview&&!final&&engineStarted&&!engineStopped?'<button class="secondary" onclick="stopCommissioningEngineTimer('+run.id+')">Engine Stopped</button>':''}
-          ${!preview&&!final?'<button class="secondary" onclick="saveCommissioningMeasurement('+run.id+')">Save Reading Snapshot</button>':''}
+          ${!preview&&!final?'<button class="secondary" onclick="saveCommissioningMeasurement('+run.id+')">Log Reading</button>':''}
           ${!preview?'<button class="secondary" onclick="addCommissioningPhoto('+run.id+')">Photo / File</button>':''}
+        </div>
+        <div class="commissioning-save-row">
+          <div><b id="crSaveState" class="${Object.keys(readDraft(run.id)).length?'has-unsaved':'is-saved'}">${preview?'Preview • nothing is saved':Object.keys(readDraft(run.id)).length?'Unsaved changes • kept locally on this device':'Saved to Run/Test ✓'}</b>
+          <small>${preview?'Use Preview freely; it never changes tracker data.':'Save Progress syncs the current fields and step note without completing the step. Log Reading adds a timestamped measurement snapshot.'}</small></div>
+          ${!preview&&!final?'<button class="primary" onclick="saveCommissioningProgress('+run.id+')">Save Progress</button>':''}
         </div>
         <div class="commissioning-readings">
           ${readingField('RPM','crRpm',fields.rpm,'rpm','1',readonly)}
@@ -537,6 +565,12 @@
     .commissioning-recorder-top b{font-size:1.15rem}
     #crOilTimer.limit-exceeded{color:#b42318}
     .commissioning-engine-actions{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:10;background:var(--panel,#fff);padding:8px 0}
+    .commissioning-save-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--soft,#f5f7f8)}
+    .commissioning-save-row>div{display:flex;flex-direction:column;gap:2px}
+    .commissioning-save-row b{font-size:.82rem}
+    .commissioning-save-row small{font-size:.72rem;color:var(--muted)}
+    .commissioning-save-row .has-unsaved{color:#9a6700}
+    .commissioning-save-row .is-saved{color:#1a7f37}
     .commissioning-readings{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
     .commissioning-reading{display:flex;flex-direction:column;gap:4px;margin:0}
     .commissioning-reading span{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
@@ -559,6 +593,8 @@
       .commissioning-recorder-top{grid-template-columns:repeat(2,minmax(0,1fr))}
       .commissioning-readings{grid-template-columns:repeat(2,minmax(0,1fr))}
       .commissioning-recorder-entry{align-items:stretch;flex-direction:column}
+      .commissioning-save-row{align-items:stretch;flex-direction:column}
+      .commissioning-save-row button{width:100%}
     }
   `;
   document.head.appendChild(style);
