@@ -45,6 +45,32 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.59 sortable Maintenance columns (September 28)
+
+- Owner asked whether **System**, **Next Due**, etc. on the Maintenance table should be clickable/sortable. Agreed and implemented for consistency with Orders/Projects/Equipment.
+- PR #37 `v5.19.59: make Maintenance columns sortable` merged to `main` at `2419556daf1c85628bc0e3808373e0049c374d15`.
+- Workflow run `36492149136` passed JavaScript syntax and the complete regression suite. New `tests/maintenance-sort.test.mjs` passed default urgency ordering, Next Due urgency sorting both directions, unset-last behavior, text sorts, basis-label sorting and header-button markup.
+- Sortable Maintenance columns:
+  - **Item**
+  - **System**
+  - **Basis**
+  - **Next Due**
+  - **Status**
+- Active sort shows **▲ / ▼**; inactive sortable headers show **↕**.
+- Default sort remains **Status ascending** (Due → Due Soon → OK), preserving prior urgent-first behavior.
+- **Next Due** is not a text sort:
+  - date-based items use remaining days normalized to the existing 30-day Due Soon window;
+  - hour-based items use remaining hours normalized to the existing 10-hour Due Soon window;
+  - Date + hours uses whichever criterion is more urgent;
+  - overdue items sort before upcoming items;
+  - unset due values stay at the bottom even when reversing the sort.
+- Search, System filter and Due-state filter continue working with the active sort.
+- Basis display is normalized to **Date**, **Hours**, or **Date + hours**.
+- No Supabase data or maintenance records changed.
+- Main verified after merge: `APP_VERSION='5.19.59'`, `app-18-enhancements.js?v=5.19.59`, service-worker shell `n594zs-v5-19-59-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.59**. Open Maintenance and click Item/System/Basis/Next Due/Status; verify the arrows and row order change in both directions.
+
 ## v5.19.58 commissioning gate requirement drill-downs (September 28)
 
 - Owner requested that **First Start**, **Full-Power Ground Run**, and **Flight Release** be directly clickable so the actual requirements in each gate can be inspected.
