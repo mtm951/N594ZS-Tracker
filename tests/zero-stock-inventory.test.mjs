@@ -162,6 +162,26 @@ assert.equal(p2.disposition,'On Hand');
 ctx.applyPurchaseToInventory('p2');
 assert.equal(newPart.stockQty,3,'Repeated receive must not double-credit a purchase');
 
+// Cloud-connected Purchase -> Stock Received delegates the real handler to
+// the production atomic Purchase+Part transaction.
+const p5=purchase('p5','AS-0',2);p5.inventoryPartId=initial.id;db.purchases.push(p5);
+let purchaseMeta=null,purchaseStages=0;
+ctx.atomicReceiptOutbox={
+  shouldHandle:kind=>{assert.equal(kind,'purchase');return true},
+  stagePurchaseReceipt:(work,message,meta)=>{
+    purchaseStages++;purchaseMeta=meta;return ctx.trackerStore.batch(work,{message});
+  }
+};
+const beforeAtomicPurchase=initial.stockQty;
+ctx.applyPurchaseToInventory('p5');
+assert.equal(purchaseStages,1);
+assert.equal(purchaseMeta.purchaseId,'p5');
+assert.equal(Number(purchaseMeta.partId),Number(initial.id));
+assert.equal(purchaseMeta.qty,2);
+assert.equal(initial.stockQty,beforeAtomicPurchase+2);
+assert.equal(p5.inventoryApplied,true);
+assert.equal(p5.disposition,'On Hand');
+
 // Zero in Purchase Reconcile routes to link-only rather than inventing stock.
 const p4=purchase('p4','ZERO-RECON',0);db.purchases.push(p4);
 controls.reconcileRemaining='0';
