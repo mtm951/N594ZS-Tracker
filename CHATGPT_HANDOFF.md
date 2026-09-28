@@ -32,6 +32,19 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.46 manual PDF page-jump correction (September 28)
+
+- User acceptance on v5.19.45 was PARTIAL: Mike confirmed the private manual PDF opened successfully, but the browser ignored the requested `#page=N` fragment and opened at the beginning. Do NOT treat v5.19.45 source-page navigation as accepted.
+- PR #24 `v5.19.46: fix manual PDF page jumps with blob URLs` merged to `main` at `d79b57ea106aa4330d20b786b03570f030a8dabb`.
+- PR workflow run `36467759111` passed JavaScript syntax and the complete regression suite. `tests/manual-source-page.test.mjs` passed the new authenticated-download → blob URL → `#page=N&zoom=page-width` path; `tests/kitfox-manual-ui.test.mjs` remained green.
+- Root cause addressed: native browser PDF viewers may ignore page fragments on signed cross-origin Supabase Storage URLs even when the PDF itself opens correctly.
+- `openAttachmentPage(id,page)` now downloads the already-private PDF through the authenticated Supabase Storage client, creates a local browser blob URL, then navigates the synchronously opened tab to `blob:...#page=<N>&zoom=page-width`.
+- The old signed-URL page-jump path is removed. Normal attachment opening/downloading is otherwise unchanged.
+- No checklist records, review statuses, Supabase schema, Storage objects, or aircraft records were modified by this corrective release.
+- Main verified after merge: `APP_VERSION='5.19.46'`, `app-13-attachments.js?v=5.19.46`, service-worker shell `n594zs-v5-19-46-shell`, authenticated Storage `download(id)` path present, old `createSignedUrl(id,15*60)` page path absent.
+- Owner acceptance required: once Synced, refresh normally and confirm footer **v5.19.46**. Open a Kitfox checklist item and tap **Open PDF p.X**. Confirm the PDF opens directly at the requested page. Do not clear site data.
+
 ## v5.19.45 direct Kitfox manual source-page access (September 28)
 
 - PR #23 `v5.19.45: direct private manual source-page links` merged to `main` at `dc2002cdad3989b94007f172af3534615a4290b9`.
