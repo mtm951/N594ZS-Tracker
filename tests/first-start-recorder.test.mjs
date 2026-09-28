@@ -130,7 +130,7 @@ function harness({gateClear=true}={}){
   const h=harness({gateClear:true});
   h.ctx.createFirstStartRun();
   const run=h.db.runs[0];
-  let note=h.elements.get('crStepNote');if(!note){note={id:'crStepNote',value:'',checked:false,dataset:{},classList:{toggle(){},add(){},remove(){}};h.elements.set('crStepNote',note)}
+  let note=h.elements.get('crStepNote');if(!note){note={id:'crStepNote',value:'',checked:false,dataset:{},classList:{toggle(){},add(){},remove(){}}};h.elements.set('crStepNote',note)}
   note.value='Aborted for unexpected fuel smell.';
   h.ctx.abortCommissioningRun(run.id);
   assert.equal(h.db.runs[0].commissioningRun.status,'Aborted');
