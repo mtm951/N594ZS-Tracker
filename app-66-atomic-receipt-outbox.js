@@ -786,7 +786,7 @@
       const current=read();
       if(!current||current.operationId!==e.operationId||
          stable(current.changes)!==stable(e.changes))
-        throw new Error('Pending receipt changed during review. Reopen Atomic Receipt Testing.');
+        throw new Error('Pending transaction changed during review. Reopen Advanced / Troubleshooting → Inventory Transaction Safety.');
       await recoverLocal();
       // An on-device recovery trail must exist before clearing the live
       // journal. Refuse to acknowledge if storage cannot retain the archive.
@@ -950,13 +950,13 @@
       (e?.changes.some(r=>r.record_type==='log')?'<div class="notice"><b>Pending Work Log protected.</b> Do not edit, delete or adjust its consumed items until the transaction is acknowledged. Export the Pending Atomic Safety Copy before supervised recovery.</div>':'')+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
     const active=receiptReady();
-    openModal(modalHeader('Inventory transaction safety','Production inventory transactions • advanced recovery')+
-      '<div class="notice">Core physical-inventory changes use one durable, idempotent atomic journal automatically whenever this device is connected to an authenticated editable cloud workspace. This covers Order receipts, manual adjustments/reversals, Part use/consumption, and Purchase stock receipts. One pending operation must finish before another can overtake it.</div>'+
+    openModal(modalHeader('Inventory Transaction Safety','Status and recovery')+
+      '<div class="notice"><b>Inventory protection is automatic.</b> Order receipts, inventory adjustments, Part use, Work Log consumption, and Purchase stock receipts are protected as complete transactions when cloud-connected. You normally do not need to do anything here.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
-      '<div class="detail-section"><b>Order receipts: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">Linked Order + Part changes commit together; legitimate unlinked Order-only receipts are journaled as one operation.</div></div>'+
-      '<div class="detail-section"><b>Inventory adjustments: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">Adjustment and reversal history is version-checked and retry-safe.</div></div>'+
-      '<div class="detail-section"><b>Part use / consumption: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">Reserved, Assigned, Quick Part Used, and Work Log consumed-item additions share the same protected transaction path.</div></div>'+
-      '<div class="detail-section"><b>Purchase stock receipts: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">A linked Purchase and Part receive stock together or not at all.</div></div>'+
+      '<div class="detail-section"><b>Order receipts: '+(active?'Protected':'Waiting for cloud connection')+'</b><div class="muted small">Linked Order + Part changes commit together; legitimate unlinked Order-only receipts are journaled as one operation.</div></div>'+
+      '<div class="detail-section"><b>Inventory adjustments: '+(active?'Protected':'Waiting for cloud connection')+'</b><div class="muted small">Adjustment and reversal history is version-checked and retry-safe.</div></div>'+
+      '<div class="detail-section"><b>Part use / consumption: '+(active?'Protected':'Waiting for cloud connection')+'</b><div class="muted small">Reserved, Assigned, Quick Part Used, and Work Log consumed-item additions share the same protected transaction path.</div></div>'+
+      '<div class="detail-section"><b>Purchase stock receipts: '+(active?'Protected':'Waiting for cloud connection')+'</b><div class="muted small">A linked Purchase and Part receive stock together or not at all.</div></div>'+
       '<div class="modal-actions">'+
       (textOnlyPendingLogDrift(e)?'<button class="secondary" onclick="atomicReceiptOutbox.restorePendingWorkLog()">Backup and Restore Staged Work Log Text</button>':'')+
       (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">'+
@@ -964,7 +964,7 @@
       (e?(e.blocked?
         '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
         '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Transaction</button>'):'')+
-      '<button class="secondary" onclick="openCloudAccount()">Back to Cloud Account</button></div>');
+      '<button class="secondary" onclick="openAdvancedTroubleshooting()">Back to Advanced</button><button class="secondary" onclick="openCloudAccount()">Cloud Account</button></div>');
   }
   // Compatibility shim for any older cached UI that still calls this method.
   // Production receipts can no longer be disabled per device.
@@ -989,7 +989,7 @@
   async function retryFromUI(){
     if(!cloudSession||!cloudWorkspaceId)return alert('Sign in to your original workspace first.');
     const result=await window.saveCloudState();
-    if(result?.pending)return alert('Receipt is still pending. '+(result.error||'Check your connection or the cloud conflict.'));
+    if(result?.pending)return alert('The inventory transaction is still pending. '+(result.error||'Check your connection or the cloud conflict.'));
     openSettings();toast('Pending receipt synchronized.','good');
   }
   const previousSave=window.saveCloudState;
@@ -1016,14 +1016,14 @@
   };
   const previousReload=window.forceCloudReload;
   window.forceCloudReload=async function(){
-    if(pending())return alert('A receipt is awaiting atomic sync. Review it in Cloud Account before reloading shared data.');
+    if(pending())return alert('An inventory transaction is still awaiting sync. Open Advanced / Troubleshooting → Inventory Transaction Safety before reloading shared data.');
     return previousReload();
   };
   for(const action of ['reliabilityUseCloud','reliabilityKeepLocal','reliabilityApplyFieldMerge']){
     const prev=window[action];
     if(typeof prev!=='function')continue;
     window[action]=function(...args){
-      if(pending())return alert('Protecting an unsynced atomic receipt. Open Cloud Account and review it before this operation.');
+      if(pending())return alert('Protecting an unsynced inventory transaction. Open Advanced / Troubleshooting → Inventory Transaction Safety before this operation.');
       return prev(...args);
     };
   }
@@ -1042,9 +1042,17 @@
   const previousAccount=window.openCloudAccount;
   window.openCloudAccount=function(){
     previousAccount();
-    const buttons=document.querySelector('#modalBox .modal-actions');
-    if(buttons)buttons.insertAdjacentHTML('afterbegin',
-      '<button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Inventory Transaction Safety'+(pending()?' • Pending':'')+'</button>');
+    const modal=document.getElementById('modalBox');if(!modal)return;
+    const buttons=modal.querySelector('.modal-actions');
+    const card=document.createElement('div');
+    card.className=pending()?'notice':'card soft-card';
+    card.style.marginTop='12px';
+    card.innerHTML=pending()
+      ?'<b>Inventory transaction pending.</b><div class="muted small" style="margin-top:5px">Your data is protected, but this transaction must finish or be reviewed before other inventory changes can pass it.</div>'
+      :'<b>Inventory protection active</b><div class="muted small" style="margin-top:5px">Receipts, stock adjustments and physical Part use are transaction-protected automatically.</div>';
+    if(buttons)modal.insertBefore(card,buttons);else modal.appendChild(card);
+    if(pending()&&buttons)buttons.insertAdjacentHTML('afterbegin',
+      '<button class="primary" onclick="atomicReceiptOutbox.openSettings()">Review Pending Inventory Transaction</button>');
   };
   const originalStatus=window.cloudStatusLabel;
   window.cloudStatusLabel=function(label,kind){
