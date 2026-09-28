@@ -29,7 +29,14 @@ const root={
   alert:msg=>alerts.push(msg),confirm:()=>true,today:()=> '2026-09-26',
   trackerStore:{update(type,id,mutator){assert.equal(type,'checklist');const c=db.checklists.find(x=>x.id===id);mutator(c);changes++}},
   document:{getElementById:()=>null,createElement:()=>({innerHTML:'',firstElementChild:null})},
-  textareaField:()=>'<textarea id="kmReviewNote"></textarea>',val:()=> 'Reviewed Kitfox clarification'
+  textareaField:()=>'<textarea id="kmReviewNote"></textarea>',val:()=> 'Reviewed Kitfox clarification',
+  getAttachments:async(type,id)=>{
+    assert.equal(type,'document');assert.equal(id,1789567365526);
+    return [{id:'n594zs/document/1789567365526/file__3_Newer_Engine_install_912_64825-000.pdf',
+      name:'3_Newer_Engine_install_912_64825-000.pdf',type:'application/pdf'}];
+  },
+  openAttachmentPage:async(id,page)=>{root.openedSource={id,page};return true},
+  openDocumentDetail:id=>{root.openedDocument=id}
 };root.window=root;
 vm.createContext(root);
 vm.runInContext(script,root);
@@ -40,7 +47,12 @@ assert.equal(root.kitfoxManualChecklistStats(other).total,1);
 root.openKitfox912ManualChecklist('manual-B');
 assert.match(modal.at(-1),/Section B/);
 assert.match(modal.at(-1),/Manual p.12/);
+assert.match(modal.at(-1),/Open PDF p.12/);
+assert.match(modal.at(-1),/Open source PDF at this section/);
 assert.match(modal.at(-1),/Fig. B-4/);
+await root.openKitfoxManualSourcePage('manual-B','B-1');
+assert.equal(root.openedSource.page,12);
+assert.match(root.openedSource.id,/3_Newer_Engine_install_912_64825-000\.pdf$/);
 assert.match(modal.at(-1),/not an airworthiness signoff/i);
 root.setKitfoxManualStep('manual-B','B-1','verify');
 assert.equal(B.items[0].done,true,'One click must normalize stale done=true/Pending into a real verification');
@@ -66,7 +78,7 @@ assert.match(modal.at(-1),/Mark alternate cowl chapter N\/A/);
 assert.equal(other.items[0].done,false,'Never touch unrelated owner checklists');
 assert.equal(changes,4);
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.40'));
+assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.45'));
 assert.ok(html.includes('app-11-checklists.js?v=5.19.40'));
 assert.match(script,/isManual\?items\.filter\(i=>i\.reviewStatus==='Verified'\)\.length/,'Checklist list progress must also ignore stale done-only state');
-console.log('PASS: source-backed manual chapter UI, review/N-A/finding states, L.3 gap guard, source page, unchanged other checklists and correct deployment references.');
+console.log('PASS: source-backed manual chapter UI, direct private-PDF page routing, review/N-A/finding states, L.3 gap guard, unchanged other checklists and correct deployment references.');
