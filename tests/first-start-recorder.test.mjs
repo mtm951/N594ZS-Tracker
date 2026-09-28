@@ -87,6 +87,26 @@ function harness({gateClear=true}={}){
   assert.deepEqual(run.commissioningRun.steps.map(x=>x.itemId),['1','2']);
   assert.ok(h.messages.some(x=>/Run #1 started/.test(x)));
 
+  // Save Progress persists the current working state without advancing the checklist,
+  // creating a formal reading snapshot, squawk, or Work Log.
+  for(const [id,v] of [['crRpm','1800'],['crOilP','48'],['crFuelP','4.1'],['crBusV','13.9'],['crStepNote','Warm-up looks normal']]){
+    let el=h.elements.get(id);if(!el){el={id,value:'',checked:false,dataset:{},classList:{toggle(){},add(){},remove(){}}};h.elements.set(id,el)}
+    el.value=v;
+  }
+  h.ctx.saveCommissioningProgress(run.id);
+  assert.equal(h.db.checklists[0].items.find(x=>x.id==='1').done,false);
+  assert.equal(h.db.runs[0].commissioningRun.steps[0].status,'pending');
+  assert.equal(h.db.runs[0].commissioningRun.steps[0].note,'Warm-up looks normal');
+  assert.equal(h.db.runs[0].commissioningRun.currentReadings.rpm,'1800');
+  assert.equal(h.db.runs[0].commissioningRun.currentReadings.oilPressure,'48');
+  assert.equal(h.db.runs[0].commissioningRun.measurements.length,0);
+  assert.equal(h.db.runs[0].rpmMax,'');
+  assert.equal(h.db.squawks.length,0);
+  assert.equal(h.db.logs.length,0);
+  assert.ok(h.db.runs[0].commissioningRun.lastSavedAt);
+  assert.match(h.modal,/Save Progress/);
+  assert.match(h.modal,/Log Reading/);
+
   // Complete saves the current reading, Run/Test state and checklist state together.
   for(const [id,v] of [['crRpm','2500'],['crOilP','55'],['crFuelP','4.2'],['crBusV','14.1'],['crStepNote','Normal start']]){
     let el=h.elements.get(id);if(!el){el={id,value:'',checked:false,dataset:{},classList:{toggle(){},add(){},remove(){}}};h.elements.set(id,el)}
