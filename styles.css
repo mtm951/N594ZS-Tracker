@@ -67,3 +67,14 @@ input,select,textarea{width:100%;border:1px solid #c8d5df;border-radius:7px;back
 .order-item-suggestion small{margin-top:3px;font-size:11px;color:var(--muted)}
 .order-item-suggestion:hover,.order-item-suggestion.active,.order-item-suggestion:focus-visible{background:#eaf4ff;outline:none}
 .order-item-no-match{padding:11px 12px;color:var(--muted);font-size:12px}
+
+/* Documents table UX */
+#page-documents th.doc-sortable{padding:0}
+#page-documents th.doc-sortable:hover{background:#eef5fb}
+#page-documents .doc-sort-button{appearance:none;width:100%;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;padding:10px 12px;text-align:left;cursor:pointer;white-space:nowrap}
+#page-documents .doc-sort-button span{font-size:.72em;margin-left:5px;opacity:.55}
+#page-documents .doc-name-link{font-size:inherit;font-weight:850;text-align:left;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
+#page-documents .doc-name-link:hover{text-decoration-thickness:2px}
+#page-documents .doc-source-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#page-documents .doc-source-button{border:0;cursor:pointer;font-family:inherit}
+#page-documents .doc-source-link{text-decoration:none}
