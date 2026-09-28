@@ -108,5 +108,5 @@ const projectById=id=>db.projects.find(x=>x.id===Number(id));
 const partById=id=>db.parts.find(x=>x.id===Number(id));
 const orderById=id=>db.orders.find(x=>x.id===Number(id));
 const logById=id=>db.logs.find(x=>x.id===Number(id));
-const docById=id=>db.docs.find(x=>x.id===Number(id));
+const docById=id=>db.docs.find(x=>String(x.id)===String(id));
 const checklistById=id=>db.checklists.find(x=>String(x.id)===String(id));
