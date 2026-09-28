@@ -21,6 +21,37 @@
   };
   window.kitfoxManualChecklistStats=stats;
 
+  function manualCheckpointLabel(c){
+    const raw=String(c?.manualProgressSavedAt||'').trim();
+    if(!raw)return 'No explicit checkpoint yet';
+    const d=new Date(raw);
+    if(Number.isNaN(d.getTime()))return 'Checkpoint saved';
+    try{return 'Last checkpoint '+d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}
+    catch(_e){return 'Checkpoint saved'}
+  }
+  function refreshManualSaveStatus(c){
+    const box=document.getElementById('modalBox');
+    const el=box?.querySelector?.('[data-km-save-status]');
+    if(el)el.textContent='Review changes save automatically • '+manualCheckpointLabel(c);
+  }
+  window.saveKitfoxManualProgress=function(cid){
+    const c=current(cid);if(!c)return;
+    const at=new Date().toISOString();
+    try{
+      trackerStore.update('checklist',c.id,draft=>{
+        draft.manualProgressSavedAt=at;
+      },{message:'Manual checklist progress checkpoint saved.'});
+      refreshManualSaveStatus(current(cid));
+      if(typeof toast==='function')toast('Checklist progress saved.','good');
+    }catch(error){
+      alert('Progress checkpoint was not saved: '+(error?.message||String(error)));
+    }
+  };
+  window.closeKitfoxManualChecklist=function(){
+    if(typeof trackerBack==='function')return trackerBack();
+    closeModal();
+  };
+
   function current(id){return db.checklists.find(c=>String(c.id)===String(id)&&manual(c))||null}
   function step(c,sid){return A(c?.items).find(i=>String(i.id)===String(sid))||null}
   function sourceDoc(c){
@@ -224,21 +255,45 @@
       ' • Section '+E(c.manualChapter)+' • printed pages '+E(c.sourcePages||'')+
       (doc?'</div><div class="action-row"><button id="kmSourcePage" class="primary">Open source PDF at this section</button><button id="kmSource" class="secondary">Document record</button></div>':'</div>')+
       '</div>'+
-      '<div class="modal-actions" style="flex-wrap:wrap">'+
+      '<div class="modal-actions km-chapter-nav" style="flex-wrap:wrap">'+
         (n.prev?'<button class="secondary" id="kmPrev">← Section '+E(n.prev.manualChapter)+'</button>':'')+
         '<button class="secondary" id="kmBack">All checklists</button>'+
         (alternate?'<button class="secondary" id="kmBulkNA">Mark alternate cowl chapter N/A</button>':'')+
         (n.next?'<button class="primary" id="kmNext">Section '+E(n.next.manualChapter)+' →</button>':'')+
+      '</div>'+
+      '<div class="km-manual-footer">'+
+        '<div class="km-save-state"><b data-km-save-status>Review changes save automatically • '+E(manualCheckpointLabel(c))+'</b>'+
+          '<small>Save Progress records an explicit checkpoint without changing any review state.</small></div>'+
+        '<div class="km-footer-actions"><button class="secondary" id="kmClose">Close</button><button class="primary" id="kmSaveProgress">Save Progress</button></div>'+
       '</div>',true);
     const box=document.getElementById('modalBox');if(!box)return;
     bindItemButtons(box);
     box.querySelector('#kmPrev')?.addEventListener('click',()=>openKitfox912ManualChecklist(n.prev.id));
     box.querySelector('#kmNext')?.addEventListener('click',()=>openKitfox912ManualChecklist(n.next.id));
     box.querySelector('#kmBack')?.addEventListener('click',()=>{closeModal();navTo('checklists')});
+    box.querySelector('#kmClose')?.addEventListener('click',()=>closeKitfoxManualChecklist());
+    box.querySelector('#kmSaveProgress')?.addEventListener('click',()=>saveKitfoxManualProgress(c.id));
     box.querySelector('#kmBulkNA')?.addEventListener('click',()=>bulkNA(c.id));
     box.querySelector('#kmSourcePage')?.addEventListener('click',()=>openSourcePage(c.id));
     box.querySelector('#kmSource')?.addEventListener('click',()=>openDocumentDetail(doc.id));
   };
+
+  const style=document.createElement('style');
+  style.id='kitfoxManualSaveFooterStyles';
+  style.textContent=`
+    .km-manual-footer{position:sticky;bottom:0;z-index:18;display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px -15px -15px;padding:12px 15px;background:var(--panel,#fff);border-top:1px solid var(--border);box-shadow:0 -6px 18px rgba(0,0,0,.08)}
+    .km-save-state{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .km-save-state b{font-size:.82rem}
+    .km-save-state small{font-size:.72rem;color:var(--muted)}
+    .km-footer-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+    @media(max-width:800px){
+      .km-manual-footer{align-items:stretch;flex-direction:column}
+      .km-footer-actions{width:100%}
+      .km-footer-actions button{flex:1 1 auto}
+      .km-footer-actions .primary{margin-left:auto}
+    }
+  `;
+  document.head.appendChild(style);
 
   window.openKitfoxManualStepNote=function(cid,iid){
     const c=current(cid),i=step(c,iid);if(!i)return;
