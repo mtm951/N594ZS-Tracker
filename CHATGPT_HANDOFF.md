@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.60** (Documents clickability fix; PR #38 merged September 28 at `229770ce806c9b3ad85aa356fdc49ae22537459f`). PR regression CI passed.
+- Current release: **v5.19.61** (Documents source UX + string-ID hardening; PR #39 merged September 28 at `41aaf589899489c350f51fa319f0b9ebead547b3`). PR regression CI passed.
 
 
 
@@ -45,6 +45,32 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.61 Documents source UX + string-ID hardening (September 28)
+
+- Owner approved a final **Documents / source-reference cleanup pass** before returning to commissioning.
+- PR #39 `v5.19.61: upgrade Documents source UX` merged to `main` at `41aaf589899489c350f51fa319f0b9ebead547b3`.
+- Final PR workflow run `36493864714` passed JavaScript syntax and the complete regression suite.
+- Documents table improvements:
+  - **Document**, **Type**, **Revision**, **System**, **Linked projects**, and **Location / source** are sortable.
+  - Active sort shows **▲ / ▼**; inactive sortable headers show **↕**.
+  - Document names are now visibly underlined/clickable while the rest of the row still opens the tracker Document record.
+  - Source cells asynchronously resolve actual tracker attachments without blocking the table.
+  - Attached PDFs show **PDF attached • Open PDF**.
+  - Other attachments show **File attached • Open file**.
+  - Stored manufacturer URLs remain directly available as **Web link**, including when a PDF is also attached.
+  - Records with no actual attachment or URL show **Needs file / link** while preserving any existing owner action/location note underneath.
+  - Attachment source status refreshes automatically after a Document upload or attachment deletion.
+- Stable string Document IDs were audited outside the Documents page as well:
+  - Project → Relevant Documents links now safely open string-ID records.
+  - Project → Link Document no longer coerces Document IDs through numeric-only `selectedNumber()`.
+  - Work Log → Relevant Documents and Component View → Related Documents are string-ID safe.
+  - Annual Inspection source-document lookup and source links no longer coerce IDs to numbers.
+  - Kitfox manual source-document lookup no longer coerces IDs to numbers.
+- Added/expanded regression coverage for Documents sorting, direct PDF/file/web source display, missing-source status, numeric + string ID rows, Project linking, and cross-view string-ID safety.
+- No Supabase records, Document records, checklist completion states, or aircraft records changed.
+- Main verified after merge: `APP_VERSION='5.19.61'`, changed script/style cache-busters are `v=5.19.61`, service-worker shell `n594zs-v5-19-61-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.61**. On **Documents**, click the six sortable headers, open several document names/rows, try **PDF attached • Open PDF** or **Web link**, and confirm records without a real source show **Needs file / link** with their existing note beneath it.
 
 ## v5.19.60 Documents table clickability fix (September 28)
 
