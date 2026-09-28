@@ -140,7 +140,7 @@ function openChecklistDetail(id){
       <div class="detail-card"><div class="section-tools"><h3>Evidence / Supporting Files</h3><button class="icon-btn" id="ckUpload">+ Upload</button></div><div class="attach-drop" id="ckDrop">Attach photos, screenshots or reference files for this checklist</div><div id="attachments-checklist-${esc(String(c.id))}"></div></div>
     </div><div>
       <div class="detail-card"><div class="section-tools"><h3>Checklist Details</h3><button class="icon-btn" id="ckDetailEdit">Edit</button></div><label>Purpose</label><div class="detail-text">${esc(c.purpose||'—')}</div><div class="detail-section"><label>Notes / Source</label><div class="detail-text">${esc(c.notes||'—')}</div></div></div>
-      ${sourceDocs.length?`<div class="detail-card"><h3>Source Documents</h3><div class="muted small" style="margin-bottom:8px">Manufacturer references used by this checklist. Item-level Source buttons open the applicable record.</div>${sourceDocs.map(d=>`<div class="kv click-row" data-ck-source-doc="${esc(String(d.id))}"><span>${esc(d.name)}</span><b>${esc(d.revision||d.issueDate||'Open')}</b></div>`).join('')}</div>`:''}
+      ${sourceDocs.length?`<div class="detail-card"><h3>Source Documents</h3><div class="muted small" style="margin-bottom:8px">Manufacturer references used by this checklist. Item-level Source buttons open the attached PDF at the cited page when available; otherwise they open the manufacturer source or Document record.</div>${sourceDocs.map(d=>`<div class="kv click-row" data-ck-source-doc="${esc(String(d.id))}"><span>${esc(d.name)}</span><b>${esc(d.revision||d.issueDate||'Open')}</b></div>`).join('')}</div>`:''}
       ${pr?`<div class="detail-card"><h3>Linked Project</h3><div class="kv click-row" id="ckLinkedProject"><span>${esc(pr.title)}</span>${pill(pr.status)}</div></div>`:''}
     </div></div>`,true);
 
@@ -157,9 +157,14 @@ function openChecklistDetail(id){
   box?.querySelectorAll('[data-ck-source-doc]').forEach(el=>el.addEventListener('click',()=>openDocumentDetail(el.dataset.ckSourceDoc)));
   box?.querySelector('#ckLinkedProject')?.addEventListener('click',()=>openProjectDetail(pr.id));
   box?.querySelectorAll('[data-detail-check]').forEach(el=>el.addEventListener('change',e=>toggleChecklistItem(c.id,el.dataset.itemId,e.target.checked)));
-  box?.querySelectorAll('[data-detail-source]').forEach(el=>el.addEventListener('click',()=>{
+  box?.querySelectorAll('[data-detail-source]').forEach(el=>el.addEventListener('click',async()=>{
     const item=checklistItemById(c,el.dataset.itemId),doc=checklistItemSourceDoc(c,item);
-    if(doc)openDocumentDetail(doc.id);
+    if(!doc)return;
+    if(typeof openSourceReference==='function'){
+      await openSourceReference(doc,item?.sourcePage||'',{fallbackToDocument:true});
+      return;
+    }
+    openDocumentDetail(doc.id);
   }));
   box?.querySelectorAll('[data-detail-edit]').forEach(el=>el.addEventListener('click',()=>editChecklistItem(c.id,el.dataset.itemId)));
   Promise.resolve(renderAttachments('checklist',c.id)).catch(e=>console.warn('Checklist attachments failed',e));
