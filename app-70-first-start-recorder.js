@@ -1,5 +1,5 @@
 'use strict';
-// ---------- V5.19.52 FIRST START / GROUND RUN RECORDER ----------
+// ---------- V5.19.53 FIRST START / GROUND RUN RECORDER ----------
 // Structured commissioning session built on Runs/Tests + source-backed checklist + Squawks + Work Log.
 
 (function(){
@@ -407,9 +407,9 @@
           ${!preview?'<button class="secondary" onclick="addCommissioningPhoto('+run.id+')">Photo / File</button>':''}
         </div>
         <div class="commissioning-save-row">
-          <div><b id="crSaveState" class="${Object.keys(readDraft(run.id)).length?'has-unsaved':'is-saved'}">${preview?'Preview • nothing is saved':Object.keys(readDraft(run.id)).length?'Unsaved changes • kept locally on this device':'Saved to Run/Test ✓'}</b>
-          <small>${preview?'Use Preview freely; it never changes tracker data.':'Save Progress syncs the current fields and step note without completing the step. Log Reading adds a timestamped measurement snapshot.'}</small></div>
-          ${!preview&&!final?'<button class="primary" onclick="saveCommissioningProgress('+run.id+')">Save Progress</button>':''}
+          <div><b id="crSaveState" class="${preview?'is-preview':Object.keys(readDraft(run.id)).length?'has-unsaved':'is-saved'}">${preview?'Preview • nothing is saved':Object.keys(readDraft(run.id)).length?'Unsaved changes • kept locally on this device':'Saved to Run/Test ✓'}</b>
+          <small>${preview?'This is how the real recorder save control will appear. Preview never writes tracker data.':'Save Progress syncs the current fields and step note without completing the step. Log Reading adds a timestamped measurement snapshot.'}</small></div>
+          ${preview?'<button class="primary" disabled title="Available only after a real commissioning Run/Test is created">Save Progress — real run only</button>':!final?'<button class="primary" onclick="saveCommissioningProgress('+run.id+')">Save Progress</button>':''}
         </div>
         <div class="commissioning-readings">
           ${readingField('RPM','crRpm',fields.rpm,'rpm','1',readonly)}
@@ -571,6 +571,7 @@
     .commissioning-save-row small{font-size:.72rem;color:var(--muted)}
     .commissioning-save-row .has-unsaved{color:#9a6700}
     .commissioning-save-row .is-saved{color:#1a7f37}
+    .commissioning-save-row .is-preview{color:var(--muted)}
     .commissioning-readings{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
     .commissioning-reading{display:flex;flex-direction:column;gap:4px;margin:0}
     .commissioning-reading span{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
