@@ -20,17 +20,17 @@ const db={
     system:'Engine',projectId:null,notes:'Current source pack',
     documentId:'rotax-om-912-ed4-r2-2025',
     sourceDocumentIds:['rotax-om-912-ed4-r2-2025','1789574858345','rotax-si-912-018-r4-2021'],
-    rotaxSourceManaged:true,sourcePack:'rotax-912-first-start-closeout-2026',
+    rotaxSourceManaged:true,sourcePack:'rotax-912-first-start-closeout-2026',commissioningReadinessPack:true,
     items:[
       {id:'FS-P2',done:false,note:'',group:'First-start gate',
        text:'Complete oil-system purge prerequisite when applicable.',
        sourceDocumentId:'rotax-si-912-018-r4-2021',sourcePage:'SI p.2–10',
-       sourceSection:'Compliance / Accomplishment',
+       sourceSection:'Compliance / Accomplishment',requiredBefore:'first-start',
        moreInfo:'Separate critical prerequisite before first start.'},
       {id:'8',done:false,note:'Observed during run',group:'Immediate after start',
        text:'Verify oil pressure rises immediately.',
        sourceDocumentId:'rotax-si-912-018-r4-2021',sourcePage:'SI p.8',
-       sourceSection:'3.5 Warming up period',
+       sourceSection:'3.5 Warming up period',requiredBefore:'full-power',
        moreInfo:'Use the stricter post-purge criterion when applicable.'}
     ]
   }],
@@ -69,6 +69,8 @@ assert.equal(ctx.checklistItemSourceDoc(c,c.items[0]).id,'rotax-si-912-018-r4-20
 
 ctx.openChecklistDetail('rotax-first-start');
 assert.match(modal,/First-start gate/);
+assert.match(modal,/Before First Start/);
+assert.match(modal,/Before Full-Power/);
 assert.match(modal,/ROTAX SI-912-018R4/);
 assert.match(modal,/SI p\.2–10/);
 assert.match(modal,/Compliance \/ Accomplishment/);
