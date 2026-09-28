@@ -394,6 +394,7 @@
     });
     return credited;
   }
+  window.applyPartUseCreditsTx=applyUseCreditsTx;
 
   function saveAtomicAssignedPartUse(project,part,qty){
     var preview=previewPhysicalUseCredits(part,qty),on=partAvailable(part);
