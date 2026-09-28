@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.61** (Documents source UX + string-ID hardening; PR #39 merged September 28 at `41aaf589899489c350f51fa319f0b9ebead547b3`). PR regression CI passed.
+- Current release: **v5.19.62** (inline Project task builder; PR #40 merged September 28 at `edcd0fa66aa9f4c23ae6f0c7721ecba675fa6208`). PR regression CI passed.
 
 
 
@@ -45,6 +45,29 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.62 inline Project task builder (September 28)
+
+- Owner requested that the **Edit Project** form make creation of the clickable Step-by-step task list fast and spreadsheet-like instead of requiring one separate popup per task.
+- PR #40 `v5.19.62: add inline Project task builder` merged to `main` at `edcd0fa66aa9f4c23ae6f0c7721ecba675fa6208`.
+- Final PR workflow run `36494759889` passed JavaScript syntax and the complete regression suite.
+- Edit Project now places **Step-by-step tasks** directly after **Plan / Notes**:
+  - each saved task appears as a checkbox + editable text field;
+  - there is always a blank trailing task field;
+  - pressing **Tab** from a task moves directly to the next task text field;
+  - pressing **Tab** from the last filled task creates/focuses another line;
+  - **Enter** does the same;
+  - pasting multiple lines creates one task per nonblank line;
+  - **+ Task** explicitly adds/focuses another task;
+  - **×** removes a draft row;
+  - existing per-step notes/details are preserved and indicated with a **details saved** badge.
+- Inline edits are a draft until **Save Project**. Closing/canceling the Project editor does not mutate the saved checklist.
+- Saving preserves existing step IDs and any extra step metadata/notes; new rows receive new IDs and ordered positions.
+- If **Use checklist completion as project progress** is enabled, the newly saved inline checkbox state continues to drive Project progress through the existing workflow logic.
+- The existing Project detail **Step-by-Step Tasks** card remains the normal clickable working checklist; individual task detail/note editing remains available there.
+- No production Project, checklist, aircraft, inventory, or Supabase records were modified by this code release.
+- Main verified after merge: `APP_VERSION='5.19.62'`, `app-20-workflow.js?v=5.19.62`, `workflow.css?v=5.19.62`, service-worker shell `n594zs-v5-19-62-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.62**. Open any Project → **Edit fields**, scroll to **Plan / Notes**, type several tasks using Tab/Enter between them, save, and verify they appear immediately as the clickable checklist at the top of the Project.
 
 ## v5.19.61 Documents source UX + string-ID hardening (September 28)
 
