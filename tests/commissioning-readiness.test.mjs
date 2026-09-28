@@ -30,6 +30,8 @@ const ctx={
   modalHeader:(title,subtitle='')=>'<h2>'+title+'</h2><div>'+subtitle+'</div>',
   openModal:html=>{modal=html},
   closeModal(){},navTo(){},openChecklistDetail(){},
+  pageTargets:[],
+  goToTrackerPageFromModal(page){this.pageTargets.push(page);return true},
   renderReadiness(){},renderDashboard(){},
   setTimeout:fn=>{fn();return 1},
   document:{
@@ -76,5 +78,8 @@ assert.match(modal,/Engine prerequisites/);
 assert.match(modal,/Open start blocker/);
 assert.match(modal,/data-commissioning-checklist="pack-a"/);
 assert.match(modal,/onclick="openChecklistDetail\('pack-a'\)"/);
+
+ctx.openCommissioningReadiness();
+assert.deepEqual(ctx.pageTargets,['readiness'],'Readiness Overview did not use atomic modal-to-page navigation');
 
 console.log('commissioning readiness cumulative gate regression tests passed');
