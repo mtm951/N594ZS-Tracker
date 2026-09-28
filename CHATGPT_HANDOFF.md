@@ -37,6 +37,48 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.51 guided First Start / Ground Run Recorder (September 28)
+
+- PR #29 `v5.19.51: add guided first-start / ground-run recorder` merged to `main` at `ad56d91e65dbbe22cdca2a45dedc8e0bc5ffe2f2`.
+- Final workflow run `36483472253` passed JavaScript syntax and the complete regression suite. New `tests/first-start-recorder.test.mjs` passed durable Run/Test creation, Complete → checklist update, Finding → unresolved Squawk, Finish/Abort → exactly one linked Work Log, and no duplicate Work Log on repeated Finish. Existing commissioning-readiness, nested modal-navigation, source-backed checklist, Kitfox desktop/mobile PDF and atomic-inventory suites remained green.
+- New `app-70-first-start-recorder.js` extends the v5.19.49 Commissioning Readiness panel. It does not create a parallel database or new Supabase schema.
+- Data model:
+  - primary session record = existing `run` / Runs & Tests record;
+  - source checklist = existing **ROTAX 912 ULS — First Start / Initial Ground Run** checklist;
+  - unresolved discrepancy = existing `squawk` record;
+  - final narrative = existing `log` / Work Log record;
+  - photos/files attach to the Run/Test record.
+- Gate behavior:
+  - a real commissioning run can start only when the cumulative **First Start** gate is clear;
+  - while First Start is blocked, **Preview Recorder** is available and does not write data, create a Run/Test, change a checklist item or create a Squawk;
+  - if an unfinished guided run already exists, Readiness shows **Resume Recorder** instead of allowing a duplicate active session.
+- Starting a real session immediately creates a durable Run/Test record with `commissioningRun.kind='first-start'`, Run number, start timestamp, checklist-step snapshot, post-purge flag, current step, measurement history and finding links. This means the session survives refresh/device changes once synced.
+- Recorder UI:
+  - session elapsed timer;
+  - engine-run timer;
+  - **ENGINE STARTED — START TIMER** action;
+  - **Oil Pressure Confirmed** action;
+  - post-purge 5-second or general 10-second oil-pressure cue (workflow cue only; manufacturer/aircraft procedure controls);
+  - **Engine Stopped** action;
+  - readings for RPM, oil pressure, oil temp, coolant temp, CHT, fuel pressure, bus voltage, ignition A/B drops, idle RPM, static RPM and engine-hours start/end;
+  - explicit reading snapshots;
+  - Previous / Source / Finding / Complete & Next / Next;
+  - phone-friendly two-column measurement layout;
+  - local unsaved input draft between explicit saves.
+- Persistence behavior:
+  - **Complete & Next** writes the Run/Test step result + measurement snapshot and checks the source checklist item in one synchronous `trackerStore.batch`;
+  - **Finding** requires a note, creates an unresolved **Before Flight** Squawk linked to the Run/Test/checklist item, records the finding in the session, and deliberately leaves the checklist item incomplete;
+  - **Abort Run** requires a reason, creates an unresolved Before Flight Squawk, marks the Run/Test Aborted and creates one linked Work Log;
+  - **Finish Session** records Satisfactory only if all guided steps are complete and no findings remain; otherwise it records Follow-up Needed and leaves readiness blockers intact;
+  - finalization creates one and only one linked Work Log with structured run measurements/summary;
+  - completed source checklist items feed the existing commissioning-readiness counts automatically.
+- Recorder Run/Test detail exposes **Resume/View Guided Session** and the linked Work Log when available. Attachment upload on an active commissioning Run returns to the recorder rather than kicking the user out to the generic Run detail.
+- CI found and fixed a real pre-merge bug in minimum-reading aggregation: blank prior minima were being coerced to numeric zero. v5.19.51 correctly treats blank as unset while preserving a genuine measured zero. This affects oil-pressure minimum, fuel-pressure minimum and bus-voltage minimum.
+- No production Supabase rows or checklist completion states were changed by this release.
+- Main verified after merge: `APP_VERSION='5.19.51'`, `app-70-first-start-recorder.js?v=5.19.51`, service-worker shell `n594zs-v5-19-51-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.51**. Open **Readiness → Commissioning Readiness**. Because First Start is still blocked in live data, verify the new **Guided run recorder** row shows **Preview Recorder** plus the blocked/start action. Open Preview and confirm the phone/desktop layout, measurement fields, guided step card and navigation. Preview must not change any checklist counts or create a Run/Test.
+
 ## v5.19.50 nested modal Back / Esc navigation (September 28)
 
 - Owner requested that drilling from **Readiness → commissioning gate → checklist** should allow **Esc / X / Back** to return to the previous popup rather than dropping directly back to the Readiness page.
@@ -54,6 +96,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - No production Supabase records or checklist completion states changed in this release.
 - Main verified after merge: `APP_VERSION='5.19.50'`, `app-35-navigation-ux.js?v=5.19.50`, `app-69-commissioning-readiness.js?v=5.19.50`, service-worker shell `n594zs-v5-19-50-shell`.
 - Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.50**. Open **Readiness → First Start → any checklist**. Press **Esc** once and confirm the First Start gate breakdown returns; press Esc again and confirm the gate popup closes to Readiness. The X buttons should behave the same way.
+- **OWNER ACCEPTANCE COMPLETE:** Mike confirmed v5.19.50 works great, including nested Esc/X/Back behavior.
 
 ## v5.19.49 commissioning readiness dashboard / dependency gates (September 28)
 
