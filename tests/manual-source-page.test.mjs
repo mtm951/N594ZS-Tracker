@@ -80,7 +80,7 @@ const ctx={
   alert:msg=>{throw new Error('Unexpected alert: '+msg)},
   objectUrls:[],formatBytes:()=>'',esc:String,reopenDetail(){},toast(){},renderStorageStats(){},
   openedDocument:null,
-  openDocumentDetail(id){this.openedDocument=id},
+  openDocumentDetail(id){ctx.openedDocument=id},
   modalHeader:(title,subtitle='')=>'<h2>'+title+'</h2><div>'+subtitle+'</div>',
   openModal:html=>{modalHTML=html}
 };
