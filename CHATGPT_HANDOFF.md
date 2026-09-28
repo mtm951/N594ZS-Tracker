@@ -33,6 +33,24 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.47 mobile in-app manual PDF viewer (September 28)
+
+- Owner acceptance on v5.19.46 was split: Mike confirmed the requested source page works perfectly on desktop, but his phone still opened the manual without honoring the requested page. Treat v5.19.46 as desktop-accepted / mobile-not-accepted.
+- PR #25 `v5.19.47: add mobile in-app manual PDF viewer` merged to `main` at `7a0a2039bace25286329a8afbfbd2931a6ad0b21`.
+- PR workflow run `36468495235` passed JavaScript syntax and the complete regression suite. The updated `tests/manual-source-page.test.mjs` passed both the desktop native blob viewer path and the phone in-app PDF.js viewer path; `tests/kitfox-manual-ui.test.mjs` remained green.
+- Root cause: mobile OS/native PDF viewers can ignore page fragments even on local blob URLs. Desktop Chrome/Edge honored the blob `#page=N` path; the phone did not.
+- v5.19.47 keeps the already-working desktop native behavior unchanged.
+- On phone/tablet environments (mobile UA or coarse-pointer / narrow display), source-page opening now uses the PDF.js library already loaded by the tracker:
+  - the private PDF is downloaded through the authenticated Supabase Storage client;
+  - PDF.js loads it in memory and renders the exact requested source page into a canvas inside a wide tracker modal;
+  - the viewer includes Previous, editable page number, page count, and Next controls;
+  - canvas rendering is sized to the mobile viewport and capped at 2x device-pixel-ratio for clarity/performance;
+  - if PDF.js cannot render, the code falls back to the existing native blob viewer instead of dead-ending.
+- No checklist records, review statuses, Supabase schema, Storage objects, or aircraft records were changed by this release.
+- Main verified after merge: `APP_VERSION='5.19.47'`, `app-13-attachments.js?v=5.19.47`, service-worker shell `n594zs-v5-19-47-shell`, mobile detection + PDF.js renderer + Previous/Next controls present.
+- Owner acceptance required: once Synced, refresh phone normally and confirm footer **v5.19.47**. Tap any Kitfox **Open PDF p.X** button. On the phone it should now open an in-app **Mobile source viewer** already rendered at page X, not hand off to the native PDF viewer. Do not clear site data.
+
 ## v5.19.46 manual PDF page-jump correction (September 28)
 
 - User acceptance on v5.19.45 was PARTIAL: Mike confirmed the private manual PDF opened successfully, but the browser ignored the requested `#page=N` fragment and opened at the beginning. Do NOT treat v5.19.45 source-page navigation as accepted.
