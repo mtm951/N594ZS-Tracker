@@ -539,12 +539,12 @@ console.log('partial reserved use and warning cancellation passed');
   h.saveAssignedPartUse(71,70);
   assert.equal(captured.mode,'assigned');
   assert.equal(saves,1);
-  assert.equal(part.stockQty,2);
-  assert.equal(purchase.inventoryReceiptMaterializedQty,2);
+  assert.equal(db.parts[0].stockQty,2);
+  assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,2);
   assert.equal(db.logs.length,1);
   assert.equal(db.logs[0].origin,'assigned-part-use');
-  assert.equal(project.partsUsed.length,1);
-  assert.equal(h.partAvailable(part),0);
+  assert.equal(db.projects[0].partsUsed.length,1);
+  assert.equal(h.partAvailable(db.parts[0]),0);
 }
 
 // Regression: declining an Assigned -> Used overdraw warning cannot consume
@@ -587,12 +587,12 @@ console.log('partial reserved use and warning cancellation passed');
   h.saveQuickPartUse();
   assert.equal(captured.mode,'quick');
   assert.equal(captured.reservationId,810);
-  assert.equal(project.plannedParts.length,0,'Quick use did not release exhausted reservation');
-  assert.equal(project.partsUsed[0].qty,2);
+  assert.equal(db.projects[0].plannedParts.length,0,'Quick use did not release exhausted reservation');
+  assert.equal(db.projects[0].partsUsed[0].qty,2);
   assert.equal(db.logs[0].origin,'quick-part-use');
-  assert.equal(purchase.inventoryReceiptMaterializedQty,2);
-  assert.equal(part.stockQty,2);
-  assert.equal(h.partAvailable(part),0);
+  assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,2);
+  assert.equal(db.parts[0].stockQty,2);
+  assert.equal(h.partAvailable(db.parts[0]),0);
 }
 
 // Existing Work Log -> Add Consumed Item uses the same production transaction
@@ -617,12 +617,12 @@ console.log('partial reserved use and warning cancellation passed');
     stageConsumption:(work,_message,meta)=>{captured=meta;h.trackerStore.batch(work,{persist:false})}};
   h.saveConsumedPart(92);
   assert.equal(captured.mode,'log-add');
-  assert.equal(log.consumedParts.length,1);
-  assert.equal(log.consumedParts[0].partId,90);
-  assert.ok(part.linkedProjectIds.includes(91));
-  assert.equal(purchase.inventoryReceiptMaterializedQty,1);
-  assert.equal(part.stockQty,1);
-  assert.equal(h.partAvailable(part),0);
+  assert.equal(db.logs[0].consumedParts.length,1);
+  assert.equal(db.logs[0].consumedParts[0].partId,90);
+  assert.ok(db.parts[0].linkedProjectIds.includes(91));
+  assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,1);
+  assert.equal(db.parts[0].stockQty,1);
+  assert.equal(h.partAvailable(db.parts[0]),0);
 }
 console.log('assigned, quick and Work Log production consumption handlers passed');
 
