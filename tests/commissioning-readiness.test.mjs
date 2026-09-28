@@ -56,6 +56,7 @@ assert.equal(start.open,1);
 assert.equal(start.clear,false);
 assert.equal(start.rows.length,1);
 assert.equal(start.rows[0].next.id,'a2');
+assert.deepEqual(start.rows[0].items.map(x=>x.id),['a1','a2']);
 
 const ground=ctx.commissioningGateInfo('full-power');
 assert.equal(ground.total,3,'full-power gate did not include first-start requirements');
@@ -78,6 +79,17 @@ assert.match(modal,/Engine prerequisites/);
 assert.match(modal,/Open start blocker/);
 assert.match(modal,/data-commissioning-checklist="pack-a"/);
 assert.match(modal,/onclick="openChecklistDetail\('pack-a'\)"/);
+assert.match(modal,/Requirements in this gate/);
+assert.match(modal,/3 cumulative requirements/);
+assert.match(modal,/Completed prerequisite/);
+assert.match(modal,/Open ground blocker/);
+assert.match(modal,/Complete/);
+assert.match(modal,/Open/);
+assert.match(modal,/Full-Power/);
+assert.match(modal,/Expand all/);
+assert.match(modal,/Collapse all/);
+assert.match(modal,/Open checklist/);
+assert.match(src,/View requirements →/,'gate cards do not visibly advertise drill-down behavior');
 
 ctx.openCommissioningReadiness();
 assert.deepEqual(ctx.pageTargets,['readiness'],'Readiness Overview did not use atomic modal-to-page navigation');
