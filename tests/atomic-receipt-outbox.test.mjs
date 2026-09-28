@@ -411,7 +411,7 @@ function receiptWork(tx){
     storage:{[OPT]:'0',[OUTBOX]:JSON.stringify(operation),[PENDING]:'1'}
   }});
   h.ctx.atomicReceiptOutbox.openSettings();
-  assert.match(h.lastModal(),/Production receipts/);
+  assert.match(h.lastModal(),/Order receipts use the durable atomic transaction path automatically/);
   assert.match(h.lastModal(),/Order receipts: Atomic protection active/);
   assert.doesNotMatch(h.lastModal(),/Enable Receipt Testing|Turn Off for New Receipts/);
   assert.match(h.lastModal(),/no linked Part update/);
