@@ -16,7 +16,7 @@
   const A=v=>Array.isArray(v)?v:[];
   const E=v=>typeof esc==='function'?esc(v):String(v??'');
   const nowISO=()=>new Date().toISOString();
-  const numeric=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
+  const numeric=v=>{if(v===null||v===undefined||String(v).trim()==='')return null;const n=Number(v);return Number.isFinite(n)?n:null};
   const sameId=(a,b)=>String(a??'')===String(b??'');
   const runById=id=>A(db?.runs).find(r=>sameId(r.id,id))||null;
   const checklist=()=>typeof checklistById==='function'?checklistById(FIRST_START_CHECKLIST_ID):null;
