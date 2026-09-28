@@ -166,7 +166,18 @@ function renderOrderRows(){const el=document.getElementById('orderRows');if(!el)
 function renderDocuments(){
   document.getElementById('page-documents').innerHTML=`<div class="card"><div class="toolbar"><div><h1>Documents</h1><div class="muted">Manuals, diagrams, records, receipts, specifications and links. Every row opens a document record with links to the work it supports.</div></div><button class="btn primary" onclick="openDocModal()">+ Add Document</button></div><div class="controls"><input id="docSearch" placeholder="Search documents…" oninput="renderDocRows()"><select id="docType" onchange="renderDocRows()"><option value="">All types</option>${unique(db.docs.map(d=>d.type).filter(Boolean)).sort().map(s=>`<option>${esc(s)}</option>`).join('')}</select></div><div class="table-wrap" style="margin-top:11px"><table><thead><tr><th>Document</th><th>Type</th><th>Revision</th><th>System</th><th>Linked projects</th><th>Location</th><th></th></tr></thead><tbody id="docRows"></tbody></table></div></div>`;renderDocRows();
 }
-function renderDocRows(){const el=document.getElementById('docRows');if(!el)return;const q=(val('docSearch')||'').toLowerCase(),type=val('docType');const rows=db.docs.filter(d=>(!q||[d.name,d.type,d.revision,d.system,d.publisher,d.location,d.notes].join(' ').toLowerCase().includes(q))&&(!type||d.type===type));el.innerHTML=rows.map(d=>`<tr class="click-row" onclick="openDocumentDetail(${d.id})"><td><b>${esc(d.name)}</b><div class="task-note">${esc(d.publisher||d.notes)}</div></td><td>${esc(d.type||'—')}</td><td>${esc(d.revision||'—')}</td><td>${esc(d.system||'—')}</td><td>${d.linkedProjectIds.length}</td><td>${isURL(d.location)?'<span class="blue pill">Web link</span>':esc(d.location||'—')}</td><td><button class="icon-btn" onclick="event.stopPropagation();openDocModal(${d.id})">Edit</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">No matching documents.</td></tr>'}
+function renderDocRows(){
+  const el=document.getElementById('docRows');if(!el)return;
+  const q=(val('docSearch')||'').toLowerCase(),type=val('docType');
+  const rows=db.docs.filter(d=>(!q||[d.name,d.type,d.revision,d.system,d.publisher,d.location,d.notes].join(' ').toLowerCase().includes(q))&&(!type||d.type===type));
+  el.innerHTML=rows.map(d=>{
+    const idArg=JSON.stringify(String(d.id));
+    const location=isURL(d.location)
+      ?`<a class="blue pill" href="${esc(d.location)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Web link</a>`
+      :esc(d.location||'—');
+    return `<tr class="click-row" onclick='openDocumentDetail(${idArg})'><td><b>${esc(d.name)}</b><div class="task-note">${esc(d.publisher||d.notes)}</div></td><td>${esc(d.type||'—')}</td><td>${esc(d.revision||'—')}</td><td>${esc(d.system||'—')}</td><td>${d.linkedProjectIds.length}</td><td>${location}</td><td><button class="icon-btn" onclick='event.stopPropagation();openDocModal(${idArg})'>Edit</button></td></tr>`;
+  }).join('')||'<tr><td colspan="7" class="empty">No matching documents.</td></tr>';
+}
 
 function renderLogbook(){
   document.getElementById('page-logbook').innerHTML=`<div class="card"><div class="toolbar"><div><h1>Work Log</h1><div class="muted">Every entry opens into a complete work record: parts/consumables, linked projects, observations, blockers, next step, labor, costs and supporting files.</div></div><button class="btn primary" onclick="openLogModal()">+ Add Work Entry</button></div><div class="controls"><input id="logSearch" placeholder="Search work log…" oninput="renderLogRows()"><select id="logSystem" onchange="renderLogRows()">${trackerSystemFilterOptions('')}</select></div><div class="table-wrap" style="margin-top:11px"><table><thead><tr><th>Date</th><th>System</th><th>Work performed</th><th>Project(s)</th><th>Labor</th><th>Consumed cost</th><th>Blocker / next step</th><th></th></tr></thead><tbody id="logRows"></tbody></table></div></div>`;renderLogRows();
