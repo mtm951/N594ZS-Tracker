@@ -17,6 +17,16 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Current release: **v5.19.40** (Kitfox 912 manual review-state hardening; PR #18 merged September 28 at `e40f5c8eee1e7192cd541775eba52b540b27aae1`). PR regression CI passed. The GitHub Pages workflow is configured to rerun the full tests and deploy on every `main` push; direct public-site fetch was unavailable from the current tool environment, so owner-device footer `v5.19.40` remains the final live-deployment acceptance check.
 
 
+
+## September 28 source-faithful Kitfox checklist rebuild
+
+- Owner clarified the goal: the tracker checklist itself must faithfully reflect the supplied SkyStar P/N 64825.000 Dec 2001 installation manual; ChatGPT should not interrogate the owner step-by-step while rebuilding it. The owner will review/check items in the tracker.
+- Rebuilt the wording and source instructions for ALL 13 manual chapters A–M directly from the supplied PDF while preserving existing owner review statuses. No checklist count or deterministic item ID changed.
+- Global verification after rebuild: 13 chapters, 159 items, 0 blank titles, 0 blank manualInstruction values, 0 blank sourcePage values, 0 duplicate item IDs, exactly 1 sourceGap (the genuine missing printed L.3), 44 Verified, 115 Pending, 0 N/A, 0 Needs Attention.
+- Chapter status counts after rebuild: A 7/7 Verified; B 8 Verified / 4 Pending; C 1/15 Verified; D 0/12; E 0/19; F 5 Verified / 1 Pending; G 15 Verified / 1 Pending; H 1 Verified / 8 Pending; I 0/15; J 0/22; K 7 Verified / 1 Pending; L 0/15; M 0/3.
+- Applicability boundaries are explicit rather than silently rewriting the manual: C=round cowl; D=smooth cowl; E.8–E.14=smooth-cowl oil-tank housing; G.8=tricycle radiator and G.9–G.12=conventional gear; H.1=smooth-cowl; I.2–I.8=factory fuel-valve arrangement; J preserves the stock SkyStar fuel schematic plus seven separately checkable p.58 routing precautions; K describes the stock SkyStar exhaust; L describes the stock 2001 electrical architecture; M is specifically the GSC three-blade ground-adjustable wood propeller.
+- The owner has custom systems in several areas, so source steps may later be marked N/A by the owner and checked against the applicable custom/component instructions separately. Do not alter source-faithful wording merely to match custom hardware.
+
 ## v5.19.40 Kitfox manual review-state hardening (September 28)
 
 - During read-only production verification of the 13 source-backed Kitfox manual checklists, all 13 chapters A–M, all 159 review items, source pages/manualInstruction fields, deterministic IDs, source-document links and the single L.3 source-gap placeholder were confirmed present. No production aircraft data was changed during verification.
