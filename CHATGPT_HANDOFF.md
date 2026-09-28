@@ -39,6 +39,22 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.53 preview exposes Save Progress control (September 28)
+
+- Owner could not see the new Save Progress button because the current recorder is only available in **Preview** while the First Start gate remains blocked. v5.19.52 intentionally hid the durable-save control in Preview, which made the preview incomplete and confusing.
+- PR #31 `v5.19.53: show Save Progress in recorder preview` merged to `main` at `4e6110c286b58da677f5f5e43a8f0b91eafb6978`.
+- Workflow run `36485875914` passed JavaScript syntax and the complete regression suite. The recorder regression now verifies Preview creates no Run/Test, changes no checklist state, and visibly includes the disabled Save Progress control.
+- Preview recorder now shows:
+  - save-state text **Preview • nothing is saved**;
+  - explanatory copy that Preview never writes tracker data;
+  - disabled primary button **Save Progress — real run only**;
+  - the rest of the recorder layout remains unchanged.
+- Real-run Save Progress behavior from v5.19.52 is unchanged.
+- No production Supabase rows or checklist completion states changed.
+- Main verified after merge: `APP_VERSION='5.19.53'`, `app-70-first-start-recorder.js?v=5.19.53`, service-worker shell `n594zs-v5-19-53-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.53**. Open **Readiness → Commissioning Readiness → Preview Recorder** and confirm the disabled **Save Progress — real run only** button is visible next to the preview save-state text.
+
 ## v5.19.52 explicit recorder Save Progress state (September 28)
 
 - Owner suggested a visible Save control so users know in-progress recorder work is actually saved before closing the modal. This was adopted as a UX/safety improvement rather than relying on invisible local draft behavior.
