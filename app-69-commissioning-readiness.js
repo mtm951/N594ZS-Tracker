@@ -1,4 +1,4 @@
-// ---------- V5.19.55 COMMISSIONING READINESS ----------
+// ---------- V5.19.58 COMMISSIONING READINESS ----------
 // Item-level commissioning gates layered onto the existing Project Readiness page.
 // These are workflow gates only; they are not airworthiness or return-to-service approvals.
 
@@ -53,6 +53,7 @@
       total+=relevant.length;done+=completed.length;
       rows.push({
         checklist,
+        items:relevant,
         total:relevant.length,
         done:completed.length,
         open,
@@ -88,8 +89,41 @@
       <div class="commissioning-count"><strong>${info.done}/${info.total}</strong><span>${info.open} open</span></div>
       <div class="progress"><div style="width:${info.pct}%"></div></div>
       <small>${dep?`Requires ${E(dep.gate.label)} gate first • `:''}${info.pct}% complete</small>
+      <span class="commissioning-view-cue">View requirements →</span>
     </button>`;
   }
+  function requirementGateLabel(gate){
+    return {'first-start':'First Start','full-power':'Full-Power','flight':'Flight'}[String(gate||'')]||String(gate||'Requirement');
+  }
+  function gateRequirementHtml(item){
+    const done=!!item?.done;
+    const label=requirementGateLabel(item?.requiredBefore);
+    return `<div class="commissioning-requirement-row ${done?'is-done':'is-open'}">
+      <span class="commissioning-requirement-status" aria-label="${done?'Complete':'Open'}">${done?'✓':'○'}</span>
+      <span class="commissioning-requirement-main">
+        <span class="commissioning-requirement-text">${E(item?.text||'Untitled requirement')}</span>
+        <span class="task-meta">
+          <span class="mini-badge ${done?'good':'warn'}">${done?'Complete':'Open'}</span>
+          <span class="mini-badge">${E(label)}</span>
+          ${item?.group?`<span class="mini-badge">${E(item.group)}</span>`:''}
+        </span>
+      </span>
+    </div>`;
+  }
+  function gateChecklistDetailsHtml(row,index){
+    const openCount=row.open.length;
+    return `<details class="commissioning-requirement-pack" ${index<2?'open':''}>
+      <summary>
+        <span><b>${E(row.checklist.name)}</b><small>${openCount?openCount+' open':'All requirements complete'}</small></span>
+        <strong>${row.done}/${row.total}</strong>
+      </summary>
+      <div class="commissioning-requirement-items">${row.items.map(gateRequirementHtml).join('')}</div>
+      <div class="commissioning-requirement-pack-actions">
+        <button class="secondary" data-commissioning-checklist="${E(String(row.checklist.id))}" onclick="openChecklistDetail('${E(String(row.checklist.id))}')">Open checklist</button>
+      </div>
+    </details>`;
+  }
+
   function bindCommissioningButtons(root=document){
     root?.querySelectorAll?.('[data-commissioning-gate]').forEach(el=>{
       if(el.dataset.commissioningBound)return;
@@ -105,6 +139,16 @@
       if(el.dataset.commissioningBound)return;
       el.dataset.commissioningBound='1';
       el.addEventListener('click',()=>openCommissioningReadiness());
+    });
+    root?.querySelectorAll?.('[data-commissioning-expand]').forEach(el=>{
+      if(el.dataset.commissioningBound)return;
+      el.dataset.commissioningBound='1';
+      el.addEventListener('click',()=>root.querySelectorAll('.commissioning-requirement-pack').forEach(d=>d.open=true));
+    });
+    root?.querySelectorAll?.('[data-commissioning-collapse]').forEach(el=>{
+      if(el.dataset.commissioningBound)return;
+      el.dataset.commissioningBound='1';
+      el.addEventListener('click',()=>root.querySelectorAll('.commissioning-requirement-pack').forEach(d=>d.open=false));
     });
   }
 
@@ -126,11 +170,15 @@
         <div><span>Open</span><b>${info.open}</b></div>
         <div><span>Packs involved</span><b>${info.rows.length}</b></div>
       </div>
-      <div class="commissioning-pack-list">
-        ${info.rows.map(r=>`<button class="commissioning-pack-row ${r.open.length?'has-open':'is-complete'}" data-commissioning-checklist="${E(String(r.checklist.id))}" onclick="openChecklistDetail('${E(String(r.checklist.id))}')">
-          <span class="commissioning-pack-main"><b>${E(r.checklist.name)}</b><small>${r.open.length?(E(r.next?.text||'Open item')+' • '+r.open.length+' open'):'All requirements for this gate complete'}</small></span>
-          <span class="commissioning-pack-end"><strong>${r.done}/${r.total}</strong><span class="mini-progress"><i style="width:${r.pct}%"></i></span></span>
-        </button>`).join('')||'<div class="empty">No commissioning requirements are assigned to this gate.</div>'}
+      <div class="commissioning-requirements-head">
+        <div><b>Requirements in this gate</b><small>Grouped by checklist • ${info.total} cumulative requirement${info.total===1?'':'s'}</small></div>
+        <div class="commissioning-requirements-tools">
+          <button class="secondary" data-commissioning-expand="all">Expand all</button>
+          <button class="secondary" data-commissioning-collapse="all">Collapse all</button>
+        </div>
+      </div>
+      <div class="commissioning-requirement-pack-list">
+        ${info.rows.map((r,index)=>gateChecklistDetailsHtml(r,index)).join('')||'<div class="empty">No commissioning requirements are assigned to this gate.</div>'}
       </div>
       <div class="modal-actions"><button class="secondary" data-commissioning-readiness>Readiness Overview</button><button class="secondary" onclick="navTo('checklists');closeModal()">All Checklists</button><button class="secondary" onclick="closeModal()">Close</button></div>`;
     openModal(html,true);
@@ -230,6 +278,7 @@
     .commissioning-count{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
     .commissioning-count strong{font-size:1.2rem}
     .commissioning-count span,.commissioning-gate-card small{font-size:.75rem;color:var(--muted)}
+    .commissioning-view-cue{font-size:.74rem;font-weight:700;color:var(--accent,#1261a0);margin-top:2px}
     .commissioning-next{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px}
     .commissioning-next>div{display:flex;flex-direction:column}
     .commissioning-next span,.commissioning-next small{font-size:.75rem;color:var(--muted)}
@@ -244,6 +293,26 @@
     .commissioning-pack-main{display:flex;flex-direction:column;min-width:0}
     .commissioning-pack-main small{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:650px}
     .commissioning-pack-end{min-width:95px;text-align:right;display:flex;flex-direction:column;gap:4px}
+    .commissioning-requirements-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0 8px}
+    .commissioning-requirements-head>div:first-child{display:flex;flex-direction:column}
+    .commissioning-requirements-head small{font-size:.74rem;color:var(--muted)}
+    .commissioning-requirements-tools{display:flex;gap:6px;flex-wrap:wrap}
+    .commissioning-requirement-pack-list{display:flex;flex-direction:column;gap:8px}
+    .commissioning-requirement-pack{border:1px solid var(--border);border-radius:10px;background:var(--card);overflow:hidden}
+    .commissioning-requirement-pack>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .commissioning-requirement-pack>summary::-webkit-details-marker{display:none}
+    .commissioning-requirement-pack>summary>span{display:flex;flex-direction:column;min-width:0}
+    .commissioning-requirement-pack>summary small{font-size:.73rem;color:var(--muted)}
+    .commissioning-requirement-items{border-top:1px solid var(--border)}
+    .commissioning-requirement-row{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border)}
+    .commissioning-requirement-row:last-child{border-bottom:0}
+    .commissioning-requirement-row.is-done{opacity:.68}
+    .commissioning-requirement-status{font-size:1rem;line-height:1.3;min-width:18px;text-align:center;font-weight:800}
+    .commissioning-requirement-row.is-done .commissioning-requirement-status{color:var(--good,#27864a)}
+    .commissioning-requirement-row.is-open .commissioning-requirement-status{color:var(--warn,#b7791f)}
+    .commissioning-requirement-main{display:flex;flex-direction:column;gap:5px;min-width:0}
+    .commissioning-requirement-text{font-size:.86rem;line-height:1.35}
+    .commissioning-requirement-pack-actions{padding:9px 12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
     .dashboard-commissioning-readiness{display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:8px;padding:9px;margin-bottom:10px}
     .dashboard-commissioning-readiness>button,.dashboard-commissioning-main{border:0;background:transparent;border-radius:9px;padding:8px 10px;text-align:left;cursor:pointer;display:flex;flex-direction:column}
     .dashboard-commissioning-readiness>button:hover,.dashboard-commissioning-main:hover{background:var(--soft,#f5f7f8)}
@@ -256,6 +325,9 @@
       .dashboard-commissioning-readiness{grid-template-columns:1fr 1fr}
       .commissioning-pack-row{align-items:flex-start}
       .commissioning-pack-main small{white-space:normal}
+      .commissioning-requirements-head{align-items:stretch;flex-direction:column}
+      .commissioning-requirements-tools button{flex:1 1 auto}
+      .commissioning-requirement-pack>summary{align-items:flex-start}
     }
   `;
   document.head.appendChild(style);
