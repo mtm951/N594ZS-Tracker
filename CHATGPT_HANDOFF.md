@@ -29,6 +29,23 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.43 inventory-neutral purchase/equipment linking (September 28)
+
+- PR #21 `v5.19.43: keep equipment linking inventory-neutral` merged to `main` at `6b582c5dd63a63ef2fe5f4add555de1e13322773`.
+- PR workflow run `36463983962` passed JavaScript syntax and the complete regression suite. The suite kept atomic receipt replay/recovery, Reserve → Use, linked-order blockers, real Order receiving, zero-stock linking/receiving, sync/versioning and core workflow regressions green.
+- Repo-wide stock-mutation audit found one remaining bypass in the older Purchase → Equipment/link reconciliation helper. Before v5.19.43, an explicit Track Purchase as Equipment / createPart path for an On Hand Purchase could create the Part and credit positive physical stock as a side effect, bypassing the explicit Purchase → Stock Received transaction.
+- v5.19.43 removes that bypass:
+  - relationship/equipment linking may create/link Part + Equipment identity records but creates the Part at `stockQty:0`;
+  - an On Hand Purchase remains `inventoryApplied=false` until the explicit Record Stock Received workflow;
+  - repeated purchase/equipment reconciliation cannot credit or double-credit stock;
+  - Installed Purchase lifecycle links remain stock-neutral (`stockQty:0`) while preserving installed/applied provenance with `remainingQty:0`;
+  - the obsolete direct `ensurePurchaseInInventory` stock mutator was removed from `app-24-data-polish.js`.
+- Positive physical stock inflow is now intentionally separated from identity/linking. Existing-stock inflow should come through explicit protected receipt workflows (Order receipt or Purchase → Stock Received); existing Part count corrections go through ± Adjust Inventory; only a brand-new manually created Part may establish an initial stock baseline.
+- No Supabase schema/function/policy changes and no production aircraft-record mutations were made by this release.
+- Release metadata verified on main: `APP_VERSION='5.19.43'`; `app-24-data-polish.js` and `app-29-equipment.js` cache-busted to 5.19.43; service-worker shell `n594zs-v5-19-43-shell`.
+- Owner acceptance: only refresh/update while the tracker reports Synced and no pending atomic transaction. Footer should read **v5.19.43**. Do not clear site data to force an update.
+
 ## v5.19.42 complete atomic inventory coverage (September 28)
 
 - PR #20 `v5.19.42: complete atomic inventory coverage` merged to `main` at `24652700dc8fc944135393c5fdf1e2bc06364dc6`.
