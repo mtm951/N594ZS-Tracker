@@ -57,6 +57,7 @@ function commonContext(db){
     partById:id=>db.parts.find(x=>Number(x.id)===Number(id)),
     projectById:id=>db.projects.find(x=>Number(x.id)===Number(id)),
     logById:id=>db.logs.find(x=>Number(x.id)===Number(id)),
+    consumedCost:log=>(log?.consumedParts||[]).reduce((sum,x)=>sum+(Number(x.qty)||0)*(Number(x.unitCost)||0),0),
     saveDB:()=>{},
     queueCloudSave:()=>{},
     persistBrowserData:async()=>{},
