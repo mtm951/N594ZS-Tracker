@@ -14,6 +14,9 @@ function checklistItemSourceDoc(c,i){
   const id=i?.sourceDocumentId||c?.sourceDocumentId||c?.documentId||null;
   return id!==null&&id!==undefined&&typeof docById==='function'?docById(id):null;
 }
+function checklistReadinessGateLabel(gate){
+  return {'first-start':'Before First Start','full-power':'Before Full-Power','flight':'Before Flight'}[String(gate||'')]||'';
+}
 
 function checklistSystemName(c){
   if(typeof window.systemRecordMatches==='function'&&typeof window.systemNames==='function'){
@@ -58,10 +61,15 @@ function renderChecklistRows(){
     const inspectionMeta=c.inspectionMode?`<div class="task-meta"><span class="mini-badge">${esc(c.sourcePages?'POH '+c.sourcePages:'Source-backed')}</span>${Array.isArray(c.groupOrder)&&c.groupOrder.length?`<span class="mini-badge">${c.groupOrder.length} groups</span>`:''}<span class="mini-badge">click items for history & notes</span></div>`:'';
     const manualMeta=c.kitfoxManualPack==='kitfox-912-64825-000-dec2001'
       ?`<div class="task-meta"><span class="mini-badge">SkyStar 912 manual • Section ${esc(c.manualChapter)}</span><span class="mini-badge">p.${esc(c.sourcePages||'')}</span><span class="mini-badge">click to review steps, N/A and notes</span></div>`:'';
-    const sourceMeta=!manualMeta&&c.rotaxSourceManaged
-      ?`<div class="task-meta"><span class="mini-badge">ROTAX source-backed</span>${c.sourcePack?`<span class="mini-badge">commissioning pack</span>`:''}<span class="mini-badge">source details inside</span></div>`:'';
+    const sourceMeta=!manualMeta&&(c.rotaxSourceManaged||c.sourceBacked||c.commissioningPack)
+      ?`<div class="task-meta"><span class="mini-badge">${c.rotaxSourceManaged?'ROTAX source-backed':'Source-backed'}</span>${c.sourcePack?`<span class="mini-badge">commissioning pack</span>`:''}<span class="mini-badge">source details inside</span></div>`:'';
+    const readinessMeta=c.commissioningReadinessPack?(()=>{
+      const counts={'first-start':0,'full-power':0,'flight':0};
+      items.forEach(i=>{if(Object.prototype.hasOwnProperty.call(counts,i.requiredBefore))counts[i.requiredBefore]++});
+      return `<div class="task-meta"><span class="mini-badge">${counts['first-start']} before start</span><span class="mini-badge">${counts['full-power']} before full-power</span><span class="mini-badge">${counts.flight} before flight</span></div>`;
+    })():'';
     return `<div class="checklist click-row" role="button" tabindex="0" data-checklist-id="${esc(String(c.id))}">
-      <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(checklistSystemName(c)||'Unassigned')} • ${esc(c.trigger||c.purpose)}</div>${inspectionMeta}${manualMeta}${sourceMeta}</div>
+      <div class="check-head"><div><b>${esc(c.name)}</b><span class="badge-count">${done}/${items.length}</span><div class="task-note">${esc(checklistSystemName(c)||'Unassigned')} • ${esc(c.trigger||c.purpose)}</div>${inspectionMeta}${manualMeta}${sourceMeta}${readinessMeta}</div>
       <div style="min-width:150px"><div class="progress"><div style="width:${pct}%"></div></div><div class="tiny muted right">${pct}%</div></div></div>
     </div>`;
   }).join('')||'<div class="empty">No matching checklists.</div>';
@@ -118,7 +126,9 @@ function openChecklistDetail(id){
       <div class="detail-card"><div class="section-tools"><h3>Checklist Items</h3><button class="icon-btn" id="ckDetailAdd">+ Item</button></div>
         ${items.map(i=>{
           const itemDoc=checklistItemSourceDoc(c,i);
+          const gateLabel=checklistReadinessGateLabel(i.requiredBefore);
           const meta=[
+            gateLabel?`<span class="mini-badge warn">${esc(gateLabel)}</span>`:'',
             i.group?`<span class="mini-badge">${esc(i.group)}</span>`:'',
             itemDoc?`<span class="mini-badge">${esc(itemDoc.name)}</span>`:'',
             i.sourcePage?`<span class="mini-badge">${esc(i.sourcePage)}</span>`:'',
