@@ -52,6 +52,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - No Supabase schema/data changes and no production aircraft-record mutations were made by this release.
 - Main verified after merge: `APP_VERSION='5.19.44'`, service-worker shell `n594zs-v5-19-44-shell`, and all touched UI modules are cache-busted to 5.19.44.
 - Owner acceptance still required: once Synced with no pending atomic transaction, refresh normally and confirm footer **v5.19.44**. Normal System/Settings screens should look calmer; Advanced / Troubleshooting should contain the moved recovery/update controls.
+- **OWNER ACCEPTANCE COMPLETE:** Mike confirmed the live tracker footer shows **v5.19.44** on 2026-09-28.
 
 ## v5.19.43 inventory-neutral purchase/equipment linking (September 28)
 
