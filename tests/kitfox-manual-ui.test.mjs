@@ -28,7 +28,7 @@ const root={
   modalHeader:s=>'<h2>'+s+'</h2>',openModal:s=>modal.push(s),
   alert:msg=>alerts.push(msg),confirm:()=>true,today:()=> '2026-09-26',
   trackerStore:{update(type,id,mutator){assert.equal(type,'checklist');const c=db.checklists.find(x=>x.id===id);mutator(c);changes++}},
-  document:{getElementById:()=>null,createElement:()=>({innerHTML:'',firstElementChild:null})},
+  document:{head:{appendChild(){}},getElementById:()=>null,createElement:()=>({innerHTML:'',firstElementChild:null,id:'',textContent:''})},
   textareaField:()=>'<textarea id="kmReviewNote"></textarea>',val:()=> 'Reviewed Kitfox clarification',
   getAttachments:async(type,id)=>{
     assert.equal(type,'document');assert.equal(id,1789567365526);
@@ -36,7 +36,9 @@ const root={
       name:'3_Newer_Engine_install_912_64825-000.pdf',type:'application/pdf'}];
   },
   openAttachmentPage:async(id,page)=>{root.openedSource={id,page};return true},
-  openDocumentDetail:id=>{root.openedDocument=id}
+  openDocumentDetail:id=>{root.openedDocument=id},
+  trackerBackCalls:0,
+  trackerBack(){root.trackerBackCalls++}
 };root.window=root;
 vm.createContext(root);
 vm.runInContext(script,root);
@@ -50,6 +52,18 @@ assert.match(modal.at(-1),/Manual p.12/);
 assert.match(modal.at(-1),/Open PDF p.12/);
 assert.match(modal.at(-1),/Open source PDF at this section/);
 assert.match(modal.at(-1),/Fig. B-4/);
+assert.match(modal.at(-1),/km-manual-footer/);
+assert.match(modal.at(-1),/Save Progress/);
+assert.match(modal.at(-1),/>Close</);
+assert.match(modal.at(-1),/Review changes save automatically/);
+
+const beforeCheckpointChanges=changes;
+root.saveKitfoxManualProgress('manual-B');
+assert.ok(B.manualProgressSavedAt,'Save Progress did not record an explicit checkpoint timestamp');
+assert.equal(changes,beforeCheckpointChanges+1,'Save Progress should make exactly one checklist-record checkpoint update');
+assert.equal(B.items[0].reviewStatus,'Pending','Save Progress changed manual review state');
+root.closeKitfoxManualChecklist();
+assert.equal(root.trackerBackCalls,1,'Close did not use tracker Back/modal navigation');
 await root.openKitfoxManualSourcePage('manual-B','B-1');
 assert.equal(root.openedSource.page,12);
 assert.match(root.openedSource.id,/3_Newer_Engine_install_912_64825-000\.pdf$/);
@@ -76,9 +90,9 @@ root.openKitfox912ManualChecklist('manual-C');
 assert.match(modal.at(-1),/round/);
 assert.match(modal.at(-1),/Mark alternate cowl chapter N\/A/);
 assert.equal(other.items[0].done,false,'Never touch unrelated owner checklists');
-assert.equal(changes,4);
+assert.equal(changes,5);
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.45'));
+assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.57'));
 assert.ok(html.includes('app-11-checklists.js?v=5.19.56'));
 assert.match(script,/isManual\?items\.filter\(i=>i\.reviewStatus==='Verified'\)\.length/,'Checklist list progress must also ignore stale done-only state');
 console.log('PASS: source-backed manual chapter UI, direct private-PDF page routing, review/N-A/finding states, L.3 gap guard, unchanged other checklists and correct deployment references.');
