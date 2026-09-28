@@ -44,6 +44,31 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.58 commissioning gate requirement drill-downs (September 28)
+
+- Owner requested that **First Start**, **Full-Power Ground Run**, and **Flight Release** be directly clickable so the actual requirements in each gate can be inspected.
+- PR #36 `v5.19.58: make commissioning gates show their requirement lists` merged to `main` at `5cfcd4df110a6d6b9b926e6f64bf86ab7fcb7263`.
+- Workflow run `36490345448` passed JavaScript syntax and the complete regression suite.
+- Gate cards now visibly advertise **View requirements →** so the drill-down behavior is obvious.
+- Clicking a gate opens a cumulative requirement view:
+  - **First Start** shows every requirement in the First Start gate;
+  - **Full-Power Ground Run** shows First Start + Full-Power requirements;
+  - **Flight Release** shows all commissioning requirements.
+- Requirements are grouped by source checklist using collapsible sections.
+- Each requirement displays:
+  - requirement text;
+  - **Open** or **Complete** status;
+  - origin-stage badge (**First Start**, **Full-Power**, or **Flight**);
+  - source checklist grouping.
+- Each checklist group shows its completion count and provides **Open checklist**.
+- Gate modal includes **Expand all** and **Collapse all** controls.
+- The first two checklist groups are expanded by default; all groups can be expanded for a full list.
+- Existing cumulative gate math and completion state are unchanged.
+- No Supabase data or checklist state changed in this release.
+- Main verified after merge: `APP_VERSION='5.19.58'`, `app-69-commissioning-readiness.js?v=5.19.58`, service-worker shell `n594zs-v5-19-58-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.58**. Click **First Start**, **Full-Power Ground Run**, and **Flight Release** and verify each opens its grouped requirement list with Open/Complete status and Open checklist actions.
+
 ## v5.19.57 Kitfox manual Save Progress / Close footer (September 28)
 
 - Owner requested explicit **Save Progress** and **Close** controls on the long Kitfox manual chapter review checklists.
