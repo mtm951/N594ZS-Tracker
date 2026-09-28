@@ -30,6 +30,29 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.44 Advanced / Troubleshooting UX cleanup (September 28)
+
+- PR #22 `v5.19.44: move recovery controls into Advanced / Troubleshooting` merged to `main` at `68a785ee7f422303f586cbf7ac4ae43ece417c86`.
+- PR workflow run `36466053314` passed JavaScript syntax and the full regression suite. Specific coverage kept app-update safety, atomic receipt replay/crash recovery, pending atomic Work Log locks, Reserve → Use, real Order receipt reliability, zero-stock linkage/receipt behavior, sync/versioning and the new `tests/troubleshooting-ux.test.mjs` green.
+- Normal Cloud Account now shows a calm **Inventory protection active** status card. It no longer exposes the full transaction-recovery panel unless a transaction is actually pending; pending transactions still surface a prominent **Review Pending Inventory Transaction** button.
+- Added one consolidated **Advanced / Troubleshooting** modal for:
+  - Data Integrity Check;
+  - Inventory Transaction Safety / pending atomic recovery;
+  - Force Latest Version + fresh-version link;
+  - cloud conflict resolution;
+  - creating/verifying cloud snapshots;
+  - snapshot restore manager (with an extra destructive-action warning);
+  - local browser recovery when one exists.
+- System & Sync keeps ordinary actions only (Reload Shared Data, Export JSON, Install App when available, Create Snapshot) plus a single **Advanced / Troubleshooting** entry. Force Latest/Fresh and direct Snapshot Restore buttons were removed from the normal System screen.
+- Settings → **App & Deployment** is now informational and links to Advanced / Troubleshooting. The old duplicated repository/update controls and local-data-key implementation detail were removed from this card.
+- The former front-and-center **Reliability & Recovery** block is now **System Health**: integrity/sync/conflict status, Run Integrity Check, Advanced / Troubleshooting, and Resolve Conflict only when needed.
+- Stale production-facing `Atomic Receipt Testing` wording was removed. Pending Work Log guidance now points to System → Advanced / Troubleshooting → Inventory Transaction Safety.
+- All recovery capabilities remain available; this release changes discoverability/organization only, not the atomic transaction architecture or safety semantics.
+- No Supabase schema/data changes and no production aircraft-record mutations were made by this release.
+- Main verified after merge: `APP_VERSION='5.19.44'`, service-worker shell `n594zs-v5-19-44-shell`, and all touched UI modules are cache-busted to 5.19.44.
+- Owner acceptance still required: once Synced with no pending atomic transaction, refresh normally and confirm footer **v5.19.44**. Normal System/Settings screens should look calmer; Advanced / Troubleshooting should contain the moved recovery/update controls.
+
 ## v5.19.43 inventory-neutral purchase/equipment linking (September 28)
 
 - PR #21 `v5.19.43: keep equipment linking inventory-neutral` merged to `main` at `6b582c5dd63a63ef2fe5f4add555de1e13322773`.
