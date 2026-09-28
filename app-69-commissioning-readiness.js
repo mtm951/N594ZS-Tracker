@@ -1,4 +1,4 @@
-// ---------- V5.19.49 COMMISSIONING READINESS ----------
+// ---------- V5.19.55 COMMISSIONING READINESS ----------
 // Item-level commissioning gates layered onto the existing Project Readiness page.
 // These are workflow gates only; they are not airworthiness or return-to-service approvals.
 
@@ -138,12 +138,10 @@
   };
 
   window.openCommissioningReadiness=function(){
+    if(typeof goToTrackerPageFromModal==='function')return goToTrackerPageFromModal('readiness');
     closeModal?.();
     navTo('readiness');
-    setTimeout(()=>{
-      const panel=document.getElementById('commissioningReadinessPanel');
-      panel?.scrollIntoView?.({behavior:'smooth',block:'start'});
-    },50);
+    return true;
   };
 
   function commissioningReadinessPanel(){
