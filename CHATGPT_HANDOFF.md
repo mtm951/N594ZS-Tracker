@@ -34,6 +34,39 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.48 source-backed commissioning checklists + first-flight master gate (September 28)
+
+- PR #26 `v5.19.48: source-backed generic checklists` merged to `main` at `dfd1080b344dc42c186b3ba59c5ecf732628c786`.
+- Final PR workflow run `36471158439` passed JavaScript syntax and the complete regression suite. New coverage verified stable string Document IDs and visible source-backed generic checklist rendering; existing Kitfox manual/mobile viewer/atomic inventory regressions remained green.
+- Generic checklists now visibly render item group, manufacturer/source Document, page/section, acceptance detail and review note. Item-level **Source** buttons open the applicable source Document. Checklists can show multiple source Documents. Core `docById()` and Document detail/edit/upload/update flows now support stable string IDs as well as legacy numeric IDs.
+- Production tracker commissioning pack created/expanded:
+  - **ROTAX 912 Installation Manual — Pre-Trial-Run Closeout**: 17 items; existing state preserved at **3 complete / 14 incomplete**; all 17 now have item-level source metadata.
+  - **ROTAX 912 ULS — Oil-System Purge / First-Start Prerequisite**: 19 new unchecked source-backed items.
+  - **ROTAX 912 ULS — First Start / Initial Ground Run**: existing start checklist upgraded in place to 29 source-backed items; original checkmarks/notes preserved (currently 0 complete). Sequence corrected to put pneumatic carb sync before ignition/full-power checks and cooling run after the controlled full-power check.
+  - **N594ZS — Custom Fuel System Commissioning / First-Start Closeout**: 22 new unchecked items.
+  - **N594ZS — EarthX ETX680 / Electrical Commissioning**: 24 new unchecked items.
+  - **N594ZS — IVO Ultralight Propeller Installation / Ground-Run Closeout**: 17 new unchecked items.
+  - **N594ZS — Custom 321 Stainless Exhaust Commissioning / Heat-Cycle Closeout**: 19 new unchecked items.
+  - **N594ZS — Post-Run / Flight-Release Closeout**: 34 new unchecked master-gate items.
+- Total across this commissioning set: **181 checklist items**. Integrity verification on 2026-09-28 showed every item has a source Document, source-page/section reference and acceptance/detail text. The only pre-checked items in the entire set are the same original 3 Pre-Trial items; no new commissioning item was auto-completed.
+- All source-document references were verified live and resolve successfully: Kitfox 912 install manual, Kitfox #1442 POH, current ROTAX MML, ROTAX Installation Manual, N594ZS W&B, Wiring Diagram, Fuel System Schematic, EarthX ETX manual, IVO Ultralight instructions, custom-exhaust as-built reference, actual-operating-limitations placeholder, current ROTAX OM, and SI-912-018R4.
+- New source Document records created:
+  - `rotax-si-912-018-r4-2021` — ROTAX SI-912-018R4 oil-system purge source.
+  - `rotax-om-912-ed4-r2-2025` — current ROTAX 912 Series Operators Manual source record.
+  - `earthx-etx-manual-111017-ae-2025` — current ETX-series manual source record.
+  - `ivo-ultralight-quick-adjust-instructions` — IVO Ultralight manufacturer instructions.
+  - `n594zs-custom-321ss-exhaust-asbuilt` — N594ZS custom exhaust as-built reference.
+  - `n594zs-operating-limitations-airworthiness-records` — **placeholder only** for the actual N594ZS Operating Limitations / airworthiness record set. It explicitly does not recreate or infer those documents.
+- Important hard-stop state preserved in the master gate:
+  - live aircraft status remains **PROJECT / NOT RETURNED TO SERVICE**;
+  - active `current-912` W&B still contains the old 523 lb / 12.235 in values with the note **Pending final post-912 weighing**;
+  - W&B Document 304 still says **Replace with post-conversion W&B when completed**;
+  - final master closeout therefore requires actual post-conversion empty weight/moment/CG before flight and requires intended loading to remain at or below 1050 lb gross and within 10.2–16.0 in CG using the final measured W&B;
+  - master closeout also requires the **actual** N594ZS Operating Limitations to be attached/reviewed and their major-change / flight-test requirements satisfied. Do not infer Phase I duration/notification/test-area rules from generic guidance.
+- The commissioning checklists are verification/workflow aids only. Completion does not by itself constitute an airworthiness approval, maintenance release, return-to-service signoff, or authorization to fly.
+- Owner acceptance still required for v5.19.48 UI: once Synced, refresh normally and confirm footer **v5.19.48**. Open any new ROTAX/N594ZS commissioning checklist and confirm its item-level source badges/detail and **Source** buttons are visible.
+
 ## v5.19.47 mobile in-app manual PDF viewer (September 28)
 
 - Owner acceptance on v5.19.46 was split: Mike confirmed the requested source page works perfectly on desktop, but his phone still opened the manual without honoring the requested page. Treat v5.19.46 as desktop-accepted / mobile-not-accepted.
