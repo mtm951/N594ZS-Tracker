@@ -63,7 +63,7 @@ function createHarness({confirmResult=true}={}){
     clearTimeout(id){tasks.delete(id)},
     addEventListener(type,fn){(listeners[type]??=[]).push(fn)},
     matchMedia:()=>({matches:false}),
-    navTo:()=>{},
+    navTo(page){ctx.currentPage=page},
     modalBackCalls:0,
     modalBack(){
       ctx.modalBackCalls++;
@@ -136,6 +136,43 @@ function createHarness({confirmResult=true}={}){
   h.ctx.trackerBack();
   h.flushBack();
   assert.equal(h.modal.classList.contains('open'),false,'second Back did not close the top-level gate popup');
+}
+
+// Explicit popup -> tracker-page navigation must consume the modal history
+// before changing pages, so delayed modal cleanup cannot bounce the user back.
+{
+  const h=createHarness();
+  h.ctx.navTo('readiness');
+  assert.equal(h.ctx.currentPage,'readiness');
+  h.ctx.openModal('First Start Gate');
+  assert.equal(h.history.state.n594zsKind,'modal');
+
+  assert.equal(h.ctx.goToTrackerPageFromModal('readiness'),true);
+  assert.equal(h.backEvents.length,1,'overview navigation did not consume modal history');
+  h.flushBack();
+
+  assert.equal(h.modal.classList.contains('open'),false,'Readiness Overview left gate modal open');
+  assert.equal(h.ctx.currentPage,'readiness','Readiness Overview did not land on Readiness');
+  assert.equal(h.history.state.n594zsKind,'page');
+  assert.equal(h.history.state.n594zsPage,'readiness');
+}
+
+// The same control opened from Dashboard must close the popup and create a
+// proper Readiness page state, with browser Back returning to Dashboard.
+{
+  const h=createHarness();
+  assert.equal(h.ctx.currentPage,'dashboard');
+  h.ctx.openModal('First Start Gate');
+  h.ctx.goToTrackerPageFromModal('readiness');
+  h.flushBack();
+
+  assert.equal(h.modal.classList.contains('open'),false);
+  assert.equal(h.ctx.currentPage,'readiness');
+  assert.equal(h.history.state.n594zsKind,'page');
+  assert.equal(h.history.state.n594zsPage,'readiness');
+
+  h.history.back();h.flushBack();
+  assert.equal(h.ctx.currentPage,'dashboard','Back from explicit Readiness navigation did not return to Dashboard');
 }
 
 // Normal explicit browser/phone Back must still close an ordinary popup.
