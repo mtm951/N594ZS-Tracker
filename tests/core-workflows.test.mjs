@@ -149,6 +149,22 @@ function loadEquipment(context){
   assert.equal(purchase.inventoryApplied,false,'repeat reconcile marked stock received');
 }
 
+// Installed lifecycle linking remains stock-neutral but may mark the Purchase
+// applied because the component is already dispositioned out of available stock.
+{
+  const purchase={id:'p-installed-eq',description:'Installed test component',pn:'INST-1',qty:1,
+    remainingQty:1,unitPrice:50,disposition:'Installed',system:'Electrical',vendor:'Test',
+    projectId:null,inventoryPartId:null,inventoryApplied:false,equipmentId:null,trackAsEquipment:false};
+  const db={equipment:[],parts:[],purchases:[purchase],invoices:[],projects:[],maintenance:[],settings:{showCosts:true}};
+  const h=loadEquipment(commonContext(db));
+  h.reconcilePurchaseLinks(purchase,{createPart:true,createEquipment:true});
+  assert.equal(db.parts.length,1);
+  assert.equal(db.parts[0].stockQty,0);
+  assert.equal(db.parts[0].status,'Installed');
+  assert.equal(purchase.inventoryApplied,true);
+  assert.equal(purchase.remainingQty,0);
+}
+
 // 3) The first migrated workflow uses the store boundary without changing equipment-history behavior.
 {
   const equipment={id:901,name:'EarthX ETX680',system:'Electrical',history:[],linkedProjectIds:[]};
