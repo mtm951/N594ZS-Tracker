@@ -33,7 +33,7 @@
     currentDetail={type:'checklist',id:Number(c.id)};
     const all=A(c.items),done=all.filter(i=>i.done||itemStatus(i)==='N/A').length,pct=all.length?Math.round(done/all.length*100):0;
     const finding=all.filter(i=>itemStatus(i)==='Finding').length;
-    const sourceDoc=c.sourceDocumentId?docById(Number(c.sourceDocumentId)):null;
+    const sourceDoc=c.sourceDocumentId?docById(c.sourceDocumentId):null;
     const groups=groupOrder(c);
     openModal(
       modalHeader(c.name,c.trigger||c.purpose)+
@@ -58,12 +58,13 @@
         '</section>';
       }).join('')+'</div>'+
       '<div class="detail-grid"><div><div class="detail-card"><h3>Checklist Notes / Applicability</h3><div class="detail-text">'+E(c.notes||'—')+'</div></div></div>'+
-      '<div><div class="detail-card"><h3>Source Document</h3>'+(sourceDoc?'<div class="kv click-row" onclick="openDocumentDetail('+sourceDoc.id+')"><span>'+E(sourceDoc.name)+'</span><b>'+E(c.sourcePages||sourceDoc.revision||'Open')+'</b></div>':'<div class="empty">Source document record not linked.</div>')+'</div></div></div>'+
+      '<div><div class="detail-card"><h3>Source Document</h3>'+(sourceDoc?'<div class="kv click-row" data-annual-source-doc="'+E(String(sourceDoc.id))+'"><span>'+E(sourceDoc.name)+'</span><b>'+E(c.sourcePages||sourceDoc.revision||'Open')+'</b></div>':'<div class="empty">Source document record not linked.</div>')+'</div></div></div>'+
       '<div class="detail-card"><div class="section-tools"><h3>Evidence / Supporting Files</h3><button class="icon-btn" onclick="chooseAttachments(\'checklist\','+c.id+')">+ Upload</button></div><div class="attach-drop" onclick="chooseAttachments(\'checklist\','+c.id+')" ondragover="event.preventDefault()" ondrop="handleEntityDrop(event,\'checklist\','+c.id+')">Attach inspection overview photos, worksheets, signed records or references</div><div id="attachments-checklist-'+c.id+'"></div></div>'+
       '<div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>',
       true
     );
     document.querySelectorAll('[data-annual-item]').forEach(el=>el.addEventListener('click',()=>openAnnualInspectionItem(c.id,Number(el.dataset.annualItem))));
+    document.querySelectorAll('[data-annual-source-doc]').forEach(el=>el.addEventListener('click',()=>openDocumentDetail(el.dataset.annualSourceDoc)));
     renderAttachments('checklist',c.id);
   };
 
@@ -145,7 +146,7 @@
   window.openAnnualInspectionItem=function(cid,iid){
     const c=checklistById(Number(cid)),i=checklistItem(cid,iid);if(!c||!i)return;
     currentDetail={type:'checklist-item',id:Number(iid),checklistId:Number(cid)};
-    const rel=relatedForItem(i),status=itemStatus(i),sourceDoc=c.sourceDocumentId?docById(Number(c.sourceDocumentId)):null;
+    const rel=relatedForItem(i),status=itemStatus(i),sourceDoc=c.sourceDocumentId?docById(c.sourceDocumentId):null;
     const af=T(db.aircraft?.airframeHours||''),eng=T(db.aircraft?.engineHours||'');
     openModal(
       modalHeader('Annual Inspection Item',i.group+' • POH '+(i.sourcePage||c.sourcePages||''))+
@@ -170,11 +171,12 @@
       '</div>'+
       (A(i.relatedTerms).length?relatedHTML(rel):'<div class="detail-card"><h3>Related History</h3><div class="empty">No automatic part/history keywords are assigned to this inspection item. You can still record notes, hours and evidence here.</div></div>')+
       '<div class="detail-card"><div class="section-tools"><h3>Evidence / Photos</h3><button class="icon-btn" onclick="chooseAttachments(\'checklist-item\','+i.id+')">+ Upload</button></div><div class="attach-drop" onclick="chooseAttachments(\'checklist-item\','+i.id+')" ondragover="event.preventDefault()" ondrop="handleEntityDrop(event,\'checklist-item\','+i.id+')">Attach close-up photos, measurements, screenshots, receipts or supporting evidence for this exact inspection line</div><div id="attachments-checklist-item-'+i.id+'"></div></div>'+
-      '<div class="detail-card"><h3>Source</h3>'+(sourceDoc?'<div class="kv click-row" onclick="openDocumentDetail('+sourceDoc.id+')"><span>'+E(sourceDoc.name)+'</span><b>POH '+E(i.sourcePage||'')+'</b></div>':'<div class="kv"><span>POH page</span><b>'+E(i.sourcePage||'—')+'</b></div>')+'<div class="tiny muted" style="margin-top:9px">The source checklist text above is locked/verbatim; the editable fields are your inspection record and applicability/context notes.</div></div>'+
+      '<div class="detail-card"><h3>Source</h3>'+(sourceDoc?'<div class="kv click-row" data-annual-source-doc="'+E(String(sourceDoc.id))+'"><span>'+E(sourceDoc.name)+'</span><b>POH '+E(i.sourcePage||'')+'</b></div>':'<div class="kv"><span>POH page</span><b>'+E(i.sourcePage||'—')+'</b></div>')+'<div class="tiny muted" style="margin-top:9px">The source checklist text above is locked/verbatim; the editable fields are your inspection record and applicability/context notes.</div></div>'+
       '<div class="modal-actions"><button class="secondary" onclick="openChecklistDetail('+c.id+')">← Annual Inspection</button><button class="primary" onclick="saveAnnualInspectionItem('+c.id+','+i.id+')">Save Details</button></div>',
       true
     );
     bindRelated();
+    document.querySelectorAll('[data-annual-source-doc]').forEach(el=>el.addEventListener('click',()=>openDocumentDetail(el.dataset.annualSourceDoc)));
     renderAttachments('checklist-item',i.id);
   };
 
