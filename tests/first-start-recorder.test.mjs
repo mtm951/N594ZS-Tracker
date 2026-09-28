@@ -78,6 +78,8 @@ function harness({gateClear=true}={}){
   assert.match(h.modal,/Preview • nothing is saved/);
   assert.match(h.modal,/Save Progress — real run only/);
   assert.match(h.modal,/disabled/);
+  assert.match(h.modal,/commissioning-recorder-footer/);
+  assert.ok(h.modal.indexOf('commissioning-recorder-footer')>h.modal.indexOf('commissioning-current-step'),'preview save footer is not below guided step content');
 }
 
 // Gate-clear start creates a durable Run/Test with guided steps only (not prerequisites).
@@ -113,6 +115,10 @@ function harness({gateClear=true}={}){
   assert.ok(h.db.runs[0].commissioningRun.lastSavedAt);
   assert.match(h.modal,/Save Progress/);
   assert.match(h.modal,/Log Reading/);
+  assert.match(h.modal,/commissioning-recorder-footer/);
+  assert.ok(h.modal.indexOf('commissioning-recorder-footer')>h.modal.indexOf('commissioning-current-step'),'real-run Save Progress footer is not at the bottom of recorder content');
+  const footer=h.modal.slice(h.modal.indexOf('commissioning-recorder-footer'));
+  assert.ok(footer.lastIndexOf('Save Progress')>footer.lastIndexOf('Finish Session'),'Save Progress is not the rightmost real-run footer action');
 
   // Complete saves the current reading, Run/Test state and checklist state together.
   for(const [id,v] of [['crRpm','2500'],['crOilP','55'],['crFuelP','4.2'],['crBusV','14.1'],['crStepNote','Normal start']]){
