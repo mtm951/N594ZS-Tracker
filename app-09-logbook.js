@@ -7,7 +7,7 @@ function atomicWorkLogLocked(id){
 }
 function atomicWorkLogEditGuard(id){
   if(!atomicWorkLogLocked(id))return false;
-  alert('This Work Log belongs to a pending atomic transaction. Its edits and consumed-item changes are locked until it synchronizes. Go to System → Cloud Account → Inventory Transaction Safety to export the Pending Atomic Safety Copy and review the pending transaction.');
+  alert('This Work Log belongs to a pending atomic transaction. Its edits and consumed-item changes are locked until it synchronizes. Go to System → Advanced / Troubleshooting → Inventory Transaction Safety to review the pending transaction or export its safety copy.');
   return true;
 }
 function openLogModal(id=null,projectId=null,partId=null){

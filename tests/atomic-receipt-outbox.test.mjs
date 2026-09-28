@@ -411,11 +411,11 @@ function receiptWork(tx){
     storage:{[OPT]:'0',[OUTBOX]:JSON.stringify(operation),[PENDING]:'1'}
   }});
   h.ctx.atomicReceiptOutbox.openSettings();
-  assert.match(h.lastModal(),/Core physical-inventory changes use one durable, idempotent atomic journal automatically/);
-  assert.match(h.lastModal(),/Order receipts: Atomic protection active/);
-  assert.match(h.lastModal(),/Inventory adjustments: Atomic protection active/);
-  assert.match(h.lastModal(),/Part use \/ consumption: Atomic protection active/);
-  assert.match(h.lastModal(),/Purchase stock receipts: Atomic protection active/);
+  assert.match(h.lastModal(),/Inventory protection is automatic/);
+  assert.match(h.lastModal(),/Order receipts: Protected/);
+  assert.match(h.lastModal(),/Inventory adjustments: Protected/);
+  assert.match(h.lastModal(),/Part use \/ consumption: Protected/);
+  assert.match(h.lastModal(),/Purchase stock receipts: Protected/);
   assert.doesNotMatch(h.lastModal(),/Enable Receipt Testing|Turn Off for New Receipts|Enable Atomic Adjustment Testing|Enable Atomic Reserve/);
   assert.match(h.lastModal(),/no linked Part update/);
   assert.match(h.lastModal(),/Compare with Cloud Safely/);
