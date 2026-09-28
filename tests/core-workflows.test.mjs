@@ -113,7 +113,8 @@ function loadEquipment(context){
   assert.equal(changed,false);
 }
 
-// 2) An EXPLICIT workflow is allowed to create the records, and repeating it must be idempotent.
+// 2) An EXPLICIT relationship/equipment workflow may create identity records,
+// but it must NEVER perform the physical stock receipt as a side effect.
 {
   const purchase={
     id:'p-explicit',description:'EarthX-style test component',pn:'TEST-5MM',qty:1,remainingQty:1,unitPrice:30,
@@ -138,12 +139,30 @@ function loadEquipment(context){
   assert.equal(String(equipment.inventoryPartId),String(part.id));
   assert.ok(equipment.linkedProjectIds.includes(44));
   assert.ok(invoice.purchaseIds.includes('p-explicit'));
-  assert.equal(part.stockQty,1);
+  assert.equal(part.stockQty,0,'equipment/link workflow credited physical stock');
+  assert.equal(purchase.inventoryApplied,false,'linking marked On Hand purchase as physically received');
 
   h.reconcilePurchaseLinks(purchase,{createPart:true,createEquipment:true});
   assert.equal(db.parts.length,1,'reconcile duplicated the Part record');
   assert.equal(db.equipment.length,1,'reconcile duplicated the Equipment record');
-  assert.equal(part.stockQty,1,'reconcile double-counted inventory');
+  assert.equal(part.stockQty,0,'reconcile credited stock on repeat');
+  assert.equal(purchase.inventoryApplied,false,'repeat reconcile marked stock received');
+}
+
+// Installed lifecycle linking remains stock-neutral but may mark the Purchase
+// applied because the component is already dispositioned out of available stock.
+{
+  const purchase={id:'p-installed-eq',description:'Installed test component',pn:'INST-1',qty:1,
+    remainingQty:1,unitPrice:50,disposition:'Installed',system:'Electrical',vendor:'Test',
+    projectId:null,inventoryPartId:null,inventoryApplied:false,equipmentId:null,trackAsEquipment:false};
+  const db={equipment:[],parts:[],purchases:[purchase],invoices:[],projects:[],maintenance:[],settings:{showCosts:true}};
+  const h=loadEquipment(commonContext(db));
+  h.reconcilePurchaseLinks(purchase,{createPart:true,createEquipment:true});
+  assert.equal(db.parts.length,1);
+  assert.equal(db.parts[0].stockQty,0);
+  assert.equal(db.parts[0].status,'Installed');
+  assert.equal(purchase.inventoryApplied,true);
+  assert.equal(purchase.remainingQty,0);
 }
 
 // 3) The first migrated workflow uses the store boundary without changing equipment-history behavior.

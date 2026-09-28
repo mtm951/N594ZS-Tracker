@@ -96,19 +96,24 @@ function purchaseInventoryQty(p){
   return Math.max(0,num(p.qty));
 }
 function createPartForPurchase(p){
-  const installed=p.disposition==='Installed',qty=purchaseInventoryQty(p);
+  const installed=p.disposition==='Installed';
+  // Creating/linking identity is deliberately NOT a physical stock receipt.
+  // Positive On Hand quantity must flow through the explicit Purchase → Stock
+  // Received transaction so it can be journaled/version-checked exactly once.
   const part={
     id:uid(),name:p.description||p.pn||'Purchased component',partNo:p.pn||'',system:p.system||'General',unit:p.unit||'ea',
-    stockQty:installed?0:qty,minQty:'',status:installed?'Installed':'On Hand',vendor:p.vendor||'',url:'',unitCost:p.unitPrice||'',
+    stockQty:0,minQty:'',status:installed?'Installed':'On Hand',vendor:p.vendor||'',url:'',unitCost:p.unitPrice||'',
     location:p.location||(installed?'Installed':'On hand'),purchaseDate:p.shipDate||'',
-    notes:'Linked automatically from purchase'+(p.invoice?' invoice '+p.invoice:'')+'.',
+    notes:'Linked automatically from purchase'+(p.invoice?' invoice '+p.invoice:'')+
+      (installed?'.':' • Stock remains 0 until Record Stock Received is used.'),
     linkedProjectIds:p.projectId?[Number(p.projectId)]:[],updates:[],inventoryAdjustments:[],
     partType:installed?'Installed Component':'Inventory',purchaseIds:[String(p.id)],equipmentId:null
   };
   db.parts.push(part);
-  p.inventoryPartId=part.id;p.inventoryApplied=true;
-  if(p.disposition==='On Hand'&&p.remainingQty==='')p.remainingQty=qty;
-  if(installed)p.remainingQty=0;
+  p.inventoryPartId=part.id;
+  // Installed items are already physically dispositioned, but On Hand links
+  // remain unapplied until the explicit stock-receipt action is confirmed.
+  if(installed){p.inventoryApplied=true;p.remainingQty=0}
   return part;
 }
 function createEquipmentForPurchase(p,part){
@@ -144,12 +149,9 @@ function reconcilePurchaseLinks(p,options={}){
     changed=setLinkValueIfBlank(part,'vendor',p.vendor)||changed;
     changed=setLinkValueIfBlank(part,'purchaseDate',p.shipDate)||changed;
     changed=setLinkValueIfBlank(part,'location',p.location)||changed;
-    if(!p.inventoryApplied&&(options.forceInventory||options.createPart)){
-      if(p.disposition==='Installed'){p.inventoryApplied=true;p.remainingQty=0;changed=true}
-      else {
-        const qty=purchaseInventoryQty(p);
-        if(qty>0){part.stockQty=(part.stockQty===''?0:num(part.stockQty))+qty;p.inventoryApplied=true;if(p.remainingQty==='')p.remainingQty=qty;changed=true}
-      }
+    if(!p.inventoryApplied&&(options.forceInventory||options.createPart)&&p.disposition==='Installed'){
+      // Installed disposition has no available stock quantity to credit.
+      p.inventoryApplied=true;p.remainingQty=0;changed=true;
     }
   }
 
@@ -182,7 +184,7 @@ window.trackPurchaseAsEquipment=function(id){
   const p=arr(db.purchases).find(x=>String(x.id)===String(id));if(!p)return;
   p.trackAsEquipment=true;
   const out=reconcilePurchaseLinks(p,{createPart:['On Hand','Installed'].includes(p.disposition),createEquipment:true});
-  saveDB(out.changed?'Purchase linked to equipment.':'Equipment link already current.');
+  saveDB(out.changed?'Purchase linked to equipment. Physical stock was not credited by linking.':'Equipment link already current.');
   setTimeout(()=>openPurchaseDetail(p.id),0);
 };
 
