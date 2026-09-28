@@ -1,7 +1,7 @@
-// ---------- v5.19.41 PRODUCTION ATOMIC INVENTORY TRANSACTIONS ----------
-// Order receipts use the durable, one-at-a-time atomic journal automatically
-// whenever the tracker is connected to an authenticated cloud workspace.
-// Manual adjustments and Reserve -> Use remain separate opt-in extensions.
+// ---------- v5.19.42 PRODUCTION ATOMIC INVENTORY TRANSACTIONS ----------
+// All core physical-inventory mutations use the durable, one-at-a-time atomic
+// journal automatically in an authenticated cloud workspace: receipts,
+// manual adjustments, part use/consumption and purchase stock receipts.
 (function(){
   'use strict';
   if(window.atomicReceiptOutbox)return;
@@ -53,14 +53,15 @@
   // Kept as a public compatibility accessor. For receipts, "enabled" now
   // means the authenticated production path is available; no device opt-in.
   function enabled(){return receiptReady()}
-  function adjustmentsEnabled(){return localStorage.getItem(ADJUST_OPT)==='1'}
-  function consumptionEnabled(){return localStorage.getItem(CONSUME_OPT)==='1'}
+  // Compatibility accessors retained for older modules/UI. In v5.19.42 the
+  // core adjustment and consumption paths are production-default too.
+  function adjustmentsEnabled(){return receiptReady()}
+  function consumptionEnabled(){return receiptReady()}
+  function purchaseReceiptsEnabled(){return receiptReady()}
   function shouldHandle(kind='receipt'){
     // Never bypass an earlier journal, regardless of which workflow created it.
     if(pending())return true;
-    if(kind==='receipt')return receiptReady();
-    if(kind==='adjustment')return adjustmentsEnabled();
-    if(kind==='consumption')return consumptionEnabled();
+    if(['receipt','adjustment','consumption','purchase'].includes(kind))return receiptReady();
     return false;
   }
   function snapshot(){
@@ -81,11 +82,238 @@
       throw new Error('A pending receipt belongs to a different workspace or account. Do not discard it.');
   }
 
-  // This release deliberately supports ONLY one Reserve -> Use operation:
-  // one existing Part and Project, one newly created Work Log and zero or
-  // more existing Purchase rows used to materialize previously installed stock.
-  // New IDs, unexpected side effects and stale cloud baselines fail closed.
+  function validateConsumptionEnvelope(before,after,changes,touchedKeys,old,meta,allowNewLog){
+    const wanted=new Set(changes.map(r=>key(r.record_type,r.record_id)));
+    const touched=new Set(touchedKeys);
+    if(wanted.size!==changes.length||wanted.size!==touched.size||
+       [...wanted].some(k=>!touched.has(k)))
+      throw new Error('Consumption touched records outside the atomic transaction.');
+    for(const k of Object.keys(old)){
+      if(['parts','projects','logs','purchases'].includes(k))continue;
+      if(stable(old[k])!==stable(db[k]))
+        throw new Error('Consumption unexpectedly modified '+k+'.');
+    }
+    for(const [k,row] of before){
+      if(!after.has(k))throw new Error('Consumption unexpectedly deleted '+k+'.');
+      if(!wanted.has(k)&&stable(row.data)!==stable(after.get(k).data))
+        throw new Error('Consumption changed an untracked record: '+k);
+    }
+    for(const [k] of after){
+      if(!before.has(k)&&(!allowNewLog||k!==key('log',meta.logId)))
+        throw new Error('Consumption unexpectedly created '+k+'.');
+    }
+  }
+
+  function validateUsePartAndPurchases(before,changes,meta,allowedProjectIds=[]){
+    const partChanges=changes.filter(r=>r.record_type==='part');
+    if(partChanges.length!==1||String(partChanges[0].record_id)!==String(meta.partId))
+      throw new Error('Consumption must version-lock exactly one source Part.');
+    const originalPart=before.get(key('part',meta.partId))?.data,nextPart=partChanges[0].data;
+    if(!originalPart)throw new Error('Consumption source Part baseline is missing.');
+    const oldPart=copy(originalPart),newPart=copy(nextPart);
+    delete oldPart.stockQty;delete oldPart.linkedProjectIds;
+    delete newPart.stockQty;delete newPart.linkedProjectIds;
+    const oldLinks=arr(originalPart.linkedProjectIds).map(String);
+    const newLinks=arr(nextPart.linkedProjectIds).map(String);
+    const allowed=new Set(arr(allowedProjectIds).filter(x=>x!==null&&x!==undefined).map(String));
+    if(stable(oldPart)!==stable(newPart)||
+       oldLinks.some(id=>!newLinks.includes(id))||
+       newLinks.some(id=>!oldLinks.includes(id)&&!allowed.has(id)))
+      throw new Error('Consumption changed unrelated Part fields or project links.');
+    let credited=0;
+    for(const purchase of changes.filter(r=>r.record_type==='purchase')){
+      const original=before.get(key('purchase',purchase.record_id))?.data,updated=purchase.data;
+      if(!original||original.disposition!=='Installed')
+        throw new Error('Only an existing Installed Purchase can materialize receipts.');
+      const prior=Number(original.inventoryReceiptMaterializedQty)||0;
+      const next=Number(updated.inventoryReceiptMaterializedQty);
+      const delta=next-prior;
+      if(!Number.isFinite(delta)||delta<=0||next>Number(original.qty)+1e-9||
+         updated.inventoryReceiptMaterialized!==true||updated.inventoryApplied!==true)
+        throw new Error('Purchase credit is not a valid single receipt materialization.');
+      const cleanOld=copy(original),cleanNew=copy(updated);
+      for(const field of ['inventoryReceiptMaterializedQty','inventoryReceiptMaterialized','inventoryApplied']){
+        delete cleanOld[field];delete cleanNew[field];
+      }
+      if(stable(cleanOld)!==stable(cleanNew))
+        throw new Error('Purchase had an unrelated change during consumption.');
+      credited+=delta;
+    }
+    if(Math.abs((Number(nextPart.stockQty)||0)-(Number(originalPart.stockQty)||0)-credited)>1e-9)
+      throw new Error('Purchase receipts and Part stock credit do not reconcile.');
+  }
+
+  function validateNewUseLog(before,changes,meta,origin,projectIds){
+    const logs=changes.filter(r=>r.record_type==='log');
+    if(logs.length!==1||String(logs[0].record_id)!==String(meta.logId)||
+       before.has(key('log',meta.logId)))
+      throw new Error('Consumption must create exactly one new Work Log.');
+    const log=logs[0].data,expectedProjects=arr(projectIds).map(String);
+    if(String(log.id)!==String(meta.logId)||log.origin!==origin||
+       !Array.isArray(log.consumedParts)||log.consumedParts.length!==1||
+       arr(log.projectIds).length!==expectedProjects.length||
+       expectedProjects.some(id=>!arr(log.projectIds).map(String).includes(id)))
+      throw new Error('Atomic consumption Work Log does not match the requested use.');
+    const consumed=log.consumedParts[0];
+    const expectedProjectPart=meta.projectPartId==null?null:String(meta.projectPartId);
+    const actualProjectPart=consumed.projectPartId==null?null:String(consumed.projectPartId);
+    if(String(consumed.id)!==String(meta.consumedItemId)||
+       String(consumed.partId)!==String(meta.partId)||
+       actualProjectPart!==expectedProjectPart||
+       Math.abs(Number(consumed.qty)-Number(meta.qty))>1e-9)
+      throw new Error('Work Log consumption does not match the requested Part and quantity.');
+  }
+
+  function validateProjectUseAppend(before,changes,meta,reservationMode){
+    const projects=changes.filter(r=>r.record_type==='project');
+    if(projects.length!==1||String(projects[0].record_id)!==String(meta.projectId))
+      throw new Error('Consumption must update exactly one matching Project.');
+    const original=before.get(key('project',meta.projectId))?.data,next=projects[0].data;
+    if(!original)throw new Error('Consumption Project baseline is missing.');
+    const priorUsed=arr(original.partsUsed),afterUsed=arr(next.partsUsed),used=afterUsed[afterUsed.length-1];
+    if(afterUsed.length!==priorUsed.length+1||
+       stable(afterUsed.slice(0,-1))!==stable(priorUsed)||
+       String(used?.id)!==String(meta.projectPartId)||
+       String(used?.logId)!==String(meta.logId)||
+       String(used?.consumedItemId)!==String(meta.consumedItemId)||
+       String(used?.partId)!==String(meta.partId)||
+       Math.abs(Number(used?.qty)-Number(meta.qty))>1e-9)
+      throw new Error('Project Parts Used entry must match the Work Log.');
+    let expectedReservations=copy(arr(original.plannedParts));
+    if(reservationMode){
+      const selected=expectedReservations.find(x=>String(x.id)===String(meta.reservationId));
+      if(!selected||String(selected.partId)!==String(meta.partId)||
+         Number(meta.qty)>Number(selected.qty)+1e-9)
+        throw new Error('Reserved quantity changed; refresh before recording use.');
+      selected.qty=Math.max(0,Number(selected.qty)-Number(meta.qty));
+      if(selected.qty<=1e-9)
+        expectedReservations=expectedReservations.filter(x=>String(x.id)!==String(meta.reservationId));
+    }
+    if(stable(arr(next.plannedParts))!==stable(expectedReservations))
+      throw new Error('Project reservation state does not match the requested use.');
+    const cleanOld=copy(original),cleanNew=copy(next);
+    delete cleanOld.plannedParts;delete cleanOld.partsUsed;
+    delete cleanNew.plannedParts;delete cleanNew.partsUsed;
+    if(stable(cleanOld)!==stable(cleanNew))
+      throw new Error('Consumption changed an unrelated Project field.');
+  }
+
+  function validateAssignedConsumption(before,after,changes,touchedKeys,old,meta){
+    if(!(Number(meta?.qty)>0)||!Number.isFinite(Number(meta.qty))||
+       meta.partId==null||meta.projectId==null||meta.logId==null||
+       meta.consumedItemId==null||meta.projectPartId==null)
+      throw new Error('Atomic assigned-part use metadata is incomplete.');
+    const byType=type=>changes.filter(r=>r.record_type===type);
+    if(changes.some(r=>!['part','project','log','purchase'].includes(r.record_type))||
+       byType('project').length!==1||byType('log').length!==1)
+      throw new Error('Assigned part use may change only one Part, one Project, one new Work Log and Installed Purchase provenance.');
+    validateConsumptionEnvelope(before,after,changes,touchedKeys,old,meta,true);
+    validateNewUseLog(before,changes,meta,'assigned-part-use',[meta.projectId]);
+    validateProjectUseAppend(before,changes,meta,false);
+    validateUsePartAndPurchases(before,changes,meta,[meta.projectId]);
+  }
+
+  function validateQuickConsumption(before,after,changes,touchedKeys,old,meta){
+    if(!(Number(meta?.qty)>0)||!Number.isFinite(Number(meta.qty))||
+       meta.partId==null||meta.logId==null||meta.consumedItemId==null)
+      throw new Error('Atomic quick-part use metadata is incomplete.');
+    const byType=type=>changes.filter(r=>r.record_type===type);
+    const hasProject=meta.projectId!==null&&meta.projectId!==undefined;
+    if(changes.some(r=>!['part','project','log','purchase'].includes(r.record_type))||
+       byType('log').length!==1||byType('project').length!==(hasProject?1:0))
+      throw new Error('Quick part use changed an unexpected record type.');
+    if(hasProject&&meta.projectPartId==null)
+      throw new Error('Quick project use is missing its Parts Used identity.');
+    validateConsumptionEnvelope(before,after,changes,touchedKeys,old,meta,true);
+    validateNewUseLog(before,changes,meta,'quick-part-use',hasProject?[meta.projectId]:[]);
+    if(hasProject)validateProjectUseAppend(before,changes,meta,meta.reservationId!=null);
+    validateUsePartAndPurchases(before,changes,meta,hasProject?[meta.projectId]:[]);
+  }
+
+  function validateLogAddConsumption(before,after,changes,touchedKeys,old,meta){
+    if(!(Number(meta?.qty)>0)||!Number.isFinite(Number(meta.qty))||
+       meta.partId==null||meta.logId==null||meta.consumedItemId==null)
+      throw new Error('Atomic Work Log consumption metadata is incomplete.');
+    const byType=type=>changes.filter(r=>r.record_type===type);
+    if(changes.some(r=>!['part','log','purchase'].includes(r.record_type))||
+       byType('log').length!==1||String(byType('log')[0].record_id)!==String(meta.logId))
+      throw new Error('Work Log consumption changed an unexpected record.');
+    validateConsumptionEnvelope(before,after,changes,touchedKeys,old,meta,false);
+    const original=before.get(key('log',meta.logId))?.data,next=byType('log')[0].data;
+    if(!original)throw new Error('Work Log consumption baseline is missing.');
+    const oldItems=arr(original.consumedParts),newItems=arr(next.consumedParts),item=newItems[newItems.length-1];
+    if(newItems.length!==oldItems.length+1||stable(newItems.slice(0,-1))!==stable(oldItems)||
+       String(item?.id)!==String(meta.consumedItemId)||
+       String(item?.partId)!==String(meta.partId)||
+       Math.abs(Number(item?.qty)-Number(meta.qty))>1e-9)
+      throw new Error('Work Log consumed item was not appended exactly once.');
+    const cleanOld=copy(original),cleanNew=copy(next);
+    delete cleanOld.consumedParts;delete cleanNew.consumedParts;
+    if(stable(cleanOld)!==stable(cleanNew))
+      throw new Error('Adding a consumed item changed unrelated Work Log fields.');
+    validateUsePartAndPurchases(before,changes,meta,arr(meta.projectIds));
+  }
+
+  function validatePurchaseReceipt(before,after,changes,touchedKeys,old,meta){
+    if(!(Number(meta?.qty)>0)||!Number.isFinite(Number(meta.qty))||
+       meta.purchaseId==null||meta.partId==null)
+      throw new Error('Atomic purchase receipt metadata is incomplete.');
+    if(changes.some(r=>!['part','purchase'].includes(r.record_type)))
+      throw new Error('Purchase receipt changed an unexpected record type.');
+    const partChange=changes.filter(r=>r.record_type==='part');
+    const purchaseChange=changes.filter(r=>r.record_type==='purchase');
+    if(partChange.length!==1||purchaseChange.length!==1||
+       String(partChange[0].record_id)!==String(meta.partId)||
+       String(purchaseChange[0].record_id)!==String(meta.purchaseId))
+      throw new Error('Purchase receipt must change exactly one Purchase and one linked Part.');
+    const wanted=new Set(changes.map(r=>key(r.record_type,r.record_id)));
+    const touched=new Set(touchedKeys);
+    if(wanted.size!==2||touched.size!==2||[...wanted].some(k=>!touched.has(k)))
+      throw new Error('Purchase receipt touched records outside its atomic transaction.');
+    for(const [k,row] of before){
+      if(!after.has(k))throw new Error('Purchase receipt unexpectedly deleted '+k+'.');
+      if(!wanted.has(k)&&stable(row.data)!==stable(after.get(k).data))
+        throw new Error('Purchase receipt changed an untracked record: '+k);
+    }
+    for(const [k] of after)if(!before.has(k))
+      throw new Error('Purchase receipt unexpectedly created '+k+'.');
+    const originalPurchase=before.get(key('purchase',meta.purchaseId))?.data,nextPurchase=purchaseChange[0].data;
+    if(!originalPurchase||originalPurchase.inventoryApplied)
+      throw new Error('Purchase was already applied or its baseline is missing.');
+    const cleanPurchaseOld=copy(originalPurchase),cleanPurchaseNew=copy(nextPurchase);
+    for(const field of ['inventoryPartId','inventoryApplied','disposition','remainingQty']){
+      delete cleanPurchaseOld[field];delete cleanPurchaseNew[field];
+    }
+    if(stable(cleanPurchaseOld)!==stable(cleanPurchaseNew)||
+       String(nextPurchase.inventoryPartId)!==String(meta.partId)||
+       nextPurchase.inventoryApplied!==true||nextPurchase.disposition!=='On Hand'||
+       Math.abs(Number(nextPurchase.remainingQty)-Number(meta.qty))>1e-9)
+      throw new Error('Purchase receipt fields do not match the requested inventory credit.');
+    const originalPart=before.get(key('part',meta.partId))?.data,nextPart=partChange[0].data;
+    if(!originalPart)throw new Error('Purchase receipt Part baseline is missing.');
+    if(Math.abs((Number(nextPart.stockQty)||0)-(Number(originalPart.stockQty)||0)-Number(meta.qty))>1e-9||
+       nextPart.status!=='On Hand')
+      throw new Error('Purchase receipt Part quantity/status does not match the received quantity.');
+    const cleanPartOld=copy(originalPart),cleanPartNew=copy(nextPart);
+    for(const field of ['stockQty','status','vendor','location','linkedProjectIds']){
+      delete cleanPartOld[field];delete cleanPartNew[field];
+    }
+    if(stable(cleanPartOld)!==stable(cleanPartNew))
+      throw new Error('Purchase receipt changed unrelated Part fields.');
+    const oldLinks=arr(originalPart.linkedProjectIds).map(String),newLinks=arr(nextPart.linkedProjectIds).map(String);
+    const allowedProject=originalPurchase.projectId==null?null:String(originalPurchase.projectId);
+    if(oldLinks.some(id=>!newLinks.includes(id))||
+       newLinks.some(id=>!oldLinks.includes(id)&&id!==allowedProject))
+      throw new Error('Purchase receipt changed unrelated Part project links.');
+  }
+
+  // Reserved -> Use keeps its existing strict validator. Other physical-use
+  // modes dispatch to equally scoped validators above.
   function validateConsumption(before,after,changes,touchedKeys,old,meta){
+    if(meta?.mode==='assigned')return validateAssignedConsumption(before,after,changes,touchedKeys,old,meta);
+    if(meta?.mode==='quick')return validateQuickConsumption(before,after,changes,touchedKeys,old,meta);
+    if(meta?.mode==='log-add')return validateLogAddConsumption(before,after,changes,touchedKeys,old,meta);
+
     if(meta?.mode!=='reserved'||!(Number(meta.qty)>0)||
        !Number.isFinite(Number(meta.qty))||meta.partId==null||
        meta.projectId==null||meta.logId==null||meta.reservationId==null)
@@ -193,9 +421,9 @@
   }
 
   function stage(work,message,kind='receipt',meta=null){
-    const adjustment=kind==='adjustment',consumption=kind==='consumption';
+    const adjustment=kind==='adjustment',consumption=kind==='consumption',purchaseReceipt=kind==='purchase';
     if(!shouldHandle(kind)||!supa||!cloudSession||!cloudWorkspaceId)
-      throw new Error('Atomic '+(adjustment?'adjustments':consumption?'part consumption':'receipts')+' requires an authenticated workspace. Connect without discarding local changes.');
+      throw new Error('Atomic '+(adjustment?'adjustments':consumption?'part consumption':purchaseReceipt?'purchase receipts':'receipts')+' requires an authenticated workspace. Connect without discarding local changes.');
     if(!canCloudEdit())throw new Error('This workspace is read-only.');
     if(pending())throw new Error('An earlier receipt is still pending, or another atomic operation is awaiting sync. Review it before changing inventory.');
     if(localStorage.getItem(PENDING)==='1')
@@ -263,6 +491,8 @@
           throw new Error('Atomic adjustment touched an unrelated record.');
       }else if(consumption){
         validateConsumption(before,after,changes,touchedKeys,old,meta);
+      }else if(purchaseReceipt){
+        validatePurchaseReceipt(before,after,changes,touchedKeys,old,meta);
       }else if(!changes.some(r=>r.record_type==='order'))
         throw new Error('Receipt did not produce a changed Order record.');
       // Production receipts may legitimately be Order-only when no inventory
@@ -297,7 +527,7 @@
       localStorage.setItem(PENDING,'1');
       cloudDirty=true;
       trackerStore.commit(message);
-      cloudStatusLabel(adjustment?'Adjustment pending':consumption?'Consumption pending':'Receipt pending');
+      cloudStatusLabel(adjustment?'Adjustment pending':consumption?'Consumption pending':purchaseReceipt?'Purchase receipt pending':'Receipt pending');
       return result;
     }catch(error){
       if(!journalWritten)restore(old);
@@ -719,21 +949,21 @@
       '<br>'+e.changes.map(r=>esc(r.record_type+' '+r.record_id)).join(', ')+'</div>'+
       (e?.changes.some(r=>r.record_type==='log')?'<div class="notice"><b>Pending Work Log protected.</b> Do not edit, delete or adjust its consumed items until the transaction is acknowledged. Export the Pending Atomic Safety Copy before supervised recovery.</div>':'')+
       (legacyUnlinked?'<div class="danger-note">This older pending operation has no linked Part update. It may have updated an Order, but it is NOT an atomic inventory receipt. Do not receive it again or expect stock credit from this attempt.</div>':''):'';
-    openModal(modalHeader('Inventory transaction safety','Production receipts • advanced recovery')+
-      '<div class="notice">Order receipts use the durable atomic transaction path automatically whenever this device is connected to an authenticated editable cloud workspace. Manual Part adjustments and Reserve → Use remain separate opt-in extensions for now. All enabled inventory operations share one idempotent journal, so one pending operation must finish before another can overtake it.</div>'+
+    const active=receiptReady();
+    openModal(modalHeader('Inventory transaction safety','Production inventory transactions • advanced recovery')+
+      '<div class="notice">Core physical-inventory changes use one durable, idempotent atomic journal automatically whenever this device is connected to an authenticated editable cloud workspace. This covers Order receipts, manual adjustments/reversals, Part use/consumption, and Purchase stock receipts. One pending operation must finish before another can overtake it.</div>'+
       (corrupt?'<div class="danger-note">'+esc(corrupt)+'</div>':'')+detail+
-      '<div class="detail-section"><b>Order receipts: '+(enabled()?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">No testing toggle is required. Linked Order + Part changes commit together; legitimate unlinked Order-only receipts are also journaled as one operation. Pending operations cannot be discarded by reloading cloud data.</div></div>'+
-      '<div class="detail-section"><b>Atomic manual adjustments: '+(adjustmentsEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental extension; test on a disposable Part. It shares the same durable journal as production receipts.</div></div>'+
-      '<div class="detail-section"><b>Atomic Reserve → Use: '+(consumptionEnabled()?'Enabled':'Off')+'</b><div class="muted small">Experimental extension. A Part, Project, new Work Log and applicable Purchase credits save together.</div></div>'+
+      '<div class="detail-section"><b>Order receipts: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">Linked Order + Part changes commit together; legitimate unlinked Order-only receipts are journaled as one operation.</div></div>'+
+      '<div class="detail-section"><b>Inventory adjustments: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">Adjustment and reversal history is version-checked and retry-safe.</div></div>'+
+      '<div class="detail-section"><b>Part use / consumption: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">Reserved, Assigned, Quick Part Used, and Work Log consumed-item additions share the same protected transaction path.</div></div>'+
+      '<div class="detail-section"><b>Purchase stock receipts: '+(active?'Atomic protection active':'Waiting for cloud connection')+'</b><div class="muted small">A linked Purchase and Part receive stock together or not at all.</div></div>'+
       '<div class="modal-actions">'+
       (textOnlyPendingLogDrift(e)?'<button class="secondary" onclick="atomicReceiptOutbox.restorePendingWorkLog()">Backup and Restore Staged Work Log Text</button>':'')+
       (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">'+
         (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
-      '<button class="secondary" onclick="atomicReceiptOutbox.toggleAdjustments()">'+(adjustmentsEnabled()?'Turn Off Atomic Adjustments':'Enable Atomic Adjustment Testing')+'</button>'+
-      '<button class="secondary" onclick="atomicReceiptOutbox.toggleConsumption()">'+(consumptionEnabled()?'Turn Off Atomic Consumption':'Enable Atomic Reserve → Use Testing')+'</button>'+
       (e?(e.blocked?
         '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
-        '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Receipt</button>'):'')+
+        '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Transaction</button>'):'')+
       '<button class="secondary" onclick="openCloudAccount()">Back to Cloud Account</button></div>');
   }
   // Compatibility shim for any older cached UI that still calls this method.
@@ -744,25 +974,16 @@
     openSettings();
   }
   function toggleAdjustments(){
-    if(adjustmentsEnabled()){
-      localStorage.removeItem(ADJUST_OPT);
-      toast('New adjustments use normal sync. Pending operations stay protected.','good');
-    }else{
-      if(!confirm('Enable experimental atomic inventory adjustments on this device? Start with a disposable Part. Only one pending inventory operation at a time.'))return;
-      localStorage.setItem(ADJUST_OPT,'1');
-    }
+    localStorage.removeItem(ADJUST_OPT);
+    toast('Atomic inventory adjustments are now automatic whenever cloud sync is connected.','good');
     openSettings();
   }
   function stageAdjustment(work,message){return stage(work,message,'adjustment')}
   function stageConsumption(work,message,meta){return stage(work,message,'consumption',meta)}
+  function stagePurchaseReceipt(work,message,meta){return stage(work,message,'purchase',meta)}
   function toggleConsumption(){
-    if(consumptionEnabled()){
-      localStorage.removeItem(CONSUME_OPT);
-      toast('New part use will follow ordinary sync. Pending operations stay protected.','good');
-    }else{
-      if(!confirm('Enable experimental atomic Reserve → Use on this device? First test with a disposable Part and Project. Other part-use forms still use ordinary sync.'))return;
-      localStorage.setItem(CONSUME_OPT,'1');
-    }
+    localStorage.removeItem(CONSUME_OPT);
+    toast('Atomic part-use transactions are now automatic whenever cloud sync is connected.','good');
     openSettings();
   }
   async function retryFromUI(){
@@ -829,12 +1050,12 @@
   window.cloudStatusLabel=function(label,kind){
     if(pending()&&label==='Synced'){
       let kind='receipt';try{kind=read()?.operationKind||'receipt'}catch(_e){}
-      label=kind==='consumption'?'Consumption pending':kind==='adjustment'?'Adjustment pending':'Receipt pending';
+      label=kind==='consumption'?'Consumption pending':kind==='adjustment'?'Adjustment pending':kind==='purchase'?'Purchase receipt pending':'Receipt pending';
     }
     return originalStatus(label,kind);
   };
   window.atomicReceiptOutbox=Object.freeze({
-    enabled,adjustmentsEnabled,consumptionEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,flush,recoverLocal,
+    enabled,adjustmentsEnabled,consumptionEnabled,purchaseReceiptsEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,stagePurchaseReceipt,flush,recoverLocal,
     openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,exportPendingJournal,restorePendingWorkLog
   });
 })();
