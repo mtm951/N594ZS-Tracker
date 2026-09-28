@@ -14,7 +14,19 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.39** (Kitfox 912 manual chapter checklists; PR #17 merged and Pages deployed September 26). Owner device version and first manual-checklist use still require acceptance.
+- Current release: **v5.19.40** (Kitfox 912 manual review-state hardening; PR #18 merged September 28 at `e40f5c8eee1e7192cd541775eba52b540b27aae1`). PR regression CI passed. The GitHub Pages workflow is configured to rerun the full tests and deploy on every `main` push; direct public-site fetch was unavailable from the current tool environment, so owner-device footer `v5.19.40` remains the final live-deployment acceptance check.
+
+
+## v5.19.40 Kitfox manual review-state hardening (September 28)
+
+- During read-only production verification of the 13 source-backed Kitfox manual checklists, all 13 chapters A–M, all 159 review items, source pages/manualInstruction fields, deterministic IDs, source-document links and the single L.3 source-gap placeholder were confirmed present. No production aircraft data was changed during verification.
+- Found one real compatibility issue from an older/stale client path: Section A had seven items with `done:true` but `reviewStatus:'Pending'` and blank `reviewedDate`. Activity history shows those seven were toggled one-by-one from client `7a82c9cb-6610-45da-9b56-567458b13edf` shortly after import on September 26/27. This was NOT the v5.19.39 specialized manual-review path. Later B.8 and F.1–F.5 were reviewed through the proper specialized UI and have `reviewStatus:'Verified'` plus review dates; preserve those owner reviews.
+- v5.19.40 changes only UI/release code: manual checklist progress now counts ONLY explicit `reviewStatus:'Verified'` as verified. Legacy `done:true + Pending` no longer appears reviewed. Clicking such a stale item once converts it into a proper dated Verified state; normal verified items still toggle back to Pending. Standard Checklists list progress uses the same status-driven rule. Existing cloud checklist records were deliberately left untouched.
+- Added regression coverage simulating stale `done:true/Pending` state and proving it is not counted as verified and normalizes correctly with one click. PR #18 `v5.19.40: harden Kitfox manual review state` merged at `e40f5c8eee1e7192cd541775eba52b540b27aae1`. PR workflow run `36442156334` passed JavaScript syntax and the complete existing/new regression suite, including atomic receipt/consumption, pending-log lock, real order receipt, sync/versioning, transaction reliability, zero-stock inventory and Kitfox manual UI tests.
+- Release metadata confirmed on merged `main`: `APP_VERSION='5.19.40'`; `app-01-seed.js`, `app-11-checklists.js` and `app-68-kitfox-manual-checklists.js` are cache-busted to 5.19.40; service-worker shell cache is `n594zs-v5-19-40-shell`.
+- GitHub Pages workflow `.github/workflows/pages.yml` triggers on every push to `main`, runs JavaScript syntax plus all `tests/*.test.mjs`, then deploys using `actions/deploy-pages@v5`. The current tool environment could not directly fetch the public `github.io` page or enumerate push-triggered Pages runs, so do NOT claim independent live-site observation. Final owner acceptance is to load the normal tracker only when Synced/no pending journal and confirm the footer reports `v5.19.40`.
+- For Section A, do NOT bulk-reset or auto-migrate the seven stale items. They are intentionally shown as not verified until the owner personally reviews them. B.8 and F.1–F.5 remain valid explicit owner reviews unless the owner changes them.
+
 
 ## v5.19.39 owner-supplied Kitfox 912 manual checklists (September 26)
 
