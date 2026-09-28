@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const src=fs.readFileSync(new URL('../app-11-checklists.js',import.meta.url),'utf8');
+assert.match(src,/openSourceReference\(doc,item\?\.sourcePage/,'generic checklist Source no longer routes through direct source resolver');
 const seed=fs.readFileSync(new URL('../app-01-seed.js',import.meta.url),'utf8');
 assert.match(seed,/const docById=id=>db\.docs\.find\(x=>String\(x\.id\)===String\(id\)\)/);
 

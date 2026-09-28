@@ -130,7 +130,7 @@ async function openMobilePdfViewer(blob,pageNo=1,label='Source manual'){
 }
 window.openMobilePdfViewer=openMobilePdfViewer;
 
-async function openAttachmentPage(id,page=null){
+async function openAttachmentPage(id,page=null,label='Kitfox 912 Install Manual'){
   const requested=Number(page),pageNo=Number.isFinite(requested)&&requested>0?Math.floor(requested):null;
   const inApp=shouldUseInAppPdfViewer()&&typeof pdfjsLib!=='undefined';
   // Desktop keeps the native viewer. Mobile/tablet renders with PDF.js inside
@@ -153,7 +153,7 @@ async function openAttachmentPage(id,page=null){
     }
     if(!blob)throw new Error('Attachment data was empty.');
     if(inApp){
-      const rendered=await window.openMobilePdfViewer(blob,pageNo||1,'Kitfox 912 Install Manual');
+      const rendered=await window.openMobilePdfViewer(blob,pageNo||1,label||'Source manual');
       if(rendered)return true;
       // If PDF.js cannot render for any reason, fall through to the native
       // blob viewer rather than leaving the user with a dead source button.
@@ -174,6 +174,73 @@ async function openAttachmentPage(id,page=null){
   }
 }
 window.openAttachmentPage=openAttachmentPage;
+
+function sourceDocumentUrl(doc){
+  const urls=[doc?.sourceUrl,doc?.location].map(v=>String(v||'').trim()).filter(Boolean);
+  return urls.find(v=>/^https?:\/\//i.test(v))||'';
+}
+function sourcePdfPageFromCitation(doc,citation){
+  const map=doc?.pdfPageMap||doc?.sourcePdfPageMap||null;
+  if(!map||typeof map!=='object')return null;
+  const text=String(citation||'').replace(/[–—]/g,'-');
+  const match=text.match(/(\d{2}-\d{2}-\d{2}).*?(?:p(?:age)?\.?\s*)(\d+)/i);
+  if(!match)return null;
+  const chapter=match[1],chapterFirstPdfPage=Number(map[chapter]),chapterPage=Number(match[2]);
+  if(!Number.isFinite(chapterFirstPdfPage)||chapterFirstPdfPage<1||!Number.isFinite(chapterPage)||chapterPage<1)return null;
+  return Math.floor(chapterFirstPdfPage+chapterPage-1);
+}
+async function sourcePdfAttachment(doc){
+  if(!doc||typeof getAttachments!=='function')return null;
+  try{
+    const files=await getAttachments('document',doc.id);
+    return (files||[]).find(f=>String(f.type||'').toLowerCase()==='application/pdf')||
+      (files||[]).find(f=>String(f.name||'').toLowerCase().endsWith('.pdf'))||null;
+  }catch(error){
+    console.warn('Could not resolve source PDF attachment',error);
+    return null;
+  }
+}
+async function openSourceReference(doc,citation='',options={}){
+  if(!doc)return false;
+  const page=sourcePdfPageFromCitation(doc,citation);
+  const pdf=await sourcePdfAttachment(doc);
+  if(pdf){
+    try{
+      if(page&&typeof openAttachmentPage==='function'){
+        const ok=await openAttachmentPage(pdf.id,page,doc.name||'Source manual');
+        if(ok)return true;
+      }
+      if(typeof openAttachment==='function'){
+        await openAttachment(pdf.id);
+        return true;
+      }
+    }catch(error){
+      console.warn('Could not open attached source PDF',error);
+    }
+  }
+
+  const url=sourceDocumentUrl(doc);
+  if(url){
+    try{
+      const tab=window.open(url,'_blank','noopener');
+      if(tab)try{tab.opener=null}catch(_e){}
+      return true;
+    }catch(error){
+      console.warn('Could not open manufacturer source URL',error);
+    }
+  }
+
+  if(options.fallbackToDocument!==false&&typeof openDocumentDetail==='function'){
+    openDocumentDetail(doc.id);
+    return true;
+  }
+  return false;
+}
+window.sourceDocumentUrl=sourceDocumentUrl;
+window.sourcePdfPageFromCitation=sourcePdfPageFromCitation;
+window.sourcePdfAttachment=sourcePdfAttachment;
+window.openSourceReference=openSourceReference;
+
 async function downloadAttachment(id){const f=await getAttachment(id);if(!f)return;const u=URL.createObjectURL(f.blob),a=document.createElement('a');a.href=u;a.download=f.name||'attachment';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}
 async function deleteAttachment(type,entityId,id){if(!confirm('Delete this attached file?'))return;await removeAttachment(id);toast('Attachment deleted.');renderAttachments(type,entityId);renderStorageStats()}
 async function clearAllAttachments(){

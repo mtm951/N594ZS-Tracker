@@ -79,6 +79,6 @@ assert.equal(other.items[0].done,false,'Never touch unrelated owner checklists')
 assert.equal(changes,4);
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.45'));
-assert.ok(html.includes('app-11-checklists.js?v=5.19.49'));
+assert.ok(html.includes('app-11-checklists.js?v=5.19.56'));
 assert.match(script,/isManual\?items\.filter\(i=>i\.reviewStatus==='Verified'\)\.length/,'Checklist list progress must also ignore stale done-only state');
 console.log('PASS: source-backed manual chapter UI, direct private-PDF page routing, review/N-A/finding states, L.3 gap guard, unchanged other checklists and correct deployment references.');

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const src=fs.readFileSync(new URL('../app-70-first-start-recorder.js',import.meta.url),'utf8');
+assert.match(src,/openSourceReference\(doc,cur\?\.item\?\.sourcePage/,'recorder Source no longer routes through direct source resolver');
 
 function harness({gateClear=true}={}){
   let uidCounter=10000,lastModal='',alerts=[],messages=[];
