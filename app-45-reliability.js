@@ -360,17 +360,68 @@ window.createVerifiedCloudSnapshot=async function(label=null){if(!supa||!cloudWo
 window.createCloudSnapshot=async function(){try{await createVerifiedCloudSnapshot();renderSystem()}catch(e){alert('Snapshot failed verification: '+e.message)}};
 window.testLatestCloudSnapshot=async function(){if(!supa||!cloudWorkspaceId)return alert('Sign in first.');const q=await supa.from('tracker_snapshots').select('label,records,created_at').eq('workspace_id',cloudWorkspaceId).order('created_at',{ascending:false}).limit(1).maybeSingle();if(q.error)return alert(q.error.message);if(!q.data)return alert('No snapshot exists.');const rows=A(q.data.records),active=rows.filter(r=>!r.deleted_at),air=active.some(r=>r.record_type==='aircraft'),settings=active.some(r=>r.record_type==='settings');openModal(modalHeader('Snapshot Restore Drill',q.data.label||'Latest snapshot')+'<div class="summary-strip"><div class="summary-cell"><div class="lab">Stored</div><div class="val">'+rows.length+'</div></div><div class="summary-cell"><div class="lab">Active</div><div class="val">'+active.length+'</div></div><div class="summary-cell"><div class="lab">Aircraft</div><div class="val">'+(air?'YES':'NO')+'</div></div><div class="summary-cell"><div class="lab">Settings</div><div class="val">'+(settings?'YES':'NO')+'</div></div></div><div class="notice"><b>'+(air&&settings&&active.length?'Snapshot payload is readable and has required singleton records.':'Snapshot needs review before relying on it.')+'</b></div><div class="tiny muted" style="margin-top:10px">Non-destructive dry run: current tracker data and files were not changed.</div><div class="modal-actions"><button class="secondary" onclick="closeModal()">Close</button></div>',true)};
 window.restoreCloudSnapshot=async function(id,label){const q=await supa.from('tracker_snapshots').select('records').eq('workspace_id',cloudWorkspaceId).eq('id',id).maybeSingle();if(q.error)return alert(q.error.message);if(!A(q.data?.records).length)return alert('Snapshot could not be validated; restore cancelled.');if(!confirm('Restore “'+label+'”? A fresh safety snapshot of the current cloud state will be created first.'))return;try{await createVerifiedCloudSnapshot('Pre-restore safety '+new Date().toLocaleString());recovery('Before cloud snapshot restore');const r=await supa.rpc('restore_workspace_snapshot',{snapshot_id:id});if(r.error)throw r.error;setConf([]);clearDirtyKeys();localStorage.removeItem(CLOUD_PENDING_KEY);toast('Snapshot restored ('+r.data+' records).','good');await loadCloudState(true);renderSystem()}catch(e){alert('Restore cancelled/failed safely: '+e.message)}};
+window.openSnapshotRestoreManager=async function(){
+  if(!supa||!cloudWorkspaceId)return alert('Sign in first.');
+  const q=await supa.from('tracker_snapshots').select('id,label,created_at').eq('workspace_id',cloudWorkspaceId).order('created_at',{ascending:false}).limit(20);
+  if(q.error)return alert(q.error.message);
+  const rows=A(q.data);
+  openModal(modalHeader('Snapshot restore','Advanced recovery')+
+    '<div class="danger-note"><b>Restore changes shared tracker data.</b> A fresh verified safety snapshot is created automatically before any restore. Use this only when you intentionally want to roll the workspace back.</div>'+
+    '<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Snapshot</th><th>Created</th><th></th></tr></thead><tbody>'+
+    (rows.map(s=>'<tr><td><b>'+esc(s.label||'Snapshot')+'</b></td><td>'+esc(new Date(s.created_at).toLocaleString())+'</td><td><button class="danger" onclick="restoreCloudSnapshot(\''+esc(String(s.id)).replace(/'/g,'&#39;')+'\',\''+esc(String(s.label||'Snapshot')).replace(/'/g,'&#39;')+'\')">Restore</button></td></tr>').join('')||
+      '<tr><td colspan="3" class="empty">No cloud snapshots available.</td></tr>')+
+    '</tbody></table></div><div class="modal-actions"><button class="secondary" onclick="openAdvancedTroubleshooting()">Back to Advanced</button></div>',true);
+};
+
+window.openAdvancedTroubleshooting=function(){
+  const a=audit(),rec=getRecovery();
+  const hasRecovery=!!rec?.db||(typeof window.hasIndexedRecoveryPoint==='function'&&window.hasIndexedRecoveryPoint());
+  const pending=localStorage.getItem(CLOUD_PENDING_KEY)==='1';
+  const atomicPending=!!window.atomicReceiptOutbox?.hasPending?.();
+  let fresh='#';
+  try{const u=new URL(window.location.href);u.hash='';u.searchParams.set('forceUpdate',String(Date.now()));fresh=u.toString()}catch(_e){}
+  openModal(modalHeader('Advanced / Troubleshooting','Recovery and diagnostic tools')+
+    '<div class="notice"><b>Normal tracker use does not require anything on this screen.</b> These tools are for updates, backups, conflicts, recovery, or a transaction that will not synchronize.</div>'+
+    '<div class="smart-status-strip">'+
+      '<div class="smart-status-card"><span>Integrity</span><b>'+(a.issues.length?'Review':a.warnings.length?'Warnings':'Clean')+'</b></div>'+
+      '<div class="smart-status-card"><span>Cloud pending</span><b>'+(pending?'YES':'NO')+'</b></div>'+
+      '<div class="smart-status-card"><span>Inventory transaction</span><b>'+(atomicPending?'PENDING':'Protected')+'</b></div>'+
+      '<div class="smart-status-card"><span>Conflicts</span><b>'+conflicts.length+'</b></div>'+
+    '</div>'+
+    '<div class="detail-section"><b>Diagnostics</b><div class="muted small">Check record relationships and protected sync conflicts.</div><div class="action-row" style="margin-top:8px">'+
+      '<button class="secondary" onclick="runReliabilityAudit(true)">Run Integrity Check</button>'+
+      (conflicts.length?'<button class="danger" onclick="openCloudConflictResolver()">Resolve Cloud Conflict</button>':'')+
+    '</div></div>'+
+    '<div class="detail-section"><b>Inventory transaction safety</b><div class="muted small">Production inventory protection is automatic. Open this only to review a pending/blocked transaction or its recovery copy.</div><div class="action-row" style="margin-top:8px">'+
+      '<button class="'+(atomicPending?'primary':'secondary')+'" onclick="atomicReceiptOutbox.openSettings()">Inventory Transaction Safety'+(atomicPending?' • Pending':'')+'</button>'+
+    '</div></div>'+
+    '<div class="detail-section"><b>App update</b><div class="muted small">Use only when this device appears stuck on an older tracker release. Updating never clears site data or IndexedDB.</div><div class="action-row" style="margin-top:8px">'+
+      '<button class="secondary" data-tracker-update-button onclick="forceLatestAppVersion()">Force Latest Version</button>'+
+      '<a class="btn secondary" href="'+esc(fresh)+'" target="_blank" rel="noopener noreferrer">Open fresh version ↗</a>'+
+      '<div class="tiny muted" role="status" aria-live="polite" data-tracker-update-status style="width:100%">Update only after sync is complete.</div>'+
+    '</div></div>'+
+    '<div class="detail-section"><b>Cloud snapshots</b><div class="muted small">Create or verify backups here. Restores are separated behind an additional warning.</div><div class="action-row" style="margin-top:8px">'+
+      '<button class="secondary" onclick="createCloudSnapshot()">Create Verified Snapshot</button>'+
+      '<button class="secondary" onclick="testLatestCloudSnapshot()">Verify Latest Snapshot</button>'+
+      '<button class="secondary" onclick="openSnapshotRestoreManager()">Manage Snapshot Restores</button>'+
+    '</div></div>'+
+    (hasRecovery?'<div class="detail-section"><b>Local recovery</b><div class="muted small">Restore the browser recovery point only when deliberately recovering from a bad local state.</div><div class="action-row" style="margin-top:8px"><button class="danger" onclick="restoreLastLocalRecovery()">Restore Local Recovery</button></div></div>':'')+
+    '<div class="modal-actions"><button class="secondary" onclick="openCloudAccount()">Back to Cloud Account</button><button class="secondary" onclick="closeModal()">Close</button></div>',true);
+};
 const accountBase=window.openCloudAccount;
 window.openCloudAccount=function(){
   accountBase();
   queueMicrotask(()=>{
-    const modal=document.getElementById('modalBox');if(!modal||!conflicts.length)return;
+    const modal=document.getElementById('modalBox');if(!modal)return;
     const actions=modal.querySelector('.modal-actions');
+    if(actions&&!actions.querySelector('[data-advanced-troubleshooting]'))
+      actions.insertAdjacentHTML('afterbegin','<button class="secondary" data-advanced-troubleshooting onclick="openAdvancedTroubleshooting()">Advanced / Troubleshooting</button>');
+    if(!conflicts.length)return;
     const card=document.createElement('div');card.className='danger-note';card.style.marginTop='12px';
     card.innerHTML='<b>Cloud conflict protected.</b><br>'+conflicts.length+' record'+(conflicts.length===1?'':'s')+' changed both locally and in the cloud. Nothing was overwritten.<div class="action-row" style="margin-top:10px"><button class="primary" onclick="openCloudConflictResolver()">Resolve Conflict</button></div>';
     if(actions)modal.insertBefore(card,actions);else modal.appendChild(card);
   });
 };
 
-const sys=window.renderSystem;window.renderSystem=async function(){await sys();const page=document.getElementById('page-system');if(!page||!cloudSession||!cloudWorkspaceId)return;const a=audit(),rec=getRecovery(),hasRecovery=!!rec?.db||(typeof window.hasIndexedRecoveryPoint==='function'&&window.hasIndexedRecoveryPoint()),pending=localStorage.getItem(CLOUD_PENDING_KEY)==='1',grid=page.querySelector('.grid');if(!grid)return;grid.insertAdjacentHTML('beforeend','<div class="card span-12"><div class="toolbar"><div><h2>Reliability & Recovery</h2><div class="muted">Integrity checks, restore drills and sync-conflict protection.</div></div><span class="mini-badge">v'+VER+'</span></div><div class="smart-status-strip"><div class="smart-status-card"><span>Integrity</span><b>'+(a.issues.length?'Review':a.warnings.length?'Warnings':'Clean')+'</b></div><div class="smart-status-card"><span>Errors / warnings</span><b>'+a.issues.length+' / '+a.warnings.length+'</b></div><div class="smart-status-card"><span>Cloud pending</span><b>'+(pending?'YES':'NO')+'</b></div><div class="smart-status-card"><span>Conflicts protected</span><b>'+conflicts.length+'</b></div></div><div class="action-row"><button class="primary" onclick="runReliabilityAudit(true)">Run Integrity Check</button><button class="secondary" onclick="testLatestCloudSnapshot()">Test Latest Snapshot</button><button class="secondary" onclick="createCloudSnapshot()">Verified Snapshot</button>'+(hasRecovery?'<button class="secondary" onclick="restoreLastLocalRecovery()">Restore Local Recovery</button>':'')+(conflicts.length?'<button class="danger" onclick="openCloudConflictResolver()">Resolve Conflict</button>':'')+'</div><div class="tiny muted" style="margin-top:10px">If the same record changes on this device and another device before sync, automatic overwrite is stopped until you choose which version wins.</div></div>')};
+const sys=window.renderSystem;window.renderSystem=async function(){await sys();const page=document.getElementById('page-system');if(!page||!cloudSession||!cloudWorkspaceId)return;const a=audit(),pending=localStorage.getItem(CLOUD_PENDING_KEY)==='1',grid=page.querySelector('.grid');if(!grid)return;grid.insertAdjacentHTML('beforeend','<div class="card span-12"><div class="toolbar"><div><h2>System Health</h2><div class="muted">At-a-glance integrity and sync protection. Recovery tools stay under Advanced / Troubleshooting.</div></div></div><div class="smart-status-strip"><div class="smart-status-card"><span>Integrity</span><b>'+(a.issues.length?'Review':a.warnings.length?'Warnings':'Clean')+'</b></div><div class="smart-status-card"><span>Errors / warnings</span><b>'+a.issues.length+' / '+a.warnings.length+'</b></div><div class="smart-status-card"><span>Cloud pending</span><b>'+(pending?'YES':'NO')+'</b></div><div class="smart-status-card"><span>Conflicts protected</span><b>'+conflicts.length+'</b></div></div><div class="action-row"><button class="primary" onclick="runReliabilityAudit(true)">Run Integrity Check</button><button class="secondary" onclick="openAdvancedTroubleshooting()">Advanced / Troubleshooting</button>'+(conflicts.length?'<button class="danger" onclick="openCloudConflictResolver()">Resolve Conflict</button>':'')+'</div><div class="tiny muted" style="margin-top:10px">Normal operation requires no recovery action. If the same record changes on two devices before sync, overwrite is stopped and the conflict is surfaced here.</div></div>')};
 })();
