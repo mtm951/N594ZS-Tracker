@@ -50,6 +50,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - No checklist records, review statuses, Supabase schema, Storage objects, or aircraft records were changed by this release.
 - Main verified after merge: `APP_VERSION='5.19.47'`, `app-13-attachments.js?v=5.19.47`, service-worker shell `n594zs-v5-19-47-shell`, mobile detection + PDF.js renderer + Previous/Next controls present.
 - Owner acceptance required: once Synced, refresh phone normally and confirm footer **v5.19.47**. Tap any Kitfox **Open PDF p.X** button. On the phone it should now open an in-app **Mobile source viewer** already rendered at page X, not hand off to the native PDF viewer. Do not clear site data.
+- **OWNER ACCEPTANCE COMPLETE:** Mike confirmed v5.19.47 works great on the phone and the requested Kitfox source page opens correctly in the in-app viewer.
 
 ## v5.19.46 manual PDF page-jump correction (September 28)
 
