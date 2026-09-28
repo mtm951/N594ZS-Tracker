@@ -113,7 +113,8 @@ function loadEquipment(context){
   assert.equal(changed,false);
 }
 
-// 2) An EXPLICIT workflow is allowed to create the records, and repeating it must be idempotent.
+// 2) An EXPLICIT relationship/equipment workflow may create identity records,
+// but it must NEVER perform the physical stock receipt as a side effect.
 {
   const purchase={
     id:'p-explicit',description:'EarthX-style test component',pn:'TEST-5MM',qty:1,remainingQty:1,unitPrice:30,
@@ -138,12 +139,14 @@ function loadEquipment(context){
   assert.equal(String(equipment.inventoryPartId),String(part.id));
   assert.ok(equipment.linkedProjectIds.includes(44));
   assert.ok(invoice.purchaseIds.includes('p-explicit'));
-  assert.equal(part.stockQty,1);
+  assert.equal(part.stockQty,0,'equipment/link workflow credited physical stock');
+  assert.equal(purchase.inventoryApplied,false,'linking marked On Hand purchase as physically received');
 
   h.reconcilePurchaseLinks(purchase,{createPart:true,createEquipment:true});
   assert.equal(db.parts.length,1,'reconcile duplicated the Part record');
   assert.equal(db.equipment.length,1,'reconcile duplicated the Equipment record');
-  assert.equal(part.stockQty,1,'reconcile double-counted inventory');
+  assert.equal(part.stockQty,0,'reconcile credited stock on repeat');
+  assert.equal(purchase.inventoryApplied,false,'repeat reconcile marked stock received');
 }
 
 // 3) The first migrated workflow uses the store boundary without changing equipment-history behavior.
