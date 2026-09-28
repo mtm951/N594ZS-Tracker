@@ -17,6 +17,8 @@ const L=mk('L','L — Electrical',[['Step 3 absent','L.3 not printed in supplied
 const other={id:'other',name:'Owner existing checklist',items:[{id:'o',done:false}]};
 const db={checklists:[B,C,L,other],docs:[{id:1789567365526,name:'Owner local Kitfox manual'}]};
 for(const c of [B,C,L])c.documentId=1789567365526;
+// Simulate a stale pre-v5.19.39 client that toggled only `done` without review metadata.
+B.items[0].done=true;
 const alerts=[],modal=[];let changes=0;
 const root={
   console,window:null,db,Map,Set,Array,Date,String,Number,Math,Object,
@@ -32,7 +34,7 @@ const root={
 vm.createContext(root);
 vm.runInContext(script,root);
 vm.runInContext(ui,root);
-assert.equal(root.kitfoxManualChecklistStats(B).verified,0);
+assert.equal(root.kitfoxManualChecklistStats(B).verified,0,'Legacy done=true/Pending must not count as verified');
 assert.equal(root.kitfoxManualChecklistStats(C).na,0);
 assert.equal(root.kitfoxManualChecklistStats(other).total,1);
 root.openKitfox912ManualChecklist('manual-B');
@@ -41,7 +43,7 @@ assert.match(modal.at(-1),/Manual p.12/);
 assert.match(modal.at(-1),/Fig. B-4/);
 assert.match(modal.at(-1),/not an airworthiness signoff/i);
 root.setKitfoxManualStep('manual-B','B-1','verify');
-assert.equal(B.items[0].done,true);
+assert.equal(B.items[0].done,true,'One click must normalize stale done=true/Pending into a real verification');
 assert.equal(B.items[0].reviewStatus,'Verified');
 assert.equal(B.items[0].reviewedDate,'2026-09-26');
 root.setKitfoxManualStep('manual-B','B-2','attention');
@@ -64,6 +66,7 @@ assert.match(modal.at(-1),/Mark alternate cowl chapter N\/A/);
 assert.equal(other.items[0].done,false,'Never touch unrelated owner checklists');
 assert.equal(changes,4);
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.39'));
-assert.ok(html.includes('app-11-checklists.js?v=5.19.39'));
+assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v=5.19.40'));
+assert.ok(html.includes('app-11-checklists.js?v=5.19.40'));
+assert.match(script,/isManual\?items\.filter\(i=>i\.reviewStatus==='Verified'\)\.length/,'Checklist list progress must also ignore stale done-only state');
 console.log('PASS: source-backed manual chapter UI, review/N-A/finding states, L.3 gap guard, source page, unchanged other checklists and correct deployment references.');

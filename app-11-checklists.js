@@ -42,7 +42,8 @@ function renderChecklistRows(){
     const items=Array.isArray(c.items)?c.items:[];
     const isManual=c.kitfoxManualPack==='kitfox-912-64825-000-dec2001';
     const na=isManual?items.filter(i=>i.reviewStatus==='N/A').length:0;
-    const done=items.filter(i=>i.done).length+(isManual?na:0),
+    const verified=isManual?items.filter(i=>i.reviewStatus==='Verified').length:items.filter(i=>i.done).length;
+    const done=verified+(isManual?na:0),
       pct=items.length?Math.round(done/items.length*100):0;
     const inspectionMeta=c.inspectionMode?`<div class="task-meta"><span class="mini-badge">${esc(c.sourcePages?'POH '+c.sourcePages:'Source-backed')}</span>${Array.isArray(c.groupOrder)&&c.groupOrder.length?`<span class="mini-badge">${c.groupOrder.length} groups</span>`:''}<span class="mini-badge">click items for history & notes</span></div>`:'';
     const manualMeta=c.kitfoxManualPack==='kitfox-912-64825-000-dec2001'
