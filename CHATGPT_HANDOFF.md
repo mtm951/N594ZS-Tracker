@@ -36,6 +36,25 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.50 nested modal Back / Esc navigation (September 28)
+
+- Owner requested that drilling from **Readiness → commissioning gate → checklist** should allow **Esc / X / Back** to return to the previous popup rather than dropping directly back to the Readiness page.
+- PR #28 `v5.19.50: make Esc/X return to previous modal` merged to `main` at `926f8182dd716fe2019c467342a1734cdc076761`.
+- Final workflow run `36480975885` passed JavaScript syntax and the complete regression suite. The nested modal-navigation regression passed together with commissioning readiness, source-backed checklist, Kitfox manual/mobile PDF viewer and atomic inventory tests.
+- Existing core modal history in `app-03-core.js` was reused; no second stack was invented.
+- `app-35-navigation-ux.js` now checks whether the current popup has a saved internal parent (`data-modal-back`). If so, `trackerBack()` calls `modalBack()` first instead of browser `history.back()`.
+- Because Esc, the floating universal X, the small modal-header X and in-app Back all route through `trackerBack()`, they now share the same nested behavior:
+  - Readiness → First Start gate → checklist;
+  - Esc/X/Back once → First Start gate;
+  - Esc/X/Back again → underlying Readiness page.
+- Unsaved-edit protection remains in force. The first Escape while an input is actively being edited still only blurs the editor; a deliberate second Escape/Back/X follows the normal discard-confirmation logic if the form is dirty.
+- Commissioning pack rows and Continue buttons now use actual `openChecklistDetail(...)` inline detail navigation so the existing core parent-snapshot mechanism captures the gate popup before opening the checklist.
+- Ordinary top-level popup behavior is unchanged.
+- No production Supabase records or checklist completion states changed in this release.
+- Main verified after merge: `APP_VERSION='5.19.50'`, `app-35-navigation-ux.js?v=5.19.50`, `app-69-commissioning-readiness.js?v=5.19.50`, service-worker shell `n594zs-v5-19-50-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.50**. Open **Readiness → First Start → any checklist**. Press **Esc** once and confirm the First Start gate breakdown returns; press Esc again and confirm the gate popup closes to Readiness. The X buttons should behave the same way.
+
 ## v5.19.49 commissioning readiness dashboard / dependency gates (September 28)
 
 - PR #27 `v5.19.49: commissioning readiness gates` merged to `main` at `b638ed58a01121f1040cdb9d19c7b2385037988e`.
