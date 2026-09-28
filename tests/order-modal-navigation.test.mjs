@@ -66,7 +66,7 @@ function createHarness({confirmResult=true}={}){
     navTo:()=>{},
     modalBackCalls:0,
     modalBack(){
-      this.modalBackCalls++;
+      ctx.modalBackCalls++;
       modal.innerHTML='First Start Gate';
       modal.classList.add('open');
     },
