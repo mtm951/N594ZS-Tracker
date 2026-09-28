@@ -68,12 +68,116 @@ function phaseGateInfo(phaseId){
 function workflowOverallPercent(){const p=db.projects.filter(x=>x.phase!=='later');return p.length?Math.round(p.reduce((s,x)=>s+num(x.percent),0)/p.length):0}
 
 // ---------- PROJECT EDITOR WORKFLOW FIELDS ----------
+function projectQuickStepRow(step=null){
+  const id=step?.id===null||step?.id===undefined?'':String(step.id);
+  const detail=String(step?.note||'').trim();
+  return `<div class="project-quick-step-row" data-project-step-row data-step-id="${esc(id)}">
+    <input class="project-quick-step-check" type="checkbox" aria-label="Task complete" ${step?.done?'checked':''}>
+    <input class="project-quick-step-text" type="text" value="${esc(step?.text||'')}" placeholder="Type a task…" autocomplete="off">
+    ${detail?'<span class="mini-badge project-quick-step-detail">details saved</span>':''}
+    <button type="button" class="project-quick-step-remove" data-project-step-remove title="Remove task" aria-label="Remove task" tabindex="-1">×</button>
+  </div>`;
+}
+function projectQuickStepEditorHTML(p){
+  const steps=projectSteps(p);
+  return `<div class="project-quick-step-head"><div><label>Step-by-step tasks</label><div class="tiny muted">These become the clickable checklist at the top of the project.</div></div><button type="button" class="icon-btn" onclick="addProjectQuickStep()">+ Task</button></div>
+    <div id="prQuickSteps" class="project-quick-steps">${steps.map(projectQuickStepRow).join('')}${projectQuickStepRow()}</div>
+    <div class="project-quick-step-help">Type a task, then press <b>Tab</b> or <b>Enter</b> to start the next line. Paste multiple lines to create multiple tasks. Changes are saved with the project.</div>`;
+}
+function projectQuickStepRows(){
+  const list=document.getElementById('prQuickSteps');
+  return list?[...list.querySelectorAll('[data-project-step-row]')]:[];
+}
+function projectQuickStepInput(row){return row?.querySelector?.('.project-quick-step-text')||null}
+function projectQuickStepBlankRow(){
+  const rows=projectQuickStepRows();
+  const last=rows.at(-1);
+  return last&&!projectQuickStepInput(last)?.value.trim()?last:null;
+}
+function addProjectQuickStep(afterRow=null,focus=true,text=''){
+  const list=document.getElementById('prQuickSteps');if(!list)return null;
+  const holder=document.createElement('div');holder.innerHTML=projectQuickStepRow({text});
+  const row=holder.firstElementChild;if(!row)return null;
+  if(afterRow?.parentElement===list)afterRow.insertAdjacentElement('afterend',row);else list.appendChild(row);
+  if(focus)projectQuickStepInput(row)?.focus();
+  return row;
+}
+function ensureProjectQuickStepBlank(focus=false){
+  const blank=projectQuickStepBlankRow();
+  if(blank){if(focus)projectQuickStepInput(blank)?.focus();return blank}
+  return addProjectQuickStep(null,focus);
+}
+function removeProjectQuickStep(button){
+  const row=button?.closest?.('[data-project-step-row]');if(!row)return;
+  row.remove();
+  ensureProjectQuickStepBlank(false);
+}
+function projectQuickStepKeydown(event){
+  const input=event.target?.closest?.('.project-quick-step-text');if(!input)return;
+  const row=input.closest('[data-project-step-row]');if(!row)return;
+  const rows=projectQuickStepRows(),index=rows.indexOf(row);
+  if(event.key==='Enter'&&!event.shiftKey){
+    event.preventDefault();
+    if(!input.value.trim())return;
+    const next=rows[index+1];
+    if(next)return projectQuickStepInput(next)?.focus();
+    return addProjectQuickStep(row,true);
+  }
+  if(event.key==='Tab'&&!event.shiftKey){
+    const next=rows[index+1];
+    if(next){event.preventDefault();return projectQuickStepInput(next)?.focus()}
+    if(input.value.trim()){event.preventDefault();return addProjectQuickStep(row,true)}
+  }
+}
+function projectQuickStepPaste(event){
+  const input=event.target?.closest?.('.project-quick-step-text');if(!input)return;
+  const raw=event.clipboardData?.getData?.('text')||'';
+  if(!/[\r\n]/.test(raw))return;
+  const lines=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return;
+  event.preventDefault();
+  input.value=lines.shift();
+  let row=input.closest('[data-project-step-row]');
+  for(const line of lines)row=addProjectQuickStep(row,false,line)||row;
+  ensureProjectQuickStepBlank(false);
+  projectQuickStepInput(row)?.focus();
+}
+function bindProjectQuickStepEditor(){
+  const list=document.getElementById('prQuickSteps');if(!list)return;
+  list.addEventListener('keydown',projectQuickStepKeydown);
+  list.addEventListener('paste',projectQuickStepPaste);
+  list.addEventListener('click',event=>{
+    const remove=event.target?.closest?.('[data-project-step-remove]');
+    if(remove){event.preventDefault();removeProjectQuickStep(remove)}
+  });
+}
+function projectQuickStepDraft(project){
+  const list=document.getElementById('prQuickSteps');if(!list)return null;
+  const previous=new Map(projectSteps(project).map(step=>[String(step.id),step]));
+  return [...list.querySelectorAll('[data-project-step-row]')].map(row=>{
+    const text=String(projectQuickStepInput(row)?.value||'').trim();if(!text)return null;
+    const key=String(row.dataset.stepId||''),prior=key?previous.get(key):null;
+    const id=prior?.id??uid();
+    return {...(prior||{}),id,text,done:!!row.querySelector('.project-quick-step-check')?.checked};
+  }).filter(Boolean).map((step,index)=>({...step,order:index+1}));
+}
+
 const openProjectModalWorkflowBase=openProjectModal;
 openProjectModal=function(id=null){
   openProjectModalWorkflowBase(id);
-  const p=id?projectById(id):{phase:'build',focusToday:false,dependsOnIds:[],completionCriteria:'',stepsDriveProgress:true};
+  const p=id?projectById(id):{phase:'build',focusToday:false,dependsOnIds:[],completionCriteria:'',stepsDriveProgress:true,steps:[]};
   const form=document.querySelector('#modalBox .form-grid');if(!form)return;
   const deps=new Set(arr(p.dependsOnIds).map(Number));
+
+  // Put the fast checklist builder directly after Plan / Notes, where the
+  // owner is already breaking the job into individual actions.
+  const planField=document.getElementById('prPlan')?.parentElement;
+  if(planField){
+    const stepWrap=document.createElement('div');
+    stepWrap.className='full project-quick-step-editor';
+    stepWrap.innerHTML=projectQuickStepEditorHTML(p);
+    planField.insertAdjacentElement('afterend',stepWrap);
+  }
+
   const wrap=document.createElement('div');wrap.className='full workflow-project-editor';
   wrap.innerHTML=`<div class="workflow-editor-grid">
     <div><label>Workflow phase</label><select id="prPhase">${WORKFLOW_PHASES.map(x=>`<option value="${x.id}" ${p.phase===x.id?'selected':''}>${esc(x.label)}</option>`).join('')}</select></div>
@@ -83,14 +187,22 @@ openProjectModal=function(id=null){
     <div class="workflow-criteria"><label>Definition of done / verification</label><textarea id="prCompletionCriteria" placeholder="What has to be checked, verified or documented before this project is truly complete?">${esc(p.completionCriteria||'')}</textarea></div>
   </div>`;
   form.appendChild(wrap);
+  bindProjectQuickStepEditor();
 };
 const saveProjectWorkflowBase=saveProject;
 saveProject=function(id){
+  const existingProject=id?projectById(id):null;
+  const stepDraft=projectQuickStepDraft(existingProject);
   const existingIds=new Set(db.projects.map(x=>x.id));
   const extras={phase:val('prPhase')||'build',focusToday:!!document.getElementById('prFocusToday')?.checked,stepsDriveProgress:!!document.getElementById('prStepsDrive')?.checked,dependsOnIds:[...document.querySelectorAll('.pr-dependency:checked')].map(x=>Number(x.value)).filter(Number.isFinite),completionCriteria:val('prCompletionCriteria')};
   saveProjectWorkflowBase(id);
   const p=id?projectById(id):db.projects.find(x=>!existingIds.has(x.id));
-  if(p){Object.assign(p,extras);p.steps=arr(p.steps);syncProjectProgressFromSteps(p);saveDB();}
+  if(p){
+    Object.assign(p,extras);
+    p.steps=stepDraft===null?arr(p.steps):stepDraft;
+    syncProjectProgressFromSteps(p);
+    saveDB();
+  }
 };
 
 // ---------- PROJECT DETAIL: WORKFLOW + STEP-BY-STEP CHECKLIST ----------
