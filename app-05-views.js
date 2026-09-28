@@ -163,22 +163,144 @@ function renderOrders(){
 }
 function renderOrderRows(){const el=document.getElementById('orderRows');if(!el)return;const q=(val('orderSearch')||'').toLowerCase(),st=val('orderStatus'),sys=val('orderSystem');const statusMatch=o=>!st||(st==='Open'?!isClosedOrder(o):st==='History'?isClosedOrder(o):o.status===st);const rows=sortOrderRows(db.orders.filter(o=>(!q||[o.item,o.vendor,o.tracking,o.notes,o.blockerReason,orderProjectSummary(o),partName(o.partId),typeof window.orderSystemName==='function'?window.orderSystemName(o):o.system].join(' ').toLowerCase().includes(q))&&statusMatch(o)&&trackerRecordMatchesSystem(o,sys,'orders')));const groups=new Map();rows.forEach(o=>{const key=typeof orderGroupKey==='function'?orderGroupKey(o):`single:${o.id}`;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(o)});el.innerHTML=[...groups.entries()].map(([,items])=>{const first=items[0],total=items.reduce((s,o)=>s+orderTotal(o),0),remaining=items.reduce((s,o)=>s+(isClosedOrder(o)?0:(typeof orderRemainingQty==='function'?orderRemainingQty(o):(o.inventoryApplied?0:num(o.qty)))),0),open=items.filter(o=>!isClosedOrder(o));const grouped=items.length>1||first.tracking;return `${grouped?`<tr class="order-group-row"><td colspan="10"><div class="section-tools"><div><b>${esc(first.tracking||first.vendor||'Order')}</b><div class="task-note">${esc(first.vendor||'No vendor')} • ${items.length} line${items.length===1?'':'s'} • ${db.settings.showCosts?fmtMoney(total):'Costs hidden'} • ${esc(remaining)} unit${remaining===1?'':'s'} remaining</div></div>${open.length?`<div class="action-row"><button class="btn secondary" onclick="event.stopPropagation();openReceiveOrderGroupModal(${first.id})">Receive Part of Order</button><button class="btn success" onclick="event.stopPropagation();receiveOrderGroupFor(${first.id})">Receive Entire Order</button></div>`:''}</div></td></tr>`:''}${items.map(o=>{const received=typeof orderReceivedQty==='function'?orderReceivedQty(o):(o.inventoryApplied?num(o.qty):0);return `<tr class="click-row" onclick="openOrderDetail(${o.id})"><td><b>${esc(o.item)}</b><div class="task-note">${esc(o.blockerReason||o.notes||'')}</div></td><td>${esc(orderProjectSummary(o))}</td><td>${esc(o.partId?partName(o.partId):'—')}</td><td>${esc(o.vendor||'—')}</td><td>${esc(o.qty||'—')} ${esc(o.unit||'')}</td><td>${esc(received+' '+(o.unit||''))}</td><td>${pill(o.status)}</td><td>${esc(o.eta||'—')}</td><td>${db.settings.showCosts?fmtMoney(orderTotal(o)):'Hidden'}</td><td><button class="icon-btn" onclick="event.stopPropagation();openOrderModal(${o.id})">Edit</button></td></tr>`}).join('')}`}).join('')||'<tr><td colspan="10" class="empty">No matching orders.</td></tr>'}
 
+let docSort={key:'name',dir:'asc'};
+let documentSourceRenderToken=0;
+const documentSourceCache=new Map();
+
+function docSortHead(label,key){
+  const active=docSort.key===key,aria=active?(docSort.dir==='asc'?'ascending':'descending'):'none';
+  return `<th class="doc-sortable" aria-sort="${aria}"><button class="doc-sort-button" data-doc-sort="${key}" onclick="setDocSort('${key}')" title="Sort by ${esc(label)}">${esc(label)} <span>${active?(docSort.dir==='asc'?'▲':'▼'):'↕'}</span></button></th>`;
+}
+function refreshDocSortHeaders(){
+  document.querySelectorAll?.('#page-documents .doc-sort-button')?.forEach(b=>{
+    const active=b.dataset.docSort===docSort.key;
+    b.closest('th')?.setAttribute('aria-sort',active?(docSort.dir==='asc'?'ascending':'descending'):'none');
+    const arrow=b.querySelector('span');if(arrow)arrow.textContent=active?(docSort.dir==='asc'?'▲':'▼'):'↕';
+  });
+}
+function setDocSort(key){
+  if(docSort.key===key)docSort.dir=docSort.dir==='asc'?'desc':'asc';
+  else docSort={key,dir:'asc'};
+  refreshDocSortHeaders();
+  renderDocRows();
+}
+function documentSourceUrl(d){
+  const preferred=String(d?.sourceUrl||'').trim(),location=String(d?.location||'').trim();
+  if(isURL(preferred))return preferred;
+  return isURL(location)?location:'';
+}
+function documentLocationNote(d){
+  const location=String(d?.location||'').trim();
+  return location&&!isURL(location)?location:'';
+}
+function documentSortValue(d,key){
+  if(key==='name')return d.name||'';
+  if(key==='type')return d.type||'';
+  if(key==='revision')return d.revision||'';
+  if(key==='system')return d.system||'';
+  if(key==='projects')return arr(d.linkedProjectIds).length;
+  if(key==='location')return documentSourceUrl(d)||documentLocationNote(d)||'';
+  return '';
+}
+function sortDocumentRows(rows){
+  const dir=docSort.dir==='desc'?-1:1,collator=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
+  return rows.sort((a,b)=>{
+    const av=documentSortValue(a,docSort.key),bv=documentSortValue(b,docSort.key);
+    const aBlank=av===''||av===null||av===undefined,bBlank=bv===''||bv===null||bv===undefined;
+    if(aBlank!==bBlank)return aBlank?1:-1;
+    const primary=typeof av==='number'&&typeof bv==='number'?av-bv:collator.compare(String(av),String(bv));
+    return primary*dir||collator.compare(String(a.name||''),String(b.name||''));
+  });
+}
+function invalidateDocumentSourceCache(id=null){
+  if(id===null||id===undefined)documentSourceCache.clear();
+  else documentSourceCache.delete(String(id));
+  if(document.getElementById?.('docRows'))renderDocRows();
+}
+window.invalidateDocumentSourceCache=invalidateDocumentSourceCache;
+
+async function documentSourceInfo(d){
+  const key=String(d.id);
+  if(documentSourceCache.has(key))return documentSourceCache.get(key);
+  const pending=(async()=>{
+    const url=documentSourceUrl(d);
+    if(typeof getAttachments!=='function')return {url,files:[],pdf:null,file:null,error:null};
+    try{
+      const files=await getAttachments('document',d.id);
+      const pdf=arr(files).find(f=>String(f.type||'').toLowerCase()==='application/pdf')||
+        arr(files).find(f=>String(f.name||'').toLowerCase().endsWith('.pdf'))||null;
+      return {url,files:arr(files),pdf,file:pdf||arr(files)[0]||null,error:null};
+    }catch(error){
+      return {url,files:[],pdf:null,file:null,error};
+    }
+  })();
+  documentSourceCache.set(key,pending);
+  return pending;
+}
+function documentSourceNoteHTML(d,info=null){
+  const note=documentLocationNote(d);
+  const attachmentCount=info?.files?.length||0;
+  const bits=[];
+  if(note)bits.push(esc(note));
+  if(attachmentCount>1)bits.push(esc(attachmentCount+' attachments'));
+  return bits.length?`<div class="task-note">${bits.join(' • ')}</div>`:'';
+}
+function initialDocumentSourceHTML(d){
+  const url=documentSourceUrl(d);
+  return `<div class="doc-source-actions">${url?`<a class="blue pill doc-source-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Web link</a>`:''}<span class="gray pill">Checking files…</span></div>${documentSourceNoteHTML(d)}`;
+}
+function finalDocumentSourceHTML(d,info){
+  const actions=[];
+  if(info.pdf)actions.push('<button type="button" class="blue pill doc-source-button" data-doc-source-file>PDF attached • Open PDF</button>');
+  else if(info.file)actions.push('<button type="button" class="blue pill doc-source-button" data-doc-source-file>File attached • Open file</button>');
+  if(info.url)actions.push(`<a class="blue pill doc-source-link" href="${esc(info.url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Web link</a>`);
+  if(!actions.length)actions.push(info.error?'<span class="gray pill">Source check unavailable</span>':'<span class="yellow pill">Needs file / link</span>');
+  return `<div class="doc-source-actions">${actions.join(' ')}</div>${documentSourceNoteHTML(d,info)}`;
+}
+async function hydrateDocumentSourceCells(rows,token){
+  await Promise.all(rows.map(async(d,index)=>{
+    const info=await documentSourceInfo(d);
+    if(token!==documentSourceRenderToken)return;
+    const cell=document.querySelector?.(`#docRows [data-doc-source-index="${index}"]`);
+    if(!cell)return;
+    cell.innerHTML=finalDocumentSourceHTML(d,info);
+    const open=cell.querySelector?.('[data-doc-source-file]');
+    if(open&&info.file)open.addEventListener('click',async event=>{
+      event.stopPropagation();
+      if(typeof openAttachment==='function')await openAttachment(info.file.id);
+    });
+  }));
+}
+function bindDocumentRowActions(el){
+  el.querySelectorAll?.('[data-doc-row]')?.forEach(row=>row.addEventListener('click',event=>{
+    if(event.target.closest?.('a,button,input,select,textarea'))return;
+    openDocumentDetail(row.dataset.docRow);
+  }));
+  el.querySelectorAll?.('[data-doc-open]')?.forEach(button=>button.addEventListener('click',event=>{
+    event.stopPropagation();openDocumentDetail(button.dataset.docOpen);
+  }));
+  el.querySelectorAll?.('[data-doc-edit]')?.forEach(button=>button.addEventListener('click',event=>{
+    event.stopPropagation();openDocModal(button.dataset.docEdit);
+  }));
+}
+
 function renderDocuments(){
-  document.getElementById('page-documents').innerHTML=`<div class="card"><div class="toolbar"><div><h1>Documents</h1><div class="muted">Manuals, diagrams, records, receipts, specifications and links. Every row opens a document record with links to the work it supports.</div></div><button class="btn primary" onclick="openDocModal()">+ Add Document</button></div><div class="controls"><input id="docSearch" placeholder="Search documents…" oninput="renderDocRows()"><select id="docType" onchange="renderDocRows()"><option value="">All types</option>${unique(db.docs.map(d=>d.type).filter(Boolean)).sort().map(s=>`<option>${esc(s)}</option>`).join('')}</select></div><div class="table-wrap" style="margin-top:11px"><table><thead><tr><th>Document</th><th>Type</th><th>Revision</th><th>System</th><th>Linked projects</th><th>Location</th><th></th></tr></thead><tbody id="docRows"></tbody></table></div></div>`;renderDocRows();
+  documentSourceCache.clear();
+  document.getElementById('page-documents').innerHTML=`<div class="card"><div class="toolbar"><div><h1>Documents</h1><div class="muted">Manuals, diagrams, records, receipts, specifications and links. Click a document name or anywhere on its row to open the tracker record; source files and web links open directly.</div></div><button class="btn primary" onclick="openDocModal()">+ Add Document</button></div><div class="controls"><input id="docSearch" placeholder="Search documents…" oninput="renderDocRows()"><select id="docType" onchange="renderDocRows()"><option value="">All types</option>${unique(db.docs.map(d=>d.type).filter(Boolean)).sort().map(s=>`<option>${esc(s)}</option>`).join('')}</select></div><div class="table-wrap" style="margin-top:11px"><table><thead><tr>${docSortHead('Document','name')}${docSortHead('Type','type')}${docSortHead('Revision','revision')}${docSortHead('System','system')}${docSortHead('Linked projects','projects')}${docSortHead('Location / source','location')}<th></th></tr></thead><tbody id="docRows"></tbody></table></div></div>`;
+  renderDocRows();
 }
 function renderDocRows(){
   const el=document.getElementById('docRows');if(!el)return;
   const q=(val('docSearch')||'').toLowerCase(),type=val('docType');
-  const rows=db.docs.filter(d=>(!q||[d.name,d.type,d.revision,d.system,d.publisher,d.location,d.notes].join(' ').toLowerCase().includes(q))&&(!type||d.type===type));
-  el.innerHTML=rows.map(d=>{
-    const idArg=JSON.stringify(String(d.id));
-    const location=isURL(d.location)
-      ?`<a class="blue pill" href="${esc(d.location)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Web link</a>`
-      :esc(d.location||'—');
-    return `<tr class="click-row" onclick='openDocumentDetail(${idArg})'><td><b>${esc(d.name)}</b><div class="task-note">${esc(d.publisher||d.notes)}</div></td><td>${esc(d.type||'—')}</td><td>${esc(d.revision||'—')}</td><td>${esc(d.system||'—')}</td><td>${d.linkedProjectIds.length}</td><td>${location}</td><td><button class="icon-btn" onclick='event.stopPropagation();openDocModal(${idArg})'>Edit</button></td></tr>`;
+  const rows=sortDocumentRows(db.docs.filter(d=>(!q||[d.name,d.type,d.revision,d.system,d.publisher,d.location,d.sourceUrl,d.notes].join(' ').toLowerCase().includes(q))&&(!type||d.type===type)));
+  const token=++documentSourceRenderToken;
+  el.innerHTML=rows.map((d,index)=>{
+    const id=esc(String(d.id));
+    return `<tr class="click-row" data-doc-row="${id}"><td><button type="button" class="linkbtn doc-name-link" data-doc-open="${id}">${esc(d.name)}</button><div class="task-note">${esc(d.publisher||d.notes)}</div></td><td>${esc(d.type||'—')}</td><td>${esc(d.revision||'—')}</td><td>${esc(d.system||'—')}</td><td>${arr(d.linkedProjectIds).length}</td><td data-doc-source-index="${index}">${initialDocumentSourceHTML(d)}</td><td><button type="button" class="icon-btn" data-doc-edit="${id}">Edit</button></td></tr>`;
   }).join('')||'<tr><td colspan="7" class="empty">No matching documents.</td></tr>';
+  bindDocumentRowActions(el);
+  hydrateDocumentSourceCells(rows,token);
 }
-
 function renderLogbook(){
   document.getElementById('page-logbook').innerHTML=`<div class="card"><div class="toolbar"><div><h1>Work Log</h1><div class="muted">Every entry opens into a complete work record: parts/consumables, linked projects, observations, blockers, next step, labor, costs and supporting files.</div></div><button class="btn primary" onclick="openLogModal()">+ Add Work Entry</button></div><div class="controls"><input id="logSearch" placeholder="Search work log…" oninput="renderLogRows()"><select id="logSystem" onchange="renderLogRows()">${trackerSystemFilterOptions('')}</select></div><div class="table-wrap" style="margin-top:11px"><table><thead><tr><th>Date</th><th>System</th><th>Work performed</th><th>Project(s)</th><th>Labor</th><th>Consumed cost</th><th>Blocker / next step</th><th></th></tr></thead><tbody id="logRows"></tbody></table></div></div>`;renderLogRows();
 }

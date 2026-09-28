@@ -56,7 +56,7 @@
   function step(c,sid){return A(c?.items).find(i=>String(i.id)===String(sid))||null}
   function sourceDoc(c){
     const did=c.sourceDocumentId||c.documentId;
-    return did&&typeof docById==='function'?docById(Number(did)):null;
+    return did&&typeof docById==='function'?docById(did):null;
   }
   async function sourcePdf(c){
     const doc=sourceDoc(c);if(!doc||typeof getAttachments!=='function')return null;

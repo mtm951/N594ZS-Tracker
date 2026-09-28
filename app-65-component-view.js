@@ -137,7 +137,7 @@
 
         <div class="detail-card">
           <div class="section-tools"><h3>Related Documents</h3></div>
-          ${docs.length?docs.slice(0,12).map(d=>`<div class="kv click-row" onclick="openDocumentDetail(${d.id})"><div><b>${esc(d.name)}</b><div class="task-note">${esc(d.type||d.publisher||'Document')}</div></div><span>Open ›</span></div>`).join(''):'<div class="empty">No documents are directly linked through this component or its projects.</div>'}
+          ${docs.length?docs.slice(0,12).map(d=>`<div class="kv click-row" onclick='openDocumentDetail(${JSON.stringify(String(d.id))})'><div><b>${esc(d.name)}</b><div class="task-note">${esc(d.type||d.publisher||'Document')}</div></div><span>Open ›</span></div>`).join(''):'<div class="empty">No documents are directly linked through this component or its projects.</div>'}
         </div>
 
         <div class="detail-card">
