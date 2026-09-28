@@ -75,5 +75,6 @@ assert.match(modal,/First Start/);
 assert.match(modal,/Engine prerequisites/);
 assert.match(modal,/Open start blocker/);
 assert.match(modal,/data-commissioning-checklist="pack-a"/);
+assert.match(modal,/onclick="openChecklistDetail\('pack-a'\)"/);
 
 console.log('commissioning readiness cumulative gate regression tests passed');
