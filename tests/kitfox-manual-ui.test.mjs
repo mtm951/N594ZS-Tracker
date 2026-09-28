@@ -93,7 +93,7 @@ assert.equal(other.items[0].done,false,'Never touch unrelated owner checklists')
 assert.equal(changes,5);
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const seed=fs.readFileSync(new URL('../app-01-seed.js',import.meta.url),'utf8');
-const version=seed.match(/\\bconst APP_VERSION='([^']+)';/)?.[1];
+const version=seed.match(/\bconst APP_VERSION='([^']+)';/)?.[1];
 assert.ok(version,'APP_VERSION missing');
 assert.ok(html.includes('app-68-kitfox-manual-checklists.js?v='+version));
 assert.ok(html.includes('app-11-checklists.js?v=5.19.56'));
