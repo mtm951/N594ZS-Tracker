@@ -62,6 +62,42 @@ function ensurePurchaseInInventory(p,qty=purchaseRemainingQty(p)){
   p.inventoryPartId=part.id;p.inventoryApplied=true;p.disposition='On Hand';p.remainingQty=qty;
   return part;
 }
+
+function existingPartForPurchase(p){
+  let part=p?.inventoryPartId?partById(Number(p.inventoryPartId)):null;
+  if(!part&&p?.pn)part=db.parts.find(x=>x.partNo&&x.partNo.toLowerCase()===String(p.pn).toLowerCase());
+  if(!part&&!p?.pn&&p?.description)part=db.parts.find(x=>x.name&&x.name.toLowerCase()===String(p.description).toLowerCase());
+  return part||null;
+}
+function purchaseStockReceiptWork(p,part,qty){
+  return tx=>{
+    const currentPurchase=tx.read('purchase',p.id),currentPart=tx.read('part',part.id);
+    if(!currentPurchase||!currentPart)throw new Error('The Purchase or linked Part changed; reopen before receiving stock.');
+    if(currentPurchase.inventoryApplied)throw new Error('This Purchase has already been applied to stock.');
+    tx.update('part',part.id,draft=>{
+      draft.stockQty=(draft.stockQty===''?0:num(draft.stockQty))+qty;
+      draft.status='On Hand';
+      if(!draft.vendor&&currentPurchase.vendor)draft.vendor=currentPurchase.vendor;
+      if(!draft.location&&currentPurchase.location)draft.location=currentPurchase.location;
+      draft.linkedProjectIds=arr(draft.linkedProjectIds);
+      if(currentPurchase.projectId&&!draft.linkedProjectIds.some(id=>String(id)===String(currentPurchase.projectId)))
+        draft.linkedProjectIds.push(Number(currentPurchase.projectId));
+    });
+    tx.update('purchase',p.id,draft=>{
+      draft.inventoryPartId=part.id;
+      draft.inventoryApplied=true;
+      draft.disposition='On Hand';
+      draft.remainingQty=qty;
+    });
+  };
+}
+function commitPurchaseStockReceipt(p,part,qty,message){
+  const work=purchaseStockReceiptWork(p,part,qty);
+  const meta={purchaseId:p.id,partId:part.id,qty};
+  if(window.atomicReceiptOutbox?.shouldHandle('purchase'))
+    return window.atomicReceiptOutbox.stagePurchaseReceipt(work,message,meta);
+  return trackerStore.batch(work,{message});
+}
 applyPurchaseToInventory=function(id){
   const p=db.purchases.find(x=>String(x.id)===String(id));if(!p)return;
   if(p.inventoryApplied)return toast('This purchase has already been applied to stock.','good');
@@ -77,8 +113,8 @@ applyPurchaseToInventory=function(id){
     openPurchaseInventoryLinkModal(id);return;
   }
   if(!confirm('Record '+qty+' '+(part.unit||'ea')+' of '+part.name+' as physically received? This is separate from linking an order/purchase and increases On Hand.'))return;
-  ensurePurchaseInInventory(p,qty);
-  saveDB(qty+' received into inventory.');
+  try{commitPurchaseStockReceipt(p,part,qty,qty+' received into inventory.')}
+  catch(error){return alert('Purchase stock receipt was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.')}
   openPurchaseDetail(id);
 };
 
@@ -100,19 +136,30 @@ function setPurchaseDisposition(id,disposition){
   if(disposition==='On Hand'){
     const qty=val('reconcileRemaining')===''?num(p.qty):num(val('reconcileRemaining'));
     if(!Number.isFinite(qty)||qty<0)return alert('Enter a quantity of zero or greater.');
-    p.disposition='On Hand';p.remainingQty=qty;
     if(qty===0){
       // Disposition and Part identity may be known before inventory arrives.
       // Never manufacture a stock receipt or set inventoryApplied for zero.
-      saveDB('Purchase recorded with zero on hand; link its inventory Part.');
+      try{trackerStore.batch(tx=>tx.update('purchase',p.id,draft=>{
+        draft.disposition='On Hand';draft.remainingQty=0;
+      }),{message:'Purchase recorded with zero on hand; link its inventory Part.'})}
+      catch(error){return alert('Purchase could not be updated safely: '+(error?.message||String(error)))}
       openPurchaseInventoryLinkModal(id);
       return;
     }
-    ensurePurchaseInInventory(p,qty);
-  }else{
-    p.disposition=disposition;p.remainingQty=0;
+    const part=existingPartForPurchase(p);
+    if(!part){
+      alert('Link this purchase to an existing or new zero-stock Part before recording positive On Hand quantity. No stock was credited.');
+      openPurchaseInventoryLinkModal(id);return;
+    }
+    try{commitPurchaseStockReceipt(p,part,qty,'Purchase reconciled into inventory.')}
+    catch(error){return alert('Purchase stock receipt was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.')}
+    openPurchaseReconcile();return;
   }
-  saveDB();openPurchaseReconcile();
+  try{trackerStore.batch(tx=>tx.update('purchase',p.id,draft=>{
+    draft.disposition=disposition;draft.remainingQty=0;
+  }),{message:'Purchase disposition updated.'})}
+  catch(error){return alert('Purchase could not be updated safely: '+(error?.message||String(error)))}
+  openPurchaseReconcile();
 }
 function skipPurchaseReconcile(id){const rows=db.purchases.filter(x=>x.disposition==='Unknown').sort((a,b)=>(b.shipDate||'').localeCompare(a.shipDate||''));const i=rows.findIndex(x=>String(x.id)===String(id)),next=rows[(i+1)%rows.length];if(!next||String(next.id)===String(id)){closeModal();return}openPurchaseReconcile(next.id)}
 
