@@ -412,7 +412,7 @@
           <label class="commissioning-step-note"><span>Step note / finding / observation</span><textarea id="crStepNote" ${readonly?'disabled':''} oninput="queueCommissioningDraftSave(currentRecorderRunId())">${E(fields.note||cur.result.note||'')}</textarea></label>
           <div class="commissioning-step-actions">
             <button class="secondary" onclick="moveCommissioningRecorder('${E(String(run.id))}',-1)" ${cur.index<=0?'disabled':''}>← Previous</button>
-            ${source?'<button class="secondary" onclick="openCommissioningSource(\\''+E(String(run.id))+'\\')">Source</button>':''}
+            ${source?`<button class="secondary" onclick="openCommissioningSource('${E(String(run.id))}')">Source</button>`:''}
             ${!readonly?'<button class="warning" onclick="recordCommissioningFinding('+run.id+')">Finding</button><button class="success" onclick="completeCommissioningStep('+run.id+')">Complete & Next</button>':''}
             <button class="secondary" onclick="moveCommissioningRecorder('${E(String(run.id))}',1)" ${cur.index>=steps.length-1?'disabled':''}>Next →</button>
           </div>
