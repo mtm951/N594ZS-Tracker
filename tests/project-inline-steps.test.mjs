@@ -9,7 +9,7 @@ assert.ok(start>=0&&end>start,'quick-step helper block missing');
 const helpers=source.slice(start,end);
 
 function makeRow(id,text,done=false){
-  const input={value:text,focused:false,focus(){this.focused=true},closest(sel){return sel==='[data-project-step-row]'?row:null}};
+  const input={value:text,focused:false,focus(){this.focused=true},closest(sel){if(sel==='.project-quick-step-text')return this;return sel==='[data-project-step-row]'?row:null}};
   const check={checked:done};
   const row={
     dataset:{stepId:id==null?'':String(id)},parentElement:null,
