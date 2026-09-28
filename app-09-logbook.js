@@ -7,7 +7,7 @@ function atomicWorkLogLocked(id){
 }
 function atomicWorkLogEditGuard(id){
   if(!atomicWorkLogLocked(id))return false;
-  alert('This Work Log belongs to a pending atomic transaction. Its edits and consumed-item changes are locked until it synchronizes. Go to System → Cloud Account → Atomic Inventory Testing to export the Pending Atomic Safety Copy and review the pending transaction.');
+  alert('This Work Log belongs to a pending atomic transaction. Its edits and consumed-item changes are locked until it synchronizes. Go to System → Cloud Account → Inventory Transaction Safety to export the Pending Atomic Safety Copy and review the pending transaction.');
   return true;
 }
 function openLogModal(id=null,projectId=null,partId=null){
@@ -51,7 +51,65 @@ function openLogDetail(id){
     <div class="detail-card"><h3>Relevant Documents</h3>${docs.length?docs.map(d=>`<div class="kv click-row" onclick="openDocumentDetail(${d.id})"><span>${esc(d.name)}</span><span>${esc(d.type)}</span></div>`).join(''):'<div class="muted">No documents linked directly to this entry.</div>'}</div>
   </div></div>`,true);renderAttachments('log',id)
 }
-function addConsumedPart(logId,presetPartId=null){if(atomicWorkLogEditGuard(logId))return;const l=logById(logId);if(!l)return;const pp=presetPartId?partById(presetPartId):null;openModal(`${modalHeader('Add Consumed Part / Material',l.work)}<div class="form-grid"><div class="full"><label>Inventory part (optional)</label><select id="cpPart" onchange="prefillConsumedPart()">${partOptions(presetPartId)}</select></div>${field('Item name','cpName',pp?.name||'')}${field('Quantity','cpQty','1','number','step="any" min="0"')}${field('Unit','cpUnit',pp?.unit||'ea')}${field('Unit cost at time of use','cpCost',pp?.unitCost||'','number','step="0.01" min="0"')}${textareaField('Notes','cpNotes','')}</div><div class="modal-actions"><button class="btn secondary" onclick="openLogDetail(${logId})">Cancel</button><button class="btn primary" onclick="saveConsumedPart(${logId})">Add Item</button></div>`)}
+function addConsumedPart(logId,presetPartId=null){if(atomicWorkLogEditGuard(logId))return;const l=logById(logId);if(!l)return;const pp=presetPartId?partById(presetPartId):null;openModal(`${modalHeader('Add Consumed Part / Material',l.work)}<div class="form-grid"><div class="full"><label>Inventory part (optional)</label><select id="cpPart" onchange="prefillConsumedPart()">${partOptions(presetPartId)}</select></div>${field('Item name','cpName',pp?.name||'')}${field('Quantity','cpQty','1','number','step="any" min="0.000001"')}${field('Unit','cpUnit',pp?.unit||'ea')}${field('Unit cost at time of use','cpCost',pp?.unitCost||'','number','step="0.01" min="0"')}${textareaField('Notes','cpNotes','')}</div><div class="modal-actions"><button class="btn secondary" onclick="openLogDetail(${logId})">Cancel</button><button class="btn primary" onclick="saveConsumedPart(${logId})">Add Item</button></div>`)}
 function prefillConsumedPart(){const p=partById(selectedNumber('cpPart'));if(!p)return;document.getElementById('cpName').value=p.name;document.getElementById('cpUnit').value=p.unit||'ea';document.getElementById('cpCost').value=p.unitCost??''}
-function saveConsumedPart(logId){if(atomicWorkLogEditGuard(logId))return;const l=logById(logId);if(!l)return;const partId=selectedNumber('cpPart'),name=val('cpName')||(partId?partName(partId):'');if(!name)return alert('Item name is required.');l.consumedParts.push({id:uid(),partId,name,qty:num(val('cpQty'))||1,unit:val('cpUnit')||'ea',unitCost:val('cpCost'),notes:val('cpNotes')});if(partId){const p=partById(partId);l.projectIds.forEach(pid=>{if(p&&!p.linkedProjectIds.includes(pid))p.linkedProjectIds.push(pid)})}saveDB('Consumed item recorded.');openLogDetail(logId)}
-function removeConsumedPart(logId,itemId){if(atomicWorkLogEditGuard(logId))return;const l=logById(logId);if(!l||!confirm('Remove this consumed-item record?'))return;l.consumedParts=l.consumedParts.filter(x=>x.id!==itemId);saveDB('Consumed item removed.');openLogDetail(logId)}
+function saveConsumedPart(logId){
+  if(atomicWorkLogEditGuard(logId))return;
+  const l=logById(logId);if(!l)return;
+  const partId=selectedNumber('cpPart'),name=val('cpName')||(partId?partName(partId):'');
+  if(!name)return alert('Item name is required.');
+  const qty=Number(val('cpQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity used.');
+  const itemId=uid(),unit=val('cpUnit')||'ea',unitCost=val('cpCost'),notes=val('cpNotes');
+  const item={id:itemId,partId,name,qty,unit,unitCost,notes};
+  if(!partId){
+    try{trackerStore.batch(tx=>tx.update('log',logId,draft=>{
+      draft.consumedParts=arr(draft.consumedParts);draft.consumedParts.push(item);
+    }),{message:'Consumed item recorded.'})}
+    catch(error){return alert('Consumed item was not safely saved: '+(error?.message||String(error)))}
+    openLogDetail(logId);return;
+  }
+  const part=partById(partId);if(!part)return alert('The linked inventory Part is missing.');
+  const preview=typeof window.previewPartForPhysicalUse==='function'?
+    window.previewPartForPhysicalUse(part,qty):{credited:0,sources:[]};
+  const on=typeof partAvailable==='function'?partAvailable(part):null;
+  if(on!==null&&on!==undefined&&qty>num(on)+num(preview.credited)+1e-9&&
+     !confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
+  const projectIds=arr(l.projectIds).map(Number).filter(Number.isFinite);
+  const work=tx=>{
+    const currentLog=tx.read('log',logId),currentPart=tx.read('part',partId);
+    if(!currentLog||!currentPart)throw new Error('The Work Log or Part changed; reopen before recording use.');
+    const credited=typeof window.applyPartUseCreditsTx==='function'?
+      window.applyPartUseCreditsTx(tx,preview.sources):0;
+    tx.update('part',partId,draft=>{
+      if(credited>0)draft.stockQty=(draft.stockQty===''?0:num(draft.stockQty))+credited;
+      draft.linkedProjectIds=arr(draft.linkedProjectIds);
+      projectIds.forEach(pid=>{
+        if(!draft.linkedProjectIds.some(id=>String(id)===String(pid)))draft.linkedProjectIds.push(pid);
+      });
+    });
+    tx.update('log',logId,draft=>{
+      draft.consumedParts=arr(draft.consumedParts);
+      if(draft.consumedParts.some(x=>String(x.id)===String(itemId)))
+        throw new Error('Consumed-item ID already exists.');
+      draft.consumedParts.push(item);
+    });
+  };
+  const meta={mode:'log-add',partId,logId,consumedItemId:itemId,qty,projectIds};
+  try{
+    if(window.atomicReceiptOutbox?.shouldHandle('consumption'))
+      window.atomicReceiptOutbox.stageConsumption(work,'Consumed item recorded.',meta);
+    else trackerStore.batch(work,{message:'Consumed item recorded.'});
+  }catch(error){
+    return alert('Consumed item was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.');
+  }
+  openLogDetail(logId);
+}
+function removeConsumedPart(logId,itemId){
+  if(atomicWorkLogEditGuard(logId))return;
+  const l=logById(logId);if(!l||!confirm('Remove this consumed-item record?'))return;
+  try{trackerStore.batch(tx=>tx.update('log',logId,draft=>{
+    draft.consumedParts=arr(draft.consumedParts).filter(x=>String(x.id)!==String(itemId));
+  }),{message:'Consumed item removed.'})}
+  catch(error){return alert('Consumed item could not be removed safely: '+(error?.message||String(error)))}
+  openLogDetail(logId);
+}
