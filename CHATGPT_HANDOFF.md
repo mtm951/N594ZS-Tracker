@@ -41,6 +41,27 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.55 Readiness Overview navigation fix (September 28)
+
+- Owner reported the **Readiness Overview** button inside commissioning gate modals did nothing.
+- Root cause: `openCommissioningReadiness()` independently called `closeModal()` and `navTo('readiness')`, while the navigation layer also scheduled modal-history cleanup. The delayed modal-history transition could race with and undo the explicit page navigation.
+- PR #33 `v5.19.55: fix Readiness Overview navigation` merged to `main` at `b8fec2422ad25a7ca96ec30ad0c68cc7a5c52172`.
+- Final workflow run `36487342337` passed JavaScript syntax and the complete regression suite.
+- `app-35-navigation-ux.js` now exposes `goToTrackerPageFromModal(page)`, which treats popup→page navigation as one intentional transition:
+  - confirms unsaved modal edits if needed;
+  - consumes the active modal history entry first;
+  - then lands on the requested tracker page;
+  - when launched from another page, creates a proper page history state so browser/in-app Back returns to the originating page.
+- `Readiness Overview` now uses `goToTrackerPageFromModal('readiness')` rather than separate close + nav calls.
+- Regression coverage proves:
+  - Readiness → gate → Readiness Overview closes the gate and remains on Readiness;
+  - Dashboard → gate → Readiness Overview lands on Readiness and Back returns to Dashboard;
+  - commissioning readiness code calls the atomic navigation helper.
+- No production Supabase data or checklist state changed.
+- Main verified after merge: `APP_VERSION='5.19.55'`, `app-35-navigation-ux.js?v=5.19.55`, `app-69-commissioning-readiness.js?v=5.19.55`, service-worker shell `n594zs-v5-19-55-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.55**. Open **Readiness → First Start** and click **Readiness Overview**. The gate modal should close and the Readiness page should remain visible.
+
 ## v5.19.54 sticky bottom-right recorder Save Progress (September 28)
 
 - Owner reviewed the live Preview screenshot and requested **Save Progress** be moved to the bottom-right of the recorder, where the cursor naturally rests after reviewing the current step.
