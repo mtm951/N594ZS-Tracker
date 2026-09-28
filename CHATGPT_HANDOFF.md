@@ -43,6 +43,24 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.57 Kitfox manual Save Progress / Close footer (September 28)
+
+- Owner requested explicit **Save Progress** and **Close** controls on the long Kitfox manual chapter review checklists.
+- PR #35 `v5.19.57: add Save Progress and Close to Kitfox manual checklists` merged to `main` at `4ebf6bd119daaa9badeb9ade9c3f8dbeee77180c`.
+- Workflow run `36489479807` passed JavaScript syntax and the complete regression suite, including Kitfox manual UI, generic source access, First Start recorder, commissioning readiness, modal navigation and atomic inventory.
+- Every Kitfox manual chapter now has a **sticky bottom footer** that remains visible while scrolling:
+  - left side: **Review changes save automatically • Last checkpoint …**
+  - right side: **Close** then **Save Progress**.
+- Existing review actions (Verified, N/A, Needs Attention, Review note) continue to save immediately as before.
+- **Save Progress** writes only `manualProgressSavedAt` on that checklist record and displays the updated checkpoint time. It does not change any review status, completion state, N/A state, finding state or note.
+- **Close** uses the existing tracker Back/modal navigation via `trackerBack()`, so it returns to the prior context rather than hard-navigating to a fixed page.
+- The existing previous/next chapter, All checklists and alternate-cowl N/A controls remain in place above the sticky footer.
+- Mobile stacks the sticky footer cleanly and keeps Save Progress prominent.
+- No existing checklist review/completion state was changed by this release.
+- Main verified after merge: `APP_VERSION='5.19.57'`, `app-68-kitfox-manual-checklists.js?v=5.19.57`, service-worker shell `n594zs-v5-19-57-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.57**. Open any Kitfox manual chapter and verify **Close** and **Save Progress** remain visible at the bottom while scrolling. Press Save Progress and confirm the checkpoint text updates; press Close and confirm it returns to the previous tracker view.
+
 ## v5.19.56 direct manufacturer source access (September 28)
 
 - PR #34 `v5.19.56: open source documents directly from checklist citations` merged to `main` at `6065911e3384f4dc1f9c8d750c2e23b10d0144c8`.
