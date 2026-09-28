@@ -45,6 +45,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - No Supabase schema/function/policy changes and no production aircraft-record mutations were made by this release.
 - Release metadata verified on main: `APP_VERSION='5.19.43'`; `app-24-data-polish.js` and `app-29-equipment.js` cache-busted to 5.19.43; service-worker shell `n594zs-v5-19-43-shell`.
 - Owner acceptance: only refresh/update while the tracker reports Synced and no pending atomic transaction. Footer should read **v5.19.43**. Do not clear site data to force an update.
+- **OWNER ACCEPTANCE COMPLETE:** Mike confirmed on 2026-09-28 that the live tracker footer shows **v5.19.43**. Treat the production atomic inventory coverage / final stock-credit-bypass cleanup as deployed and accepted.
 
 ## v5.19.42 complete atomic inventory coverage (September 28)
 
