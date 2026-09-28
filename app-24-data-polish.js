@@ -43,26 +43,6 @@ renderAircraft=function(){
 
 // Keep purchase disposition and physical Parts inventory tied together.
 function purchaseRemainingQty(p){return p.remainingQty===''?num(p.qty):num(p.remainingQty)}
-function ensurePurchaseInInventory(p,qty=purchaseRemainingQty(p)){
-  if(!p||qty<=0)return null;
-  if(p.inventoryApplied&&p.inventoryPartId)return partById(Number(p.inventoryPartId));
-  let part=p.inventoryPartId?partById(Number(p.inventoryPartId)):null;
-  if(!part&&p.pn)part=db.parts.find(x=>x.partNo&&x.partNo.toLowerCase()===p.pn.toLowerCase());
-  if(!part&&!p.pn)part=db.parts.find(x=>x.name&&p.description&&x.name.toLowerCase()===p.description.toLowerCase());
-  if(!part){
-    part={id:uid(),name:p.description||p.pn||'Purchased part',description:p.description||'',partNo:p.pn||'',system:p.system||'General',partType:'Inventory',unit:'ea',stockQty:0,minQty:'',status:'On Hand',vendor:p.vendor||'',url:p.productUrl||p.sourceUrl||'',unitCost:p.unitPrice||'',location:p.location||'',purchaseDate:p.shipDate||'',notes:`Created from purchase history${p.invoice?` invoice ${p.invoice}`:''}.`,linkedProjectIds:p.projectId?[Number(p.projectId)]:[],updates:[]};
-    db.parts.push(part);
-  }
-  part.stockQty=(part.stockQty===''?0:num(part.stockQty))+qty;
-  part.status='On Hand';
-  if(!part.vendor&&p.vendor)part.vendor=p.vendor;
-  if(!part.location&&p.location)part.location=p.location;
-  part.linkedProjectIds=arr(part.linkedProjectIds);
-  if(p.projectId&&!part.linkedProjectIds.includes(Number(p.projectId)))part.linkedProjectIds.push(Number(p.projectId));
-  p.inventoryPartId=part.id;p.inventoryApplied=true;p.disposition='On Hand';p.remainingQty=qty;
-  return part;
-}
-
 function existingPartForPurchase(p){
   let part=p?.inventoryPartId?partById(Number(p.inventoryPartId)):null;
   if(!part&&p?.pn)part=db.parts.find(x=>x.partNo&&x.partNo.toLowerCase()===String(p.pn).toLowerCase());
