@@ -64,13 +64,20 @@ function harness({gateClear=true}={}){
   return {ctx,db,elements,alerts,messages,get modal(){return lastModal},setGate(v){gateClear=v;ctx.commissioningGateInfo=()=>({clear:v,open:v?0:1})}};
 }
 
-// Blocked First Start gate cannot create a production run, but offers preview.
+// Blocked First Start gate cannot create a production run, but offers a complete preview.
 {
   const h=harness({gateClear:false});
   h.ctx.openFirstStartRecorder();
   assert.equal(h.db.runs.length,0);
   assert.match(h.modal,/First Start gate is not clear/);
   assert.match(h.modal,/Preview Recorder/);
+
+  h.ctx.openFirstStartRecorderPreview();
+  assert.equal(h.db.runs.length,0,'preview created a Run/Test');
+  assert.equal(h.db.checklists[0].items.find(x=>x.id==='1').done,false,'preview changed checklist state');
+  assert.match(h.modal,/Preview • nothing is saved/);
+  assert.match(h.modal,/Save Progress — real run only/);
+  assert.match(h.modal,/disabled/);
 }
 
 // Gate-clear start creates a durable Run/Test with guided steps only (not prerequisites).
