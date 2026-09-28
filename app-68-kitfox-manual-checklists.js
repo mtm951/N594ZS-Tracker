@@ -13,7 +13,7 @@
   const manual=c=>c?.kitfoxManualPack===SOURCE_KEY;
   const stats=c=>{
     const items=A(c.items),na=items.filter(i=>i.reviewStatus==='N/A').length;
-    const verified=items.filter(i=>i.reviewStatus==='Verified'||(i.done&&i.reviewStatus!=='N/A')).length;
+    const verified=items.filter(i=>i.reviewStatus==='Verified').length;
     const attention=items.filter(i=>i.reviewStatus==='Needs Attention').length;
     const applicable=items.length-na;
     return {total:items.length,na,verified,attention,applicable,
@@ -44,7 +44,7 @@
     return i.done||i.reviewStatus==='Verified'?'green':'yellow';
   }
   function itemHtml(i){
-    const isNA=i.reviewStatus==='N/A',done=i.done||i.reviewStatus==='Verified';
+    const isNA=i.reviewStatus==='N/A',done=i.reviewStatus==='Verified';
     const gapBlocked=i.sourceGap&&!String(i.note||'').trim();
     const flagged=i.reviewStatus==='Needs Attention';
     return '<div class="check-item" data-km-item="'+E(i.id)+'" style="align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line, #ddd)">'+
@@ -105,8 +105,9 @@
       const x=step(draft,iid);
       if(!x)return;
       if(action==='verify'){
-        x.done=!x.done;x.reviewStatus=x.done?'Verified':'Pending';
-        x.reviewedDate=x.done?(typeof today==='function'?today():new Date().toISOString().slice(0,10)):'';
+        const toVerified=x.reviewStatus!=='Verified';
+        x.done=toVerified;x.reviewStatus=toVerified?'Verified':'Pending';
+        x.reviewedDate=toVerified?(typeof today==='function'?today():new Date().toISOString().slice(0,10)):'';
       }else if(action==='na'){
         const toNA=next!=='N/A';
         x.done=false;x.reviewStatus=toNA?'N/A':'Pending';
