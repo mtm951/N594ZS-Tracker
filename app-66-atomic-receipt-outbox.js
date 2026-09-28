@@ -164,7 +164,7 @@
       throw new Error('Work Log consumption does not match the requested Part and quantity.');
   }
 
-  function validateProjectUseAppend(before,changes,meta,reservationMode){
+  function validateProjectUseAppend(before,changes,meta,reservationMode,strictReservation=true){
     const projects=changes.filter(r=>r.record_type==='project');
     if(projects.length!==1||String(projects[0].record_id)!==String(meta.projectId))
       throw new Error('Consumption must update exactly one matching Project.');
@@ -183,7 +183,7 @@
     if(reservationMode){
       const selected=expectedReservations.find(x=>String(x.id)===String(meta.reservationId));
       if(!selected||String(selected.partId)!==String(meta.partId)||
-         Number(meta.qty)>Number(selected.qty)+1e-9)
+         (strictReservation&&Number(meta.qty)>Number(selected.qty)+1e-9))
         throw new Error('Reserved quantity changed; refresh before recording use.');
       selected.qty=Math.max(0,Number(selected.qty)-Number(meta.qty));
       if(selected.qty<=1e-9)
@@ -226,7 +226,7 @@
       throw new Error('Quick project use is missing its Parts Used identity.');
     validateConsumptionEnvelope(before,after,changes,touchedKeys,old,meta,true);
     validateNewUseLog(before,changes,meta,'quick-part-use',hasProject?[meta.projectId]:[]);
-    if(hasProject)validateProjectUseAppend(before,changes,meta,meta.reservationId!=null);
+    if(hasProject)validateProjectUseAppend(before,changes,meta,meta.reservationId!=null,false);
     validateUsePartAndPurchases(before,changes,meta,hasProject?[meta.projectId]:[]);
   }
 
