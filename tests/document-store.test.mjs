@@ -85,6 +85,32 @@ function makeHarness(values={}){
   assert.deepEqual(h.saves,['Document updated.']);
 }
 
+// Stable manufacturer source IDs remain fully editable through the same store boundary.
+{
+  const h=makeHarness({
+    dcName:'ROTAX SI-912-018R4',
+    dcType:'Service Instruction',
+    dcRevision:'R4',
+    dcIssue:'2021-07-02',
+    dcSystem:'Engine',
+    dcPublisher:'BRP-Rotax',
+    dcLocation:'https://example.test/si-912-018',
+    dcNotes:'Current purge source'
+  });
+  h.db.docs.push({
+    id:'rotax-si-912-018-r4-2021',name:'Old SI name',type:'Manual',revision:'',issueDate:'',
+    system:'Engine',publisher:'',location:'',notes:'',linkedProjectIds:[102],linkedPartIds:[201],
+    linkedLogIds:[],updates:[],rotaxSourceManaged:true
+  });
+  h.context.saveDoc('rotax-si-912-018-r4-2021');
+  const d=h.db.docs.find(x=>String(x.id)==='rotax-si-912-018-r4-2021');
+  assert.equal(d.name,'ROTAX SI-912-018R4');
+  assert.equal(d.revision,'R4');
+  assert.deepEqual(d.linkedProjectIds,[102]);
+  assert.equal(d.rotaxSourceManaged,true);
+  assert.deepEqual(h.saves,['Document updated.']);
+}
+
 // Create a new linked document through the store boundary.
 {
   const h=makeHarness({
