@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 // Real production Parts, Orders, Purchases, data-polish overrides and passive
 // purchase link reconciler; disposable records and no Supabase writes.
-const files=['app-23-wb-purchases.js','app-24-data-polish.js','app-29-equipment.js',
+const files=['app-17a-data-store.js','app-23-wb-purchases.js','app-24-data-polish.js','app-29-equipment.js',
   'app-07-parts.js','app-08-orders.js'];
 const source=Object.fromEntries(files.map(f=>[f,fs.readFileSync(new URL('../'+f,import.meta.url),'utf8')]));
 const controls={};
@@ -28,7 +28,8 @@ const doc={
 };
 const ctx={
   window:null,db,document:doc,console,crypto:{randomUUID:()=> 'uuid-1'},
-  NAV:[['aircraft','Aircraft'],['orders','Orders']],RECORD_ARRAYS:{},
+  NAV:[['aircraft','Aircraft'],['orders','Orders']],
+  RECORD_ARRAYS:{part:'parts',order:'orders',purchase:'purchases',project:'projects',log:'logs',document:'docs',checklist:'checklists'},
   SYNC_RECORD_TYPES:new Set(),SEED:{purchases:[],equipment:[]},
   blankCloudDB:()=>({}),normalizeDB:()=>{},
   renderAircraft:()=>{},renderPurchases:()=>{},renderParts:()=>{},renderSearchPage:()=>{},
@@ -70,6 +71,14 @@ Object.assign(controls,{ptName:'TEST ZERO PART',ptPN:'AS-0',ptSystem:'Fuel',ptUn
   ptUrl:'',ptNotes:'Disposable test'});
 ctx.savePart(null);
 const initial=db.parts[0];assert.equal(initial.stockQty,0);
+
+// Editing descriptive Part metadata must not rewrite the recorded stock baseline.
+Object.assign(controls,{ptName:'TEST ZERO PART EDITED',ptPN:'AS-0',ptSystem:'Fuel',ptUnit:'ea',
+  ptStock:'99',ptMin:'',ptStatus:'On Hand',ptVendor:'Amazon',ptCost:'8',ptPurchase:'',ptLocation:'',
+  ptUrl:'',ptNotes:'Metadata edit only'});
+ctx.savePart(initial.id);
+assert.equal(initial.stockQty,0,'Edit Part silently rewrote stock instead of using inventory adjustment history');
+assert.equal(initial.name,'TEST ZERO PART EDITED');
 
 // A purchase can link to an existing 0-on-hand Part with remainingQty=0.
 // Linkage is idempotent and must not imply a stock receipt.
@@ -147,19 +156,39 @@ assert.ok(alerts.some(x=>/already exists/i.test(x)));
 // Only the explicit receive action with positive quantity adds physical stock.
 p2.remainingQty=3;
 ctx.applyPurchaseToInventory('p2');
-assert.equal(newPart.stockQty,3);
-assert.equal(p2.inventoryApplied,true);
-assert.equal(p2.disposition,'On Hand');
+assert.equal(ctx.partById(p2.inventoryPartId).stockQty,3);
+assert.equal(db.purchases.find(x=>String(x.id)==='p2').inventoryApplied,true);
+assert.equal(db.purchases.find(x=>String(x.id)==='p2').disposition,'On Hand');
 ctx.applyPurchaseToInventory('p2');
-assert.equal(newPart.stockQty,3,'Repeated receive must not double-credit a purchase');
+assert.equal(ctx.partById(p2.inventoryPartId).stockQty,3,'Repeated receive must not double-credit a purchase');
+
+// Cloud-connected Purchase -> Stock Received delegates the real handler to
+// the production atomic Purchase+Part transaction.
+const p5=purchase('p5','AS-0',2);p5.inventoryPartId=initial.id;db.purchases.push(p5);
+let purchaseMeta=null,purchaseStages=0;
+ctx.atomicReceiptOutbox={
+  shouldHandle:kind=>{assert.equal(kind,'purchase');return true},
+  stagePurchaseReceipt:(work,message,meta)=>{
+    purchaseStages++;purchaseMeta=meta;return ctx.trackerStore.batch(work,{message});
+  }
+};
+const beforeAtomicPurchase=ctx.partById(initial.id).stockQty;
+ctx.applyPurchaseToInventory('p5');
+assert.equal(purchaseStages,1);
+assert.equal(purchaseMeta.purchaseId,'p5');
+assert.equal(Number(purchaseMeta.partId),Number(initial.id));
+assert.equal(purchaseMeta.qty,2);
+assert.equal(ctx.partById(initial.id).stockQty,beforeAtomicPurchase+2);
+assert.equal(db.purchases.find(x=>String(x.id)==='p5').inventoryApplied,true);
+assert.equal(db.purchases.find(x=>String(x.id)==='p5').disposition,'On Hand');
 
 // Zero in Purchase Reconcile routes to link-only rather than inventing stock.
 const p4=purchase('p4','ZERO-RECON',0);db.purchases.push(p4);
 controls.reconcileRemaining='0';
 ctx.setPurchaseDisposition('p4','On Hand');
-assert.equal(p4.remainingQty,0);
-assert.equal(p4.inventoryApplied,false);
+assert.equal(db.purchases.find(x=>String(x.id)==='p4').remainingQty,0);
+assert.equal(db.purchases.find(x=>String(x.id)==='p4').inventoryApplied,false);
 assert.match(modalHTML.at(-1),/Link Purchase to Inventory/);
 
 // No cloud calls exist in the disposable harness.
-console.log('PASS: real Parts/Orders/Purchases allow zero stock; link-only paths never credit; partial receipts and explicit stock receipt credit correctly, duplicates prevented.');
+console.log('PASS: real Parts/Orders/Purchases allow zero stock; existing Part edits preserve stock baseline; link-only paths never credit; partial receipts and explicit stock receipt credit correctly, duplicates prevented.');

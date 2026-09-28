@@ -411,9 +411,12 @@ function receiptWork(tx){
     storage:{[OPT]:'0',[OUTBOX]:JSON.stringify(operation),[PENDING]:'1'}
   }});
   h.ctx.atomicReceiptOutbox.openSettings();
-  assert.match(h.lastModal(),/Order receipts use the durable atomic transaction path automatically/);
+  assert.match(h.lastModal(),/Core physical-inventory changes use one durable, idempotent atomic journal automatically/);
   assert.match(h.lastModal(),/Order receipts: Atomic protection active/);
-  assert.doesNotMatch(h.lastModal(),/Enable Receipt Testing|Turn Off for New Receipts/);
+  assert.match(h.lastModal(),/Inventory adjustments: Atomic protection active/);
+  assert.match(h.lastModal(),/Part use \/ consumption: Atomic protection active/);
+  assert.match(h.lastModal(),/Purchase stock receipts: Atomic protection active/);
+  assert.doesNotMatch(h.lastModal(),/Enable Receipt Testing|Turn Off for New Receipts|Enable Atomic Adjustment Testing|Enable Atomic Reserve/);
   assert.match(h.lastModal(),/no linked Part update/);
   assert.match(h.lastModal(),/Compare with Cloud Safely/);
   const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
@@ -659,15 +662,18 @@ function deletedTestFixture(){
 
 const ADJUST_OPT='n594zs_atomic_adjustments_opt_in_v1';
 
-// Atomic manual adjustments use the SAME replay-safe journal as production
-// receipts but remain a separate opt-in extension.
+// Manual adjustments now use the SAME production replay-safe journal as
+// receipts. Legacy per-device preference keys cannot turn protection off.
 {
   const h=makeHarness({enabled:false});
-  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('adjustment'),false);
-  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true,'production receipts were not active');
-  h.localStorage.setItem(ADJUST_OPT,'1');
+  h.localStorage.setItem(ADJUST_OPT,'0');
   assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('adjustment'),true);
-  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true,'adjustment opt-in changed receipt availability');
+  assert.equal(h.ctx.atomicReceiptOutbox.adjustmentsEnabled(),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('consumption'),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.consumptionEnabled(),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('purchase'),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.purchaseReceiptsEnabled(),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true,'production receipts were not active');
   const adjust=tx=>tx.update('part',21,p=>{
     p.inventoryAdjustments=[{id:501,date:'2026-09-24',delta:-1,reason:'Count correction',notes:'Fixture'}];
   });

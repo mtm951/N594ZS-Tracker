@@ -49,10 +49,13 @@ function makeHarness({db:input=null,stored=null,online=true,failKey=null,onRpc=n
   const snapshot=stored?.[SNAP]?JSON.parse(stored[SNAP]):Object.fromEntries([
     ...db.parts.map(x=>['part:'+x.id,stable(x)]),
     ...db.projects.map(x=>['project:'+x.id,stable(x)]),
+    ...db.logs.map(x=>['log:'+x.id,stable(x)]),
     ...db.purchases.map(x=>['purchase:'+x.id,stable(x)])
   ]);
   const versions=stored?.[VERS]?JSON.parse(stored[VERS]):{
-    'part:21':2,'project:41':4,...(db.purchases.length?{'purchase:p1':3}:{})
+    'part:21':2,'project:41':4,
+    ...Object.fromEntries(db.logs.map(x=>['log:'+x.id,5])),
+    ...(db.purchases.length?{'purchase:p1':3}:{})
   };
   const localStorage=memory(stored||{[OPT]:'1',[SNAP]:JSON.stringify(snapshot),
     [VERS]:JSON.stringify(versions)},failKey);
@@ -131,11 +134,13 @@ function consumeWork(installed=true){
   };
 }
 
-// Opt-in: four records in ONE version-checked RPC, including a genuinely
-// new Work Log with expected_version=0.
+// Production-default: four records in ONE version-checked RPC, including a
+// genuinely new Work Log with expected_version=0. Legacy opt-out is ignored.
 {
   const h=makeHarness();
+  h.localStorage.removeItem(OPT);
   assert.equal(h.ctx.atomicReceiptOutbox.consumptionEnabled(),true);
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('consumption'),true);
   h.ctx.atomicReceiptOutbox.stageConsumption(consumeWork(), 'TEST consumption',META);
   const pending=JSON.parse(h.localStorage.getItem(KEY));
   assert.equal(pending.operationKind,'consumption');
@@ -157,6 +162,105 @@ function consumeWork(installed=true){
   await h.ctx.saveCloudState();
   assert.equal(h.rpcCalls.length,1,'repeated sync duplicated a consumption');
   assert.equal(h.db.logs.length,1);
+}
+
+// Assigned -> Used: Part + Project + new Work Log + Installed Purchase
+// provenance are one scoped transaction, with no reservation mutation.
+{
+  const db=makeDb();db.projects[0].plannedParts=[];
+  const h=makeHarness({db});
+  const meta={mode:'assigned',partId:21,projectId:41,logId:889,
+    consumedItemId:910,projectPartId:911,qty:1};
+  h.ctx.atomicReceiptOutbox.stageConsumption(tx=>{
+    tx.update('purchase','p1',p=>{
+      p.inventoryReceiptMaterializedQty=1;p.inventoryReceiptMaterialized=true;p.inventoryApplied=true;
+    });
+    tx.update('part',21,p=>{p.stockQty=1});
+    tx.update('project',41,p=>{p.partsUsed.push({id:911,partId:21,qty:1,unit:'ea',
+      logId:889,consumedItemId:910,consumptionRecorded:true})});
+    tx.write('log',889,{id:889,date:'2026-09-24',airframeHours:'',engineHours:'',laborHours:'',
+      system:'Hardware',projectIds:[41],work:'Assigned use',observations:'',blockers:'',nextStep:'',
+      otherCost:'',notes:'Assigned → Used.',origin:'assigned-part-use',
+      consumedParts:[{id:910,partId:21,qty:1,unit:'ea',projectPartId:911}]});
+  },'Assigned use',meta);
+  const journal=JSON.parse(h.localStorage.getItem(KEY));
+  assert.deepEqual(new Set(journal.changes.map(x=>x.record_type)),
+    new Set(['part','project','log','purchase']));
+  assert.equal(journal.changes.find(x=>x.record_type==='project').data.plannedParts.length,0);
+}
+
+// Quick Part Used may consume more than an existing reservation; it releases
+// that reservation while recording the actual larger physical use.
+{
+  const h=makeHarness();
+  h.db.projects[0].plannedParts[0].qty=1;
+  h.ctx.cloudRecordSnapshot.set('project:41',stable(h.db.projects[0]));
+  const snapshots=JSON.parse(h.localStorage.getItem(SNAP));
+  snapshots['project:41']=stable(h.db.projects[0]);
+  h.localStorage.setItem(SNAP,JSON.stringify(snapshots));
+  const meta={mode:'quick',partId:21,projectId:41,reservationId:501,logId:890,
+    consumedItemId:912,projectPartId:913,qty:2};
+  h.ctx.atomicReceiptOutbox.stageConsumption(tx=>{
+    tx.update('purchase','p1',p=>{
+      p.inventoryReceiptMaterializedQty=2;p.inventoryReceiptMaterialized=true;p.inventoryApplied=true;
+    });
+    tx.update('part',21,p=>{p.stockQty=2});
+    tx.update('project',41,p=>{
+      p.partsUsed.push({id:913,partId:21,qty:2,unit:'ea',logId:890,
+        consumedItemId:912,consumptionRecorded:true});
+      p.plannedParts=[];
+    });
+    tx.write('log',890,{id:890,date:'2026-09-24',airframeHours:'',engineHours:'',laborHours:'',
+      system:'Hardware',projectIds:[41],work:'Quick use',observations:'',blockers:'',nextStep:'',
+      otherCost:'',notes:'Created by Quick Add 2.0.',origin:'quick-part-use',
+      consumedParts:[{id:912,partId:21,qty:2,unit:'ea',projectPartId:913}]});
+  },'Quick use',meta);
+  assert.equal(JSON.parse(h.localStorage.getItem(KEY)).operationKind,'consumption');
+  assert.equal(h.db.projects[0].plannedParts.length,0);
+}
+
+// Existing Work Log consumption appends exactly one item while locking the
+// source Part and any materialized Installed-Purchase receipt in the same op.
+{
+  const db=makeDb();
+  db.logs=[{id:777,date:'2026-09-24',system:'Hardware',projectIds:[41],work:'Existing work',
+    observations:'',blockers:'',nextStep:'',otherCost:'',notes:'',consumedParts:[]}];
+  const h=makeHarness({db});
+  const meta={mode:'log-add',partId:21,logId:777,consumedItemId:914,qty:1,projectIds:[41]};
+  h.ctx.atomicReceiptOutbox.stageConsumption(tx=>{
+    tx.update('purchase','p1',p=>{
+      p.inventoryReceiptMaterializedQty=1;p.inventoryReceiptMaterialized=true;p.inventoryApplied=true;
+    });
+    tx.update('part',21,p=>{p.stockQty=1});
+    tx.update('log',777,l=>{l.consumedParts.push({id:914,partId:21,qty:1,unit:'ea',notes:'Added'})});
+  },'Log use',meta);
+  const journal=JSON.parse(h.localStorage.getItem(KEY));
+  assert.deepEqual(new Set(journal.changes.map(x=>x.record_type)),new Set(['part','log','purchase']));
+  assert.equal(journal.changes.find(x=>x.record_type==='log').expected_version,5);
+}
+
+// Purchase -> Stock Received is a two-record transaction. It cannot change
+// arbitrary Purchase or Part metadata while crediting physical stock.
+{
+  const db=makeDb({installed:false,stockQty:0});
+  db.purchases=[{id:'p1',qty:2,remainingQty:2,disposition:'Unknown',inventoryPartId:21,
+    inventoryApplied:false,vendor:'Test Vendor',location:'Shelf',projectId:41,notes:'Source'}];
+  db.parts[0].status='Order';db.parts[0].vendor='';db.parts[0].location='';
+  const h=makeHarness({db});
+  assert.equal(h.ctx.atomicReceiptOutbox.shouldHandle('purchase'),true);
+  h.ctx.atomicReceiptOutbox.stagePurchaseReceipt(tx=>{
+    tx.update('part',21,p=>{
+      p.stockQty=2;p.status='On Hand';p.vendor='Test Vendor';p.location='Shelf';
+    });
+    tx.update('purchase','p1',p=>{
+      p.inventoryPartId=21;p.inventoryApplied=true;p.disposition='On Hand';p.remainingQty=2;
+    });
+  },'Purchase received',{purchaseId:'p1',partId:21,qty:2});
+  const journal=JSON.parse(h.localStorage.getItem(KEY));
+  assert.equal(journal.operationKind,'purchase');
+  assert.deepEqual(new Set(journal.changes.map(x=>x.record_type)),new Set(['part','purchase']));
+  assert.equal(h.db.parts[0].stockQty,2);
+  assert.equal(h.db.purchases[0].inventoryApplied,true);
 }
 
 // Offline durable journal can restore a partially saved browser cache,

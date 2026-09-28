@@ -5,6 +5,7 @@ import vm from 'node:vm';
 const dataStoreSource=fs.readFileSync(new URL('../app-17a-data-store.js',import.meta.url),'utf8');
 const equipmentSource=fs.readFileSync(new URL('../app-29-equipment.js',import.meta.url),'utf8');
 const inventorySource=fs.readFileSync(new URL('../app-42-inventory-workflow.js',import.meta.url),'utf8');
+const logbookSource=fs.readFileSync(new URL('../app-09-logbook.js',import.meta.url),'utf8');
 const smartSource=fs.readFileSync(new URL('../app-38-smart-workflow.js',import.meta.url),'utf8');
 const smartMovementStart=smartSource.indexOf('function partMovementRows(part){');
 const smartMovementEnd=smartSource.indexOf('const smartOpenPartDetailBase=openPartDetail;',smartMovementStart);
@@ -56,6 +57,7 @@ function commonContext(db){
     partById:id=>db.parts.find(x=>Number(x.id)===Number(id)),
     projectById:id=>db.projects.find(x=>Number(x.id)===Number(id)),
     logById:id=>db.logs.find(x=>Number(x.id)===Number(id)),
+    consumedCost:log=>(log?.consumedParts||[]).reduce((sum,x)=>sum+(Number(x.qty)||0)*(Number(x.unitCost)||0),0),
     saveDB:()=>{},
     queueCloudSave:()=>{},
     persistBrowserData:async()=>{},
@@ -509,3 +511,119 @@ console.log('atomic Reserve -> Use production handler regression tests passed');
   assert.deepEqual(db,original,'warning cancellation mutated a Part, Purchase or reservation');
 }
 console.log('partial reserved use and warning cancellation passed');
+
+// Assigned -> Used uses the production consumption transaction before any
+// Installed-Purchase provenance or Work Log mutation can escape independently.
+{
+  const part={id:70,name:'Assigned test fitting',unit:'ea',stockQty:0,unitCost:5,
+    linkedProjectIds:[71],inventoryAdjustments:[],purchaseIds:['assigned-p']};
+  const project={id:71,title:'Assigned use project',system:'Fuel',status:'In Progress',
+    nextStep:'',plannedParts:[],partsUsed:[]};
+  const purchase={id:'assigned-p',qty:2,disposition:'Installed',inventoryPartId:70,
+    inventoryApplied:true,inventoryReceiptMaterializedQty:0,inventoryReceiptMaterialized:false};
+  const db={parts:[part],projects:[project],logs:[],purchases:[purchase],orders:[],settings:{}};
+  const values={apuQty:'2',apuDate:'2026-09-24',apuWork:'Install assigned fitting',apuNotes:'Fixture'};
+  const h=inventoryHarness(db,values);
+  h.RECORD_ARRAYS={part:'parts',project:'projects',log:'logs',purchase:'purchases'};
+  let saves=0,captured=null;h.saveDB=()=>{saves++};
+  load(dataStoreSource,h,'app-17a-data-store.js');
+  h.atomicReceiptOutbox={
+    shouldHandle:kind=>{assert.equal(kind,'consumption');return true},
+    stageConsumption:(work,message,meta)=>{
+      captured=meta;
+      assert.equal(db.logs.length,0,'Assigned use created a log before staging');
+      assert.equal(purchase.inventoryReceiptMaterializedQty,0,'Assigned use credited purchase before staging');
+      h.trackerStore.batch(work,{persist:false});
+      h.trackerStore.commit(message);
+    }
+  };
+  h.saveAssignedPartUse(71,70);
+  assert.equal(captured.mode,'assigned');
+  assert.equal(saves,1);
+  assert.equal(db.parts[0].stockQty,2);
+  assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,2);
+  assert.equal(db.logs.length,1);
+  assert.equal(db.logs[0].origin,'assigned-part-use');
+  assert.equal(db.projects[0].partsUsed.length,1);
+  assert.equal(h.partAvailable(db.parts[0]),0);
+}
+
+// Regression: declining an Assigned -> Used overdraw warning cannot consume
+// Installed-Purchase provenance before the confirmation.
+{
+  const part={id:72,name:'Scarce assigned fitting',unit:'ea',stockQty:0,unitCost:5,
+    linkedProjectIds:[73],inventoryAdjustments:[],purchaseIds:['assigned-low']};
+  const project={id:73,title:'Assigned cancel project',system:'Fuel',status:'In Progress',
+    nextStep:'',plannedParts:[],partsUsed:[]};
+  const purchase={id:'assigned-low',qty:1,disposition:'Installed',inventoryPartId:72,
+    inventoryApplied:true,inventoryReceiptMaterializedQty:0,inventoryReceiptMaterialized:false};
+  const db={parts:[part],projects:[project],logs:[],purchases:[purchase],orders:[],settings:{}};
+  const h=inventoryHarness(db,{apuQty:'2',apuDate:'2026-09-24'});
+  const original=structuredClone(db);h.confirm=()=>false;
+  h.atomicReceiptOutbox={shouldHandle:()=>false};
+  h.saveAssignedPartUse(73,72);
+  assert.deepEqual(db,original,'Assigned-use cancellation mutated purchase provenance or inventory');
+}
+
+// Quick Part Used stages Part + optional Project + Log + purchase credit in
+// one transaction and may consume beyond a smaller existing reservation.
+{
+  const part={id:80,name:'Quick test clamp',unit:'ea',stockQty:0,unitCost:3,
+    linkedProjectIds:[81],inventoryAdjustments:[],purchaseIds:['quick-p']};
+  const project={id:81,title:'Quick use project',system:'Hardware',status:'In Progress',
+    plannedParts:[{id:810,partId:80,qty:1,unit:'ea',name:'Quick test clamp'}],partsUsed:[]};
+  const purchase={id:'quick-p',qty:2,disposition:'Installed',inventoryPartId:80,
+    inventoryApplied:true,inventoryReceiptMaterializedQty:0,inventoryReceiptMaterialized:false};
+  const db={parts:[part],projects:[project],logs:[],purchases:[purchase],orders:[],settings:{}};
+  const values={qpuPartFallback:'80',qpuProject:'81',qpuQty:'2',qpuDate:'2026-09-24',
+    qpuWork:'Quick installed clamps',qpuNotes:'Fixture'};
+  const h=inventoryHarness(db,values);
+  h.RECORD_ARRAYS={part:'parts',project:'projects',log:'logs',purchase:'purchases'};
+  let captured=null;h.saveDB=()=>{};
+  load(dataStoreSource,h,'app-17a-data-store.js');
+  h.atomicReceiptOutbox={shouldHandle:()=>true,stageConsumption:(work,_message,meta)=>{
+    captured=meta;assert.equal(purchase.inventoryReceiptMaterializedQty,0);
+    h.trackerStore.batch(work,{persist:false});
+  }};
+  h.saveQuickPartUse();
+  assert.equal(captured.mode,'quick');
+  assert.equal(captured.reservationId,810);
+  assert.equal(db.projects[0].plannedParts.length,0,'Quick use did not release exhausted reservation');
+  assert.equal(db.projects[0].partsUsed[0].qty,2);
+  assert.equal(db.logs[0].origin,'quick-part-use');
+  assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,2);
+  assert.equal(db.parts[0].stockQty,2);
+  assert.equal(h.partAvailable(db.parts[0]),0);
+}
+
+// Existing Work Log -> Add Consumed Item uses the same production transaction
+// for Log append, Part version/link update and Installed-Purchase provenance.
+{
+  const part={id:90,name:'Log test washer',unit:'ea',stockQty:0,unitCost:1,
+    linkedProjectIds:[],inventoryAdjustments:[],purchaseIds:['log-p']};
+  const project={id:91,title:'Log use project',system:'Hardware',status:'In Progress',
+    plannedParts:[],partsUsed:[]};
+  const purchase={id:'log-p',qty:1,disposition:'Installed',inventoryPartId:90,
+    inventoryApplied:true,inventoryReceiptMaterializedQty:0,inventoryReceiptMaterialized:false};
+  const log={id:92,date:'2026-09-24',system:'Hardware',projectIds:[91],work:'Existing work',
+    observations:'',blockers:'',nextStep:'',otherCost:'',notes:'',consumedParts:[]};
+  const db={parts:[part],projects:[project],logs:[log],purchases:[purchase],orders:[],docs:[],settings:{showCosts:true}};
+  const values={cpPart:'90',cpName:'Log test washer',cpQty:'1',cpUnit:'ea',cpCost:'1',cpNotes:'Used'};
+  const h=inventoryHarness(db,values);
+  h.RECORD_ARRAYS={part:'parts',project:'projects',log:'logs',purchase:'purchases',document:'docs'};
+  load(dataStoreSource,h,'app-17a-data-store.js');
+  load(logbookSource,h,'app-09-logbook.js');
+  let captured=null;
+  h.atomicReceiptOutbox={isPendingRecord:()=>false,shouldHandle:()=>true,
+    stageConsumption:(work,_message,meta)=>{captured=meta;h.trackerStore.batch(work,{persist:false})}};
+  h.saveConsumedPart(92);
+  assert.equal(captured.mode,'log-add');
+  assert.equal(db.logs[0].consumedParts.length,1);
+  assert.equal(db.logs[0].consumedParts[0].partId,90);
+  assert.ok(db.parts[0].linkedProjectIds.includes(91));
+  assert.equal(db.purchases[0].inventoryReceiptMaterializedQty,1);
+  assert.equal(db.parts[0].stockQty,1);
+  assert.equal(h.partAvailable(db.parts[0]),0);
+}
+console.log('assigned, quick and Work Log production consumption handlers passed');
+
