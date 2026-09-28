@@ -52,26 +52,34 @@ async function openAttachment(id){const f=await getAttachment(id);if(!f)return;c
 async function openAttachmentPage(id,page=null){
   const requested=Number(page),pageNo=Number.isFinite(requested)&&requested>0?Math.floor(requested):null;
   // Open synchronously from the click so Safari/iOS does not treat the later
-  // authenticated Storage lookup as a popup.
+  // authenticated Storage download as a popup.
   const tab=window.open('about:blank','_blank');
   if(tab)try{tab.opener=null}catch(_e){}
-  let url='',revoke=false;
+  let url='';
   try{
+    let blob=null;
     if(typeof id==='string'&&id.includes('/')&&supa&&cloudSession){
-      const {data,error}=await supa.storage.from(CLOUD_BUCKET).createSignedUrl(id,15*60);
+      // Native PDF viewers do not consistently honor #page on signed,
+      // cross-origin Storage URLs. Download the already-private file through
+      // the authenticated client and give the viewer a same-browser blob URL.
+      const {data,error}=await supa.storage.from(CLOUD_BUCKET).download(id);
       if(error)throw error;
-      if(!data?.signedUrl)throw new Error('Storage did not return a signed file URL.');
-      url=data.signedUrl;
+      blob=data;
     }else{
       const f=await getAttachment(id);if(!f)throw new Error('Attachment was not found.');
-      url=URL.createObjectURL(f.blob);objectUrls.push(url);revoke=true;
+      blob=f.blob;
     }
-    const target=url+(pageNo?'#page='+pageNo:'');
-    if(tab)tab.location.href=target;else window.open(target,'_blank');
-    if(revoke)setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
+    if(!blob)throw new Error('Attachment data was empty.');
+    url=URL.createObjectURL(blob);
+    objectUrls.push(url);
+    const target=url+(pageNo?'#page='+pageNo+'&zoom=page-width':'');
+    if(tab)tab.location.replace?tab.location.replace(target):tab.location.href=target;
+    else window.open(target,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),5*60*1000);
     return true;
   }catch(error){
     try{tab?.close()}catch(_e){}
+    if(url)try{URL.revokeObjectURL(url)}catch(_e){}
     console.warn('Could not open attachment page',error);
     alert('Could not open the source file: '+(error?.message||String(error)));
     return false;
