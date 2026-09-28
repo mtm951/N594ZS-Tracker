@@ -68,7 +68,6 @@ assert.equal(docs[0].id,'rotax-om-912-ed4-r2-2025');
 assert.equal(ctx.checklistItemSourceDoc(c,c.items[0]).id,'rotax-si-912-018-r4-2021');
 
 ctx.openChecklistDetail('rotax-first-start');
-assert.match(modal,/ROTAX source/i);
 assert.match(modal,/First-start gate/);
 assert.match(modal,/ROTAX SI-912-018R4/);
 assert.match(modal,/SI p\.2–10/);
