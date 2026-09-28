@@ -40,6 +40,26 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.54 sticky bottom-right recorder Save Progress (September 28)
+
+- Owner reviewed the live Preview screenshot and requested **Save Progress** be moved to the bottom-right of the recorder, where the cursor naturally rests after reviewing the current step.
+- PR #32 `v5.19.54: move Save Progress to sticky bottom-right recorder footer` merged to `main` at `57583736d589470a5b80c032ce781d3f6c2ce3c5`.
+- Workflow run `36486454363` passed JavaScript syntax and the complete regression suite. Recorder regression now verifies the footer renders after the guided-step content and Save Progress is the rightmost real-run footer action.
+- Recorder layout change:
+  - removed the Save Progress row from the upper measurement area;
+  - added a **sticky bottom footer** inside the recorder modal;
+  - left side of footer shows save state/explanatory text;
+  - right side contains actions with **Save Progress all the way on the right**;
+  - real runs place **Abort Run**, **Finish Session**, then **Save Progress** in the footer;
+  - Preview shows disabled **Save Progress — real run only** in the same bottom-right location;
+  - footer remains visible while scrolling through the recorder;
+  - mobile footer stacks cleanly and keeps the Save Progress action prominent.
+- Save/Log/Complete/Finding/Abort/Finish behavior did not change in this release.
+- No production Supabase rows or checklist completion states changed.
+- Main verified after merge: `APP_VERSION='5.19.54'`, `app-70-first-start-recorder.js?v=5.19.54`, service-worker shell `n594zs-v5-19-54-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.54**. Open **Readiness → Commissioning Readiness → Preview Recorder** and verify the disabled **Save Progress — real run only** appears in the sticky bottom-right footer where requested.
+
 ## v5.19.53 preview exposes Save Progress control (September 28)
 
 - Owner could not see the new Save Progress button because the current recorder is only available in **Preview** while the First Start gate remains blocked. v5.19.52 intentionally hid the durable-save control in Preview, which made the preview incomplete and confusing.
