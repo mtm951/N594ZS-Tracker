@@ -240,7 +240,8 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
 }
 
 // The production receipt entry point hands the SAME mutation callback to the
-// opt-in durable journal when enabled. This test doesn't touch the network.
+// durable atomic journal whenever that production path is available. This
+// fixture doesn't touch the network.
 {
   const h=harness({inputs:{orReceiveQty:'2',orReceiveDate:'2026-09-23'}});
   const calls=[];
@@ -252,7 +253,7 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
     }
   };
   h.ctx.savePartialOrderReceipt(501);
-  assert.equal(calls.length,1,'actual receipt bypassed the opted-in atomic queue');
+  assert.equal(calls.length,1,'actual receipt bypassed the production atomic queue');
   assert.equal(h.db.parts[0].stockQty,4);
   assert.equal(h.db.orders[0].receivedQty,4);
   assert.equal(h.db.parts[0].receiptHistory[0].qty,2);
@@ -269,7 +270,8 @@ function harness({inputs={},saveMode='ok',failingPartId=null,missingPartId=null,
   unlinked.db.orders[0].partId=null;
   unlinked.ctx.openReceiveOrderModal(501);
   assert.match(unlinked.ui.lastModal,/No linked inventory Part/);
-  assert.match(unlinked.ui.lastModal,/Linking afterward does not credit earlier receipts/);
+  assert.match(unlinked.ui.lastModal,/transaction-journaled/);
+  assert.match(unlinked.ui.lastModal,/Linking a Part afterward does not retroactively credit earlier receipts/);
   assert.equal(unlinked.saves.length,0,'opening a warning edited the order');
 }
 
