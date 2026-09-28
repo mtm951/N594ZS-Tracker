@@ -27,6 +27,20 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Applicability boundaries are explicit rather than silently rewriting the manual: C=round cowl; D=smooth cowl; E.8–E.14=smooth-cowl oil-tank housing; G.8=tricycle radiator and G.9–G.12=conventional gear; H.1=smooth-cowl; I.2–I.8=factory fuel-valve arrangement; J preserves the stock SkyStar fuel schematic plus seven separately checkable p.58 routing precautions; K describes the stock SkyStar exhaust; L describes the stock 2001 electrical architecture; M is specifically the GSC three-blade ground-adjustable wood propeller.
 - The owner has custom systems in several areas, so source steps may later be marked N/A by the owner and checked against the applicable custom/component instructions separately. Do not alter source-faithful wording merely to match custom hardware.
 
+
+## v5.19.41 production atomic order receipts (September 28)
+
+- PR #19 `v5.19.41: productionize atomic order receipts` merged to `main` at `ce1aa5e1731ce61422c9a7bff3ba9353d94883b7`.
+- PR regression workflow run `36460645953` passed JavaScript syntax and the full existing/new regression suite. Specific production receipt coverage passed in `tests/atomic-receipt-outbox.test.mjs`, `tests/order-receipt-transaction.test.mjs`, and linked-order-blocker tests; Reserve → Use, sync/versioning and transaction reliability regressions also stayed green.
+- Order receipts are no longer behind the old per-device `n594zs_atomic_receipts_opt_in_v1` testing toggle. In an authenticated editable cloud workspace, `atomicReceiptOutbox.shouldHandle('receipt')` now routes receipts through the durable atomic journal automatically.
+- The old receipt toggle is ignored for routing and removed from the visible settings UI. A compatibility shim remains so an older cached UI calling `atomicReceiptOutbox.toggle()` cannot disable production receipts.
+- Legitimate Order-only receipts with no linked inventory Part are allowed and journaled as a single atomic Order operation. If an Order DOES have `partId`, the corresponding Part must be changed in the same operation; otherwise staging fails closed before persistence.
+- Linked Order + Part receipts, grouped receipts, and receipt-driven Project blocker updates continue to share the same durable operation ID / exact payload / expected-version transaction. Pending operations remain serialized one-at-a-time per device; offline retry uses the same operation ID; conflicts block rather than partially acknowledge.
+- The settings surface is now labeled **Inventory Transaction Safety**. Production receipts show as automatic when cloud-connected; manual Part adjustments and Reserve → Use remain separate opt-in experimental extensions for now.
+- No Supabase schema, function, policy, or production aircraft record was changed by this release. The existing `sync_tracker_records_atomic` RPC remains authenticated-only, permission checked, idempotent and all-or-nothing on version conflict.
+- Release metadata: `APP_VERSION='5.19.41'`; `app-08-orders.js` and `app-66-atomic-receipt-outbox.js` cache-busted to 5.19.41; service-worker shell is `n594zs-v5-19-41-shell`.
+- Owner acceptance: only refresh/update when the device says Synced and no pending atomic operation is shown. Footer should read **v5.19.41**. Under Cloud Account, the button now reads **Inventory Transaction Safety** and should report **Order receipts: Atomic protection active** when connected. Do not clear site data to update.
+
 ## v5.19.40 Kitfox manual review-state hardening (September 28)
 
 - During read-only production verification of the 13 source-backed Kitfox manual checklists, all 13 chapters A–M, all 159 review items, source pages/manualInstruction fields, deterministic IDs, source-document links and the single L.3 source-gap placeholder were confirmed present. No production aircraft data was changed during verification.
