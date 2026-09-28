@@ -364,9 +364,14 @@
     finalizeRun(run.id,'Completed',String(collectFields().note||'').trim());
   };
 
-  window.openCommissioningSource=function(runId){
+  window.openCommissioningSource=async function(runId){
     const run=String(runId)==='preview'?previewRun:runById(runId),cur=currentStep(run),doc=stepSourceDoc(cur?.item);
-    if(doc)openDocumentDetail(doc.id);
+    if(!doc)return;
+    if(typeof openSourceReference==='function'){
+      await openSourceReference(doc,cur?.item?.sourcePage||'',{fallbackToDocument:true});
+      return;
+    }
+    openDocumentDetail(doc.id);
   };
   window.addCommissioningPhoto=runId=>chooseAttachments('run',runId);
 
