@@ -38,6 +38,28 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.52 explicit recorder Save Progress state (September 28)
+
+- Owner suggested a visible Save control so users know in-progress recorder work is actually saved before closing the modal. This was adopted as a UX/safety improvement rather than relying on invisible local draft behavior.
+- PR #30 `v5.19.52: add explicit Save Progress to commissioning recorder` merged to `main` at `d36f3dfaca242efc22342911e742047d36bfaa2e`.
+- Final workflow run `36484213779` passed JavaScript syntax and the complete regression suite. The existing `tests/first-start-recorder.test.mjs` now also proves **Save Progress** persists working state without completing the checklist, creating a formal measurement snapshot, creating a Squawk, or creating a Work Log.
+- Recorder UX changes:
+  - adds a prominent **Save Progress** button in real commissioning sessions;
+  - adds visible **Saved to Run/Test ✓** vs **Unsaved changes • kept locally on this device** status;
+  - renames **Save Reading Snapshot** to **Log Reading** to make the distinction clear;
+  - adds explanatory copy: Save Progress syncs current fields/step note without completing the step; Log Reading creates a timestamped measurement snapshot;
+  - on mobile the Save Progress button expands full width.
+- Save Progress writes the current measurement-field values, engine-hours start/end values, current step note and `lastSavedAt` timestamp into the durable Run/Test record. It deliberately does **not** change checklist status or step position.
+- Local input draft is cleared only after the durable tracker save succeeds.
+- Existing behavior remains:
+  - Complete & Next = save + checklist completion;
+  - Finding = save + Before Flight Squawk + checklist remains incomplete;
+  - Abort/Finish = session finalization + linked Work Log.
+- No production Supabase rows or checklist completion states were changed by this release.
+- Main verified after merge: `APP_VERSION='5.19.52'`, `app-70-first-start-recorder.js?v=5.19.52`, service-worker shell `n594zs-v5-19-52-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.52**. Open **Readiness → Commissioning Readiness → Preview Recorder** to inspect layout; in a real future run the Save Progress control/status appears and distinguishes durable save from local unsaved draft.
+
 ## v5.19.51 guided First Start / Ground Run Recorder (September 28)
 
 - PR #29 `v5.19.51: add guided first-start / ground-run recorder` merged to `main` at `ad56d91e65dbbe22cdca2a45dedc8e0bc5ffe2f2`.
