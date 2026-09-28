@@ -27,6 +27,43 @@
     const did=c.sourceDocumentId||c.documentId;
     return did&&typeof docById==='function'?docById(Number(did)):null;
   }
+  async function sourcePdf(c){
+    const doc=sourceDoc(c);if(!doc||typeof getAttachments!=='function')return null;
+    const files=await getAttachments('document',doc.id);
+    const expected=String(c.sourcePdfFilename||'').toLowerCase();
+    return A(files).find(f=>expected&&String(f.name||'').toLowerCase()===expected)||
+      A(files).find(f=>String(f.type||'').toLowerCase()==='application/pdf')||
+      A(files).find(f=>/\.pdf$/i.test(String(f.name||'')))||null;
+  }
+  async function openSourcePage(cid,iid=null){
+    const c=current(cid);if(!c)return false;
+    const i=iid?step(c,iid):null;
+    const pages=A(c.items).map(x=>Number(x.sourcePage)).filter(Number.isFinite);
+    const page=i?Number(i.sourcePage):(pages.length?Math.min(...pages):Number(String(c.sourcePages||'').match(/\d+/)?.[0]));
+    const doc=sourceDoc(c);
+    if(!doc){
+      alert('This checklist is not linked to its source Document record yet.');
+      return false;
+    }
+    try{
+      const pdf=await sourcePdf(c);
+      if(!pdf){
+        alert('The source Document exists, but its PDF attachment is not available. Opening the Document record instead.');
+        openDocumentDetail(doc.id);return false;
+      }
+      if(typeof openAttachmentPage==='function'){
+        const ok=await openAttachmentPage(pdf.id,page);
+        if(ok)return true;
+      }else if(typeof openAttachment==='function'){
+        await openAttachment(pdf.id);return true;
+      }
+    }catch(error){
+      console.warn('Could not open Kitfox source PDF',error);
+      alert('Could not open the source PDF. Opening the tracker Document record instead.');
+    }
+    openDocumentDetail(doc.id);return false;
+  }
+  window.openKitfoxManualSourcePage=openSourcePage;
   function chapterNeighbors(c){
     const list=db.checklists.filter(manual).sort((a,b)=>ORDER.indexOf(a.manualChapter)-ORDER.indexOf(b.manualChapter));
     const at=list.findIndex(x=>String(x.id)===String(c.id));
@@ -64,6 +101,7 @@
           (i.sourceGap?'<div class="danger-note">The provided manual jumps from L.2 to L.4. Do not infer L.3; record the correction or clarification source before marking reviewed.</div>':'')+
         '</details>'+
         '<div class="action-row" style="gap:6px;flex-wrap:wrap">'+
+          '<button class="icon-btn" data-km-source-page="'+E(i.id)+'">Open PDF p.'+E(i.sourcePage)+'</button>'+
           '<button class="icon-btn" data-km-note="'+E(i.id)+'">Review note</button>'+
           '<button class="icon-btn" data-km-na="'+E(i.id)+'">'+(isNA?'Undo N/A':'N/A')+'</button>'+
           '<button class="icon-btn" data-km-attention="'+E(i.id)+'">'+(flagged?'Clear finding':'Needs attention')+'</button>'+
@@ -137,6 +175,11 @@
       el.dataset.kmBound='1';
       el.addEventListener('click',()=>setStep(currentDetail.id,el.dataset.kmAttention,'attention'));
     });
+    box.querySelectorAll('[data-km-source-page]').forEach(el=>{
+      if(el.dataset.kmBound)return;
+      el.dataset.kmBound='1';
+      el.addEventListener('click',()=>openSourcePage(currentDetail.id,el.dataset.kmSourcePage));
+    });
     box.querySelectorAll('[data-km-note]').forEach(el=>{
       if(el.dataset.kmBound)return;
       el.dataset.kmBound='1';
@@ -179,7 +222,7 @@
       '<div class="detail-card"><h3>Source and applicability</h3><div class="detail-text">'+E(c.notes||'')+
       '</div><div class="task-note" style="margin-top:6px">Source PDF: '+E(c.sourcePdfFilename||'3_Newer_Engine_install_912_64825-000.pdf')+
       ' • Section '+E(c.manualChapter)+' • printed pages '+E(c.sourcePages||'')+
-      (doc?'</div><div class="action-row"><button id="kmSource" class="secondary">Open tracker document: '+E(doc.name)+'</button></div>':'</div>')+
+      (doc?'</div><div class="action-row"><button id="kmSourcePage" class="primary">Open source PDF at this section</button><button id="kmSource" class="secondary">Document record</button></div>':'</div>')+
       '</div>'+
       '<div class="modal-actions" style="flex-wrap:wrap">'+
         (n.prev?'<button class="secondary" id="kmPrev">← Section '+E(n.prev.manualChapter)+'</button>':'')+
@@ -193,6 +236,7 @@
     box.querySelector('#kmNext')?.addEventListener('click',()=>openKitfox912ManualChecklist(n.next.id));
     box.querySelector('#kmBack')?.addEventListener('click',()=>{closeModal();navTo('checklists')});
     box.querySelector('#kmBulkNA')?.addEventListener('click',()=>bulkNA(c.id));
+    box.querySelector('#kmSourcePage')?.addEventListener('click',()=>openSourcePage(c.id));
     box.querySelector('#kmSource')?.addEventListener('click',()=>openDocumentDetail(doc.id));
   };
 
@@ -205,9 +249,11 @@
       '<div class="form-grid"><div class="full">'+
         textareaField('Your evidence / applicability / clarification','kmReviewNote',i.note||'')+
       '</div></div><div class="modal-actions">'+
+        '<button class="secondary" id="kmNoteSource">Open source PDF p.'+E(i.sourcePage)+'</button>'+
         '<button class="secondary" id="kmNoteBack">Back to chapter</button>'+
         '<button class="primary" id="kmNoteSave">Save review note</button>'+
       '</div>',true);
+    document.getElementById('kmNoteSource')?.addEventListener('click',()=>openSourcePage(cid,iid));
     document.getElementById('kmNoteBack')?.addEventListener('click',()=>openKitfox912ManualChecklist(cid));
     document.getElementById('kmNoteSave')?.addEventListener('click',()=>{
       const note=val('kmReviewNote');
