@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.40** (Kitfox 912 manual review-state hardening; PR #18 merged September 28 at `e40f5c8eee1e7192cd541775eba52b540b27aae1`). PR regression CI passed. The GitHub Pages workflow is configured to rerun the full tests and deploy on every `main` push; direct public-site fetch was unavailable from the current tool environment, so owner-device footer `v5.19.40` remains the final live-deployment acceptance check.
+- Current release: **v5.19.60** (Documents clickability fix; PR #38 merged September 28 at `229770ce806c9b3ad85aa356fdc49ae22537459f`). PR regression CI passed.
 
 
 
@@ -45,6 +45,20 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.60 Documents table clickability fix (September 28)
+
+- Owner reported that many rows in **Documents** appeared non-clickable.
+- Root cause: the list renderer still emitted Document IDs directly into inline JavaScript. Legacy numeric IDs worked, but newer stable string IDs such as manufacturer/source records were emitted as bare JavaScript expressions and their row/Edit clicks failed.
+- PR #38 `v5.19.60: fix document list clickability` merged to `main` at `229770ce806c9b3ad85aa356fdc49ae22537459f`.
+- PR workflow run `36492725898` passed JavaScript syntax and the complete regression suite.
+- The entire Documents row now opens the Document record for both legacy numeric IDs and stable string IDs.
+- The row **Edit** button now works for both ID formats.
+- **Web link** badges are now real direct links that open the stored source URL in a new tab without also opening the tracker record.
+- New regression coverage verifies numeric IDs, string IDs, Edit actions, and direct web links.
+- No Supabase data or Document records changed.
+- Main verified after merge: `APP_VERSION='5.19.60'`, `app-05-views.js?v=5.19.60`, service-worker shell `n594zs-v5-19-60-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.60**. In **Documents**, click several of the newer source records (EarthX, IVO, ROTAX SI/OM, etc.) anywhere on their row; each should open its Document record. Their **Edit** buttons should open the editor, and **Web link** should open the actual source directly.
 
 ## v5.19.59 sortable Maintenance columns (September 28)
 
