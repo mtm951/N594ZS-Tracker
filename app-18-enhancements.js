@@ -35,13 +35,63 @@ function maintenanceDueInfo(m){
   return {status:due?'Due':soon?'Due Soon':'OK',dueDate,dueHours:dueHours||'',reason:reason.join(' • ')};
 }
 
+let maintenanceSort={key:'status',dir:'asc'};
+const MAINTENANCE_STATUS_RANK={Due:0,'Due Soon':1,OK:2};
+function maintenanceBasisLabel(m){return m?.basis==='both'?'Date + hours':m?.basis==='hours'?'Hours':m?.basis==='date'?'Date':String(m?.basis||'')}
+function maintenanceSortHead(label,key){
+  const active=maintenanceSort.key===key,aria=active?(maintenanceSort.dir==='asc'?'ascending':'descending'):'none';
+  return `<th class="maintenance-sortable" aria-sort="${aria}"><button class="maintenance-sort-button" data-maintenance-sort="${key}" onclick="setMaintenanceSort('${key}')" title="Sort by ${esc(label)}">${esc(label)} <span>${active?(maintenanceSort.dir==='asc'?'▲':'▼'):'↕'}</span></button></th>`;
+}
+function refreshMaintenanceSortHeaders(){
+  document.querySelectorAll('#page-maintenance .maintenance-sort-button').forEach(b=>{
+    const active=b.dataset.maintenanceSort===maintenanceSort.key;
+    b.closest('th')?.setAttribute('aria-sort',active?(maintenanceSort.dir==='asc'?'ascending':'descending'):'none');
+    const arrow=b.querySelector('span');if(arrow)arrow.textContent=active?(maintenanceSort.dir==='asc'?'▲':'▼'):'↕';
+  });
+}
+function setMaintenanceSort(key){
+  if(maintenanceSort.key===key)maintenanceSort.dir=maintenanceSort.dir==='asc'?'desc':'asc';
+  else maintenanceSort={key,dir:'asc'};
+  refreshMaintenanceSortHeaders();
+  renderMaintenanceRows();
+}
+function maintenanceDueUrgency(m){
+  const d=maintenanceDueInfo(m),scores=[];
+  if((m.basis==='date'||m.basis==='both')&&d.dueDate){
+    const dd=new Date(d.dueDate+'T12:00:00');
+    if(!Number.isNaN(dd.getTime()))scores.push((dd-Date.now())/86400000/30);
+  }
+  const currentHours=Number(m.meter==='airframe'?db.aircraft.airframeHours:db.aircraft.engineHours);
+  if((m.basis==='hours'||m.basis==='both')&&Number.isFinite(currentHours)&&Number(d.dueHours)>0)
+    scores.push((Number(d.dueHours)-currentHours)/10);
+  return scores.length?Math.min(...scores):null;
+}
+function maintenanceSortValue(m,key){
+  if(key==='item')return m.title||'';
+  if(key==='system')return m.system||'';
+  if(key==='basis')return maintenanceBasisLabel(m);
+  if(key==='next')return maintenanceDueUrgency(m);
+  if(key==='status')return MAINTENANCE_STATUS_RANK[maintenanceDueInfo(m).status]??99;
+  return '';
+}
+function sortMaintenanceRows(rows){
+  const key=maintenanceSort.key,dir=maintenanceSort.dir==='desc'?-1:1,collator=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
+  return rows.sort((a,b)=>{
+    const av=maintenanceSortValue(a,key),bv=maintenanceSortValue(b,key);
+    const aBlank=av===null||av===undefined||av==='',bBlank=bv===null||bv===undefined||bv==='';
+    if(aBlank!==bBlank)return aBlank?1:-1;
+    const primary=typeof av==='number'&&typeof bv==='number'?av-bv:collator.compare(String(av),String(bv));
+    return primary*dir||collator.compare(String(a.title||''),String(b.title||''))||Number(a.id||0)-Number(b.id||0);
+  });
+}
+
 function renderMaintenance(){
   const page=document.getElementById('page-maintenance');if(!page)return;
   const gates=db.projects.filter(p=>p.status!=='Done'&&/before|return|flight|engine/i.test(p.trigger||''));
   page.innerHTML=`<div class="grid">
     <div class="card span-8"><div class="toolbar"><div><h1>Maintenance</h1><div class="muted">Recurring date/hour items plus return-to-service gates from your active projects.</div></div><button class="primary" onclick="openMaintenanceModal()">+ Add Maintenance Item</button></div>
       <div class="controls" style="margin-top:10px"><input id="maintenanceSearch" placeholder="Search maintenance…"><select id="maintenanceSystem">${trackerSystemFilterOptions('')}</select><select id="maintenanceDue"><option value="">All due states</option><option>Due</option><option>Due Soon</option><option>OK</option></select></div>
-      <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Item</th><th>System</th><th>Basis</th><th>Next due</th><th>Status</th><th></th></tr></thead><tbody id="maintenanceRows"></tbody></table></div>
+      <div class="table-wrap" style="margin-top:12px"><table><thead><tr>${maintenanceSortHead('Item','item')}${maintenanceSortHead('System','system')}${maintenanceSortHead('Basis','basis')}${maintenanceSortHead('Next due','next')}${maintenanceSortHead('Status','status')}<th></th></tr></thead><tbody id="maintenanceRows"></tbody></table></div>
     </div>
     <div class="card span-4"><div class="section-head"><h2>Return-to-service gates</h2><button class="linkbtn" onclick="openProjectsView({status:'Active'})">Projects</button></div>${gates.slice(0,10).map(p=>`<div class="blocker click-row" onclick="openProjectDetail(${p.id})"><span class="dot"></span><div><b>${esc(p.title)}</b><div class="task-note">${esc(p.trigger)} • ${esc(p.nextStep||'No next step')}</div></div></div>`).join('')||'<div class="empty">No open return-to-service gates.</div>'}</div>
   </div>`;
@@ -53,12 +103,13 @@ function renderMaintenance(){
 function renderMaintenanceRows(){
   const box=document.getElementById('maintenanceRows');if(!box)return;
   const q=(val('maintenanceSearch')||'').toLowerCase(),sys=val('maintenanceSystem'),dueFilter=val('maintenanceDue');
-  const rows=[...db.maintenance].filter(m=>
+  const rows=sortMaintenanceRows([...db.maintenance].filter(m=>
     (!q||cloudStableJSON(m).toLowerCase().includes(q))&&
     trackerRecordMatchesSystem(m,sys,'maintenance')&&
     (!dueFilter||maintenanceDueInfo(m).status===dueFilter)
-  ).sort((a,b)=>({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(a).status]??9)-({Due:0,'Due Soon':1,OK:2}[maintenanceDueInfo(b).status]??9));
-  box.innerHTML=rows.map(m=>{const d=maintenanceDueInfo(m),linked=m.linkedChecklistSourceKey?db.checklists.find(c=>c.sourceKey===m.linkedChecklistSourceKey):null,items=linked?arr(linked.items):arr(m.procedureItems),done=items.filter(i=>i.done).length,checkMeta=items.length?`<span class="mini-badge">${done}/${items.length} checklist</span>`:'';return `<tr class="click-row" onclick="openMaintenanceDetail(${m.id})"><td><b>${esc(m.title)}</b><div class="task-note">${esc(m.notes||m.sourceNotes||'')}</div>${checkMeta?`<div class="task-meta">${checkMeta}</div>`:''}</td><td>${esc(m.system||'—')}</td><td>${esc(m.basis==='both'?'Date + hours':m.basis||'—')}</td><td>${esc(d.reason||'Not set')}</td><td>${pill(d.status)}</td><td><button class="icon-btn" onclick="event.stopPropagation();openMaintenanceModal(${m.id})">Edit</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No matching maintenance items.</td></tr>';
+  ));
+  box.innerHTML=rows.map(m=>{const d=maintenanceDueInfo(m),linked=m.linkedChecklistSourceKey?db.checklists.find(c=>c.sourceKey===m.linkedChecklistSourceKey):null,items=linked?arr(linked.items):arr(m.procedureItems),done=items.filter(i=>i.done).length,checkMeta=items.length?`<span class="mini-badge">${done}/${items.length} checklist</span>`:'';return `<tr class="click-row" onclick="openMaintenanceDetail(${m.id})"><td><b>${esc(m.title)}</b><div class="task-note">${esc(m.notes||m.sourceNotes||'')}</div>${checkMeta?`<div class="task-meta">${checkMeta}</div>`:''}</td><td>${esc(m.system||'—')}</td><td>${esc(maintenanceBasisLabel(m)||'—')}</td><td>${esc(d.reason||'Not set')}</td><td>${pill(d.status)}</td><td><button class="icon-btn" onclick="event.stopPropagation();openMaintenanceModal(${m.id})">Edit</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No matching maintenance items.</td></tr>';
+  refreshMaintenanceSortHeaders();
 }
 
 function maintenanceProcedureProgress(m){
@@ -164,6 +215,8 @@ function saveMaintenance(id){
   const i=db.maintenance.findIndex(x=>String(x.id)===String(obj.id));if(i>=0)db.maintenance[i]=obj;else db.maintenance.push(obj);closeModal();saveDB('Maintenance item saved.');
 }
 function deleteMaintenance(id){if(!confirm('Move this maintenance item to Trash?'))return;db.maintenance=db.maintenance.filter(x=>String(x.id)!==String(id));closeModal();saveDB('Maintenance item moved to Trash.')}
+(()=>{if(document.getElementById('maintenanceSortStyle'))return;const s=document.createElement('style');s.id='maintenanceSortStyle';s.textContent=`#page-maintenance th.maintenance-sortable{padding:0}#page-maintenance th.maintenance-sortable:hover{background:#eef5fb}#page-maintenance .maintenance-sort-button{appearance:none;width:100%;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;padding:10px 12px;text-align:left;cursor:pointer;white-space:nowrap}#page-maintenance .maintenance-sort-button span{font-size:.72em;margin-left:5px;opacity:.55}`;document.head.appendChild(s)})();
+
 (()=>{if(document.getElementById('maintenanceChecklistStyle'))return;const s=document.createElement('style');s.id='maintenanceChecklistStyle';s.textContent=`
 .maintenance-checklist-card{overflow:hidden;padding:0!important}.maintenance-checklist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 17px 12px;background:linear-gradient(180deg,#fbfdff,#f6f9fc);border-bottom:1px solid var(--line)}.maintenance-checklist-head h3{margin:2px 0 3px}.maintenance-eyebrow{font-size:9px;line-height:1;text-transform:uppercase;letter-spacing:.12em;font-weight:900;color:#52718d}.maintenance-progress-count{text-align:right;min-width:84px}.maintenance-progress-count b{font-size:24px;line-height:1}.maintenance-progress-count>span{font-weight:800;color:var(--muted)}.maintenance-progress-count small{display:block;margin-top:3px;font-size:9px;color:var(--muted);font-weight:750;text-transform:uppercase;letter-spacing:.04em}.maintenance-progress-track{height:5px;background:#e8eef3}.maintenance-progress-track i{display:block;height:100%;background:#5b9b70;transition:width .18s ease}.maintenance-procedure-list{display:grid;gap:0;padding:7px 13px 10px}.maintenance-procedure-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border-bottom:1px solid #e9eef2;padding:11px 4px;background:#fff}.maintenance-procedure-item:last-child{border-bottom:0}.maintenance-step-main{display:grid;grid-template-columns:18px 28px minmax(0,1fr);align-items:flex-start;gap:8px;cursor:pointer;min-width:0}.maintenance-step-main input{width:auto;margin:7px 0 0 1px}.maintenance-step-number{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#edf3f7;color:#526b7c;font-size:11px;font-weight:900;flex:none}.maintenance-step-copy{min-width:0;padding-top:3px}.maintenance-step-copy b{display:block;font-size:13px;line-height:1.38;font-weight:750}.maintenance-step-copy small{display:block;margin-top:6px;padding:7px 9px;border-radius:7px;background:#fff8e8;color:#5f5131;font-size:11px;line-height:1.35;white-space:pre-wrap}.maintenance-procedure-item.done{background:#f8fbf8}.maintenance-procedure-item.done .maintenance-step-number{background:#dff1e5;color:#24733f}.maintenance-procedure-item.done .maintenance-step-copy>b{color:#66766c;text-decoration:line-through;text-decoration-thickness:1px}.maintenance-note-btn{appearance:none;border:1px solid #d9e2e8;background:#fff;border-radius:8px;padding:7px 9px;font-size:10px;font-weight:800;color:#48657c;cursor:pointer;white-space:nowrap}.maintenance-note-btn:hover{background:#f5f9fc}.maintenance-note-btn.has-note{background:#fff8e8;border-color:#ead7a5;color:#705b22}.maintenance-checklist-actions{display:flex;justify-content:flex-end;gap:8px;padding:10px 16px 15px;border-top:1px solid #edf1f4}.maintenance-procedure-preview{display:grid;gap:0;padding:8px 16px 12px}.maintenance-procedure-preview>div{display:grid;grid-template-columns:28px 1fr;align-items:start;gap:9px;padding:8px 0;border-bottom:1px solid #edf1f4;font-size:12px;line-height:1.38}.maintenance-procedure-preview>div:last-child{border-bottom:0}.maintenance-procedure-preview>div.done{color:#6c7a71}.maintenance-preview-more{display:block!important;padding:10px 0 2px!important;color:var(--muted);font-size:10px!important;font-weight:800;text-transform:uppercase;letter-spacing:.04em}.maintenance-related-card{padding:0!important;overflow:hidden}.maintenance-related-card>.section-tools{padding:14px 16px 10px;border-bottom:1px solid var(--line);background:#fbfcfd}.maintenance-related-list{display:grid}.maintenance-related-project{border-bottom:1px solid #edf1f4}.maintenance-related-project:last-child{border-bottom:0}.maintenance-related-head{appearance:none;width:100%;border:0;background:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;text-align:left;color:inherit;cursor:pointer}.maintenance-related-head:hover{background:#f8fbfd}.maintenance-related-head b{display:block;font-size:13px}.maintenance-related-head small{display:block;margin-top:3px;color:var(--muted);font-size:10px}.maintenance-related-arrow{font-size:21px;color:#8aa0b0}.maintenance-related-notes{display:grid;gap:6px;padding:0 16px 13px}.maintenance-related-notes>div{display:grid;grid-template-columns:minmax(130px,.8fr) minmax(0,1.2fr);gap:10px;background:#fff9eb;border:1px solid #efe1b8;border-radius:8px;padding:8px 10px}.maintenance-related-notes span{font-size:10px;line-height:1.25;color:#776b4f}.maintenance-related-notes b{font-size:11px;line-height:1.35;color:#4f4734}.maintenance-related-empty{padding:0 16px 12px}.maintenance-small-val{font-size:13px!important;line-height:1.25}@media(max-width:700px){.maintenance-checklist-head{padding:14px}.maintenance-procedure-list{padding:6px 10px}.maintenance-procedure-item{grid-template-columns:1fr;padding:10px 2px}.maintenance-note-btn{justify-self:start;margin-left:54px}.maintenance-related-notes>div{grid-template-columns:1fr;gap:3px}}
 `;document.head.appendChild(s)})();
