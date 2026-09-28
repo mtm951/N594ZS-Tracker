@@ -57,6 +57,7 @@
   let modalOpenSerial=0;
   let pendingProgrammaticBackSerial=null;
   let explicitModalBackRequested=false;
+  let pendingModalPageTarget=null;
   let receiptLastEditAt=0;
   let modalEditorBaselines=new WeakMap();
   let modifiedEditors=new Set();
@@ -174,6 +175,26 @@
     try{closeModalBase();resetModalEditors()}finally{historyHandling=false;updateControls()}
   }
 
+  window.goToTrackerPageFromModal=function(page){
+    if(!validPage(page))return false;
+    if(popupOpen()&&!confirmDiscardModalEdits())return false;
+
+    if(popupOpen()&&stateIsModal()){
+      pendingModalPageTarget=page;
+      explicitModalBackRequested=true;
+      history.back();
+      return true;
+    }
+
+    if(popupOpen()){
+      historyHandling=true;
+      try{closeModalBase();resetModalEditors()}finally{historyHandling=false}
+    }
+    navTo(page);
+    updateControls();
+    return true;
+  };
+
   window.trackerBack=function(){
     if(popupOpen()){
       if(!confirmDiscardModalEdits())return;
@@ -245,6 +266,8 @@
   window.addEventListener('popstate',e=>{
     clearTimeout(closeHistoryTimer);
     const st=e.state;
+    const modalPageTarget=pendingModalPageTarget;
+    pendingModalPageTarget=null;
     const explicitBack=explicitModalBackRequested;
     explicitModalBackRequested=false;
     const programmaticBackSerial=pendingProgrammaticBackSerial;
@@ -258,6 +281,20 @@
       return;
     }
     if(popupOpen()){
+      if(modalPageTarget){
+        closeFromHistory();
+        if(st?.n594zs)depth=Number(st.n594zsDepth||0);
+        const from=currentPage;
+        if(from!==modalPageTarget){
+          depth=Number(st?.n594zsDepth??depth)+1;
+          history.pushState(trackerState('page',modalPageTarget,depth),'');
+        }else if(!(st?.n594zs&&st.n594zsKind==='page'&&st.n594zsPage===modalPageTarget)){
+          history.replaceState(trackerState('page',modalPageTarget,depth),'');
+        }
+        historyHandling=true;
+        try{navToBase(modalPageTarget)}finally{historyHandling=false;updateControls()}
+        return;
+      }
       // Only a deliberate Back should dismiss a receipt that is being edited.
       // Unsolicited popstate (including a phone keyboard/browser interaction)
       // must not throw away the entered quantity. Restore one modal state.
