@@ -637,6 +637,33 @@
     .commissioning-recorder-top b{font-size:1.15rem}
     #crOilTimer.limit-exceeded{color:#b42318}
     .commissioning-engine-actions{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:10;background:var(--panel,#fff);padding:8px 0}
+    .commissioning-session-checklist{border:1px solid var(--border);border-radius:12px;background:var(--card);overflow:hidden}
+    .commissioning-session-checklist>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .commissioning-session-checklist>summary::-webkit-details-marker{display:none}
+    .commissioning-session-checklist>summary>span{display:flex;flex-direction:column;min-width:0}
+    .commissioning-session-checklist>summary small{font-size:.72rem;color:var(--muted)}
+    .commissioning-session-step-list{border-top:1px solid var(--border);display:flex;flex-direction:column;max-height:280px;overflow:auto}
+    .commissioning-session-step{border:0;border-bottom:1px solid var(--border);background:transparent;color:inherit;padding:8px 10px;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;cursor:pointer}
+    .commissioning-session-step:last-child{border-bottom:0}
+    .commissioning-session-step:hover{background:var(--soft,#f5f7f8)}
+    .commissioning-session-step.is-current{background:#eef7ff;box-shadow:inset 3px 0 0 var(--accent,#1261a0)}
+    .commissioning-session-step.is-complete{opacity:.72}
+    .commissioning-session-step.has-finding{box-shadow:inset 3px 0 0 var(--warn,#d99a31)}
+    .commissioning-session-step-symbol{font-weight:900;text-align:center}
+    .commissioning-session-step-main{display:flex;flex-direction:column;min-width:0}
+    .commissioning-session-step-main b{font-size:.8rem;line-height:1.3}
+    .commissioning-session-step-main small{font-size:.7rem;color:var(--muted)}
+    .commissioning-after-run{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--soft,#f7f9fa);display:flex;flex-direction:column;gap:10px}
+    .commissioning-after-run>div:first-child{display:flex;flex-direction:column;gap:2px}
+    .commissioning-after-run>div:first-child span,.commissioning-after-run>div:first-child small{font-size:.72rem;color:var(--muted)}
+    .commissioning-next-gates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .commissioning-next-gate{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:10px;text-align:left;display:flex;flex-direction:column;cursor:pointer}
+    .commissioning-next-gate.is-clear{border-color:var(--good,#6c9)}
+    .commissioning-next-gate span,.commissioning-next-gate small{font-size:.72rem;color:var(--muted)}
+    .commissioning-next-gate b{font-size:.95rem}
+    .commissioning-after-run-actions{justify-content:flex-end}
+    .commissioning-run-detail-next{display:flex;flex-direction:column;margin-top:7px;padding-top:7px;border-top:1px solid rgba(0,0,0,.08)}
+    .commissioning-run-detail-next span{font-size:.72rem;color:var(--muted)}
     .commissioning-recorder-footer{position:sticky;bottom:0;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:14px;margin:2px -15px -15px;padding:12px 15px;background:var(--panel,#fff);border-top:1px solid var(--border);box-shadow:0 -6px 18px rgba(0,0,0,.08)}
     .commissioning-save-status{display:flex;flex-direction:column;gap:2px;min-width:0}
     .commissioning-save-status b{font-size:.82rem}
@@ -665,6 +692,8 @@
     @media(max-width:800px){
       .commissioning-recorder-top{grid-template-columns:repeat(2,minmax(0,1fr))}
       .commissioning-readings{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .commissioning-next-gates{grid-template-columns:1fr}
+      .commissioning-session-step-list{max-height:220px}
       .commissioning-recorder-entry{align-items:stretch;flex-direction:column}
       .commissioning-recorder-footer{align-items:stretch;flex-direction:column;margin-left:-15px;margin-right:-15px}
       .commissioning-footer-actions{width:100%}
