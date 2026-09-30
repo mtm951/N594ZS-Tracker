@@ -140,7 +140,7 @@
     return {label:'Open',tone:'',symbol:'○'};
   }
   function recorderStepNavigatorHTML(run){
-    const s=sessionOf(run),steps=A(s?.steps),current=Math.max(0,Math.min(steps.length-1,Number(s?.currentIndex)||0));
+    const s=sessionOf(run),steps=A(s?.steps),current=currentStep(run)?.index??Math.max(0,Math.min(steps.length-1,Number(s?.currentIndex)||0));
     return `<details class="commissioning-session-checklist" open>
       <summary><span><b>Guided Session Checklist</b><small>Jump directly to any recorded step without changing its completion state.</small></span><strong>${steps.filter(x=>x.status==='complete').length}/${steps.length}</strong></summary>
       <div class="commissioning-session-step-list">${steps.map((step,index)=>{
