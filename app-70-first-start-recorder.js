@@ -556,9 +556,9 @@
         <div class="modal-actions"><button class="secondary" onclick="openFirstStartRecorderPreview()">Preview Recorder</button><button class="primary" onclick="openCommissioningGate('first-start')">Review First Start Blockers</button></div>`,true);
     }
     const purge=typeof checklistById==='function'?checklistById('rotax912-oil-purge-first-start'):null;
-    const purgeDone=A(purge?.items).length>0&&A(purge.items).every(i=>!!i.done),n=runNumber();
-    openModal(`${modalHeader('Start First Start / Ground Run','Create durable commissioning Run #'+n)}
-      <div class="notice"><b>First Start gate is clear.</b> Starting creates a Run/Test record immediately so progress survives refreshes and device changes.</div>
+    const purgeDone=A(purge?.items).length>0&&A(purge.items).every(i=>!!i.done),n=runNumber(),prior=latestCommissioningRun();
+    openModal(`${modalHeader(n===1?'Start First Start / Ground Run':'Start Commissioning Run #'+n,'Create durable commissioning Run #'+n)}
+      <div class="notice"><b>First Start gate is clear.</b> Starting creates a Run/Test record immediately so progress survives refreshes and device changes.${prior?'<br><span class="muted">Previous Run #'+E(String(sessionOf(prior)?.runNumber||''))+' — '+E(prior.outcome||recorderStatus(prior))+'</span>':''}</div>
       <div class="form-grid">
         ${field('Engine hours / tach start','crStartTach',db.aircraft?.engineHours||'','number','step="0.1" min="0"')}
         <label class="focus-toggle full"><input id="crPostPurge" type="checkbox" ${purgeDone?'checked':''}> <span>This is the first engine start immediately following the oil-system purge. Use the 5-second oil-pressure cue.</span></label>
