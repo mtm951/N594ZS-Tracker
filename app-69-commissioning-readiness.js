@@ -95,19 +95,63 @@
   function requirementGateLabel(gate){
     return {'first-start':'First Start','full-power':'Full-Power','flight':'Flight'}[String(gate||'')]||String(gate||'Requirement');
   }
-  function gateRequirementHtml(item){
-    const done=!!item?.done;
-    const label=requirementGateLabel(item?.requiredBefore);
+  function inlineJsString(value){
+    return E(JSON.stringify(String(value)));
+  }
+  function commissioningChecklistItem(checklist,itemId){
+    return A(checklist?.items).find(item=>String(item.id)===String(itemId))||null;
+  }
+  function commissioningRequirementProject(checklist){
+    if(checklist?.projectId===null||checklist?.projectId===undefined||checklist?.projectId==='')return null;
+    return typeof projectById==='function'?projectById(checklist.projectId):null;
+  }
+  function commissioningRequirementSourceDoc(checklist,item){
+    if(typeof checklistItemSourceDoc==='function')return checklistItemSourceDoc(checklist,item);
+    const id=item?.sourceDocumentId||checklist?.sourceDocumentId||checklist?.documentId||null;
+    return id!==null&&id!==undefined&&typeof docById==='function'?docById(id):null;
+  }
+  function commissioningRequirementState(item){
+    if(item?.done)return {label:'Complete',tone:'good',reason:'Requirement is checked complete in its source checklist.'};
+    const inspection=String(item?.inspectionStatus||'').trim().toLowerCase();
+    const review=String(item?.reviewStatus||'').trim().toLowerCase();
+    if(inspection==='finding'||item?.findingSquawkId||item?.findingId)
+      return {label:'Finding open',tone:'warn',reason:'A finding is recorded against this requirement and it is not complete.'};
+    if(review==='needs attention')
+      return {label:'Needs attention',tone:'warn',reason:'This requirement is marked Needs Attention in its source checklist.'};
+    if(item?.sourceGap)
+      return {label:'Source review required',tone:'warn',reason:'The source checklist identifies a source gap that still requires review.'};
+    return {label:'Pending verification',tone:'warn',reason:'Not yet checked complete in the source checklist.'};
+  }
+  function gateRequirementHtml(checklist,item){
+    const state=commissioningRequirementState(item);
+    const done=!!item?.done,label=requirementGateLabel(item?.requiredBefore);
+    const doc=commissioningRequirementSourceDoc(checklist,item);
+    const project=commissioningRequirementProject(checklist);
+    const cid=inlineJsString(checklist.id),iid=inlineJsString(item.id);
+    const sourceExpected=!!(item?.sourceDocumentId||checklist?.sourceDocumentId||checklist?.documentId);
     return `<div class="commissioning-requirement-row ${done?'is-done':'is-open'}">
-      <span class="commissioning-requirement-status" aria-label="${done?'Complete':'Open'}">${done?'✓':'○'}</span>
-      <span class="commissioning-requirement-main">
-        <span class="commissioning-requirement-text">${E(item?.text||'Untitled requirement')}</span>
-        <span class="task-meta">
-          <span class="mini-badge ${done?'good':'warn'}">${done?'Complete':'Open'}</span>
-          <span class="mini-badge">${E(label)}</span>
-          ${item?.group?`<span class="mini-badge">${E(item.group)}</span>`:''}
+      <button type="button" class="commissioning-requirement-open" onclick="openChecklistDetailAtItem(${cid},${iid})" title="Open this exact requirement in its checklist">
+        <span class="commissioning-requirement-status" aria-label="${done?'Complete':'Open'}">${done?'✓':'○'}</span>
+        <span class="commissioning-requirement-main">
+          <span class="commissioning-requirement-text">${E(item?.text||'Untitled requirement')}</span>
+          <span class="commissioning-requirement-why"><b>${E(state.label)}</b><span>${E(state.reason)}</span></span>
+          ${item?.moreInfo?`<span class="commissioning-requirement-detail">${E(item.moreInfo)}</span>`:''}
+          ${item?.note?`<span class="commissioning-requirement-detail"><b>Review note:</b> ${E(item.note)}</span>`:''}
+          <span class="task-meta">
+            <span class="mini-badge ${state.tone}">${E(state.label)}</span>
+            <span class="mini-badge">${E(label)}</span>
+            ${item?.group?`<span class="mini-badge">${E(item.group)}</span>`:''}
+            ${doc?`<span class="mini-badge">${E(doc.name)}</span>`:sourceExpected?'<span class="mini-badge warn">Source record missing</span>':''}
+            ${item?.sourcePage?`<span class="mini-badge">${E(item.sourcePage)}</span>`:''}
+            ${project?`<span class="mini-badge ${project.status==='Done'?'good':'warn'}">Project: ${E(project.status||'Open')}</span>`:''}
+          </span>
+          <span class="commissioning-open-cue">Open requirement →</span>
         </span>
-      </span>
+      </button>
+      <div class="commissioning-requirement-actions">
+        ${doc?`<button type="button" class="secondary" onclick="event.stopPropagation();openCommissioningRequirementSource(${cid},${iid})">Source</button>`:''}
+        ${project?`<button type="button" class="secondary" onclick="event.stopPropagation();openProjectDetail(${Number(project.id)})">Project</button>`:''}
+      </div>
     </div>`;
   }
   function gateChecklistDetailsHtml(row,index){
@@ -117,12 +161,27 @@
         <span><b>${E(row.checklist.name)}</b><small>${openCount?openCount+' open':'All requirements complete'}</small></span>
         <strong>${row.done}/${row.total}</strong>
       </summary>
-      <div class="commissioning-requirement-items">${row.items.map(gateRequirementHtml).join('')}</div>
+      <div class="commissioning-requirement-items">${row.items.map(item=>gateRequirementHtml(row.checklist,item)).join('')}</div>
       <div class="commissioning-requirement-pack-actions">
         <button class="secondary" data-commissioning-checklist="${E(String(row.checklist.id))}" onclick="openChecklistDetail('${E(String(row.checklist.id))}')">Open checklist</button>
       </div>
     </details>`;
   }
+
+  window.openCommissioningRequirementSource=async function(checklistId,itemId){
+    const checklist=commissioningPacks().find(c=>String(c.id)===String(checklistId));
+    const item=commissioningChecklistItem(checklist,itemId);
+    if(!checklist||!item)return false;
+    const doc=commissioningRequirementSourceDoc(checklist,item);
+    if(!doc){
+      if(typeof toast==='function')toast('Source document record could not be found.','bad');
+      return false;
+    }
+    if(typeof openSourceReference==='function')
+      return openSourceReference(doc,item.sourcePage||'',{fallbackToDocument:true});
+    if(typeof openDocumentDetail==='function'){openDocumentDetail(doc.id);return true}
+    return false;
+  };
 
   function bindCommissioningButtons(root=document){
     root?.querySelectorAll?.('[data-commissioning-gate]').forEach(el=>{
@@ -158,7 +217,13 @@
 
   window.openCommissioningGate=function(gateId){
     const info=commissioningGateInfo(gateId),dep=commissioningGateDependency(gateId);
-    const openRows=info.rows.filter(r=>r.open.length);
+    const nextRow=info.rows.find(r=>r.open.length),nextItem=nextRow?.next||null;
+    const nextAction=nextItem
+      ?`<button class="primary" onclick="openChecklistDetailAtItem(${inlineJsString(nextRow.checklist.id)},${inlineJsString(nextItem.id)})">Open next requirement</button>`
+      :'';
+    const recorderAction=gateId==='first-start'&&info.clear&&typeof openFirstStartRecorder==='function'
+      ?'<button class="primary" onclick="openFirstStartRecorder()">Start / Resume First Start Recorder</button>'
+      :'';
     const html=`${modalHeader(info.gate.label+' Gate',info.done+'/'+info.total+' required items complete • '+info.open+' open')}
       <div class="${info.clear?'notice':'danger-note'}"><b>${info.clear?'Gate requirements complete.':'Gate not clear.'}</b><br>
         ${E(info.gate.note)}
@@ -170,6 +235,10 @@
         <div><span>Open</span><b>${info.open}</b></div>
         <div><span>Packs involved</span><b>${info.rows.length}</b></div>
       </div>
+      ${nextItem?`<div class="commissioning-next-blocker">
+        <div><span>Next open requirement</span><b>${E(nextItem.text||'Untitled requirement')}</b><small>${E(nextRow.checklist.name)}</small></div>
+        ${nextAction}
+      </div>`:''}
       <div class="commissioning-requirements-head">
         <div><b>Requirements in this gate</b><small>Grouped by checklist • ${info.total} cumulative requirement${info.total===1?'':'s'}</small></div>
         <div class="commissioning-requirements-tools">
@@ -180,7 +249,7 @@
       <div class="commissioning-requirement-pack-list">
         ${info.rows.map((r,index)=>gateChecklistDetailsHtml(r,index)).join('')||'<div class="empty">No commissioning requirements are assigned to this gate.</div>'}
       </div>
-      <div class="modal-actions"><button class="secondary" data-commissioning-readiness>Readiness Overview</button><button class="secondary" onclick="navTo('checklists');closeModal()">All Checklists</button><button class="secondary" onclick="closeModal()">Close</button></div>`;
+      <div class="modal-actions"><button class="secondary" data-commissioning-readiness>Readiness Overview</button><button class="secondary" onclick="navTo('checklists');closeModal()">All Checklists</button>${recorderAction}<button class="secondary" onclick="closeModal()">Close</button></div>`;
     openModal(html,true);
     bindCommissioningButtons(document.getElementById('modalBox'));
   };
@@ -197,7 +266,7 @@
     if(!overall.total)return '';
     const infos=GATES.map(g=>commissioningGateInfo(g.id));
     const next=infos.find(x=>!x.clear)||infos[infos.length-1];
-    const nextRow=next.rows.find(r=>r.open.length);
+    const nextRow=next.rows.find(r=>r.open.length),nextItem=nextRow?.next||null;
     return `<div class="card commissioning-readiness-panel" id="commissioningReadinessPanel">
       <div class="section-head commissioning-head">
         <div>
@@ -210,8 +279,10 @@
       <div class="progress commissioning-overall-progress"><div style="width:${overall.pct}%"></div></div>
       <div class="commissioning-gate-grid">${infos.map(gateCard).join('')}</div>
       <div class="commissioning-next">
-        <div><span>Next gate</span><b>${E(next.gate.label)}</b><small>${next.clear?'All commissioning gates are complete.':next.open+' blocking item'+(next.open===1?'':'s')+' remain.'}</small></div>
-        ${nextRow?`<button class="primary" data-commissioning-checklist="${E(String(nextRow.checklist.id))}" onclick="openChecklistDetail('${E(String(nextRow.checklist.id))}')">Continue: ${E(nextRow.checklist.name)}</button>`:''}
+        <div><span>Next gate</span><b>${E(next.gate.label)}</b><small>${next.clear?'All commissioning gates are complete.':next.open+' blocking item'+(next.open===1?'':'s')+' remain.'}</small>
+          ${nextItem?`<small class="commissioning-next-item"><b>Next:</b> ${E(nextItem.text||'Untitled requirement')} • ${E(nextRow.checklist.name)}</small>`:''}
+        </div>
+        ${nextItem?`<button class="primary" onclick="openChecklistDetailAtItem(${inlineJsString(nextRow.checklist.id)},${inlineJsString(nextItem.id)})">Open next requirement</button>`:''}
       </div>
     </div>`;
   }
@@ -305,6 +376,11 @@
     .commissioning-requirement-pack>summary small{font-size:.73rem;color:var(--muted)}
     .commissioning-requirement-items{border-top:1px solid var(--border)}
     .commissioning-requirement-row{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border)}
+    .commissioning-requirement-open{flex:1 1 auto;min-width:0;border:0;background:transparent;color:inherit;padding:0;text-align:left;display:flex;align-items:flex-start;gap:9px;cursor:pointer;border-radius:8px}
+    .commissioning-requirement-open:hover .commissioning-requirement-text,.commissioning-requirement-open:focus-visible .commissioning-requirement-text{color:var(--accent,#1261a0);text-decoration:underline;text-underline-offset:2px}
+    .commissioning-requirement-open:focus-visible{outline:3px solid rgba(45,127,209,.18);outline-offset:3px}
+    .commissioning-requirement-actions{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+    .commissioning-requirement-actions button{white-space:nowrap}
     .commissioning-requirement-row:last-child{border-bottom:0}
     .commissioning-requirement-row.is-done{opacity:.68}
     .commissioning-requirement-status{font-size:1rem;line-height:1.3;min-width:18px;text-align:center;font-weight:800}
@@ -312,6 +388,16 @@
     .commissioning-requirement-row.is-open .commissioning-requirement-status{color:var(--warn,#b7791f)}
     .commissioning-requirement-main{display:flex;flex-direction:column;gap:5px;min-width:0}
     .commissioning-requirement-text{font-size:.86rem;line-height:1.35}
+    .commissioning-requirement-why{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;font-size:.74rem;color:var(--muted)}
+    .commissioning-requirement-why b{color:var(--text)}
+    .commissioning-requirement-detail{font-size:.74rem;color:var(--muted);line-height:1.35}
+    .commissioning-open-cue{font-size:.73rem;font-weight:750;color:var(--accent,#1261a0)}
+    .commissioning-next-blocker{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--warn,#d99a31);background:var(--soft,#fffaf0);border-radius:10px;padding:10px 12px;margin:10px 0 2px}
+    .commissioning-next-blocker>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .commissioning-next-blocker span,.commissioning-next-blocker small{font-size:.72rem;color:var(--muted)}
+    .commissioning-next-blocker b{font-size:.88rem;line-height:1.3}
+    .commissioning-next-item{margin-top:3px;line-height:1.35}
+    .check-item.commissioning-focus{border-radius:9px;outline:3px solid rgba(45,127,209,.22);outline-offset:2px;background:#f1f8fe}
     .commissioning-requirement-pack-actions{padding:9px 12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
     .dashboard-commissioning-readiness{display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:8px;padding:9px;margin-bottom:10px}
     .dashboard-commissioning-readiness>button,.dashboard-commissioning-main{border:0;background:transparent;border-radius:9px;padding:8px 10px;text-align:left;cursor:pointer;display:flex;flex-direction:column}
@@ -328,6 +414,9 @@
       .commissioning-requirements-head{align-items:stretch;flex-direction:column}
       .commissioning-requirements-tools button{flex:1 1 auto}
       .commissioning-requirement-pack>summary{align-items:flex-start}
+      .commissioning-requirement-row{flex-direction:column}
+      .commissioning-requirement-actions{width:100%;justify-content:flex-end}
+      .commissioning-next-blocker{align-items:stretch;flex-direction:column}
     }
   `;
   document.head.appendChild(style);

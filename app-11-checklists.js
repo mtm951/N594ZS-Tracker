@@ -134,7 +134,7 @@ function openChecklistDetail(id){
             i.sourcePage?`<span class="mini-badge">${esc(i.sourcePage)}</span>`:'',
             i.sourceSection?`<span class="mini-badge">${esc(i.sourceSection)}</span>`:''
           ].filter(Boolean).join('');
-          return `<div class="check-item"><input type="checkbox" data-detail-check data-item-id="${esc(String(i.id))}" ${i.done?'checked':''}><div style="flex:1"><div class="${i.done?'done':''}">${esc(i.text)}</div>${meta?`<div class="task-meta" style="margin-top:5px">${meta}</div>`:''}${i.moreInfo?`<div class="task-note" style="margin-top:5px">${esc(i.moreInfo)}</div>`:''}${i.note?`<div class="task-note" style="margin-top:5px"><b>Review note:</b> ${esc(i.note)}</div>`:''}</div><div class="action-row" style="gap:5px;flex-wrap:wrap">${itemDoc?`<button class="icon-btn" data-detail-source data-item-id="${esc(String(i.id))}">Source</button>`:''}<button class="icon-btn" data-detail-edit data-item-id="${esc(String(i.id))}">Edit</button></div></div>`;
+          return `<div class="check-item" data-checklist-item-id="${esc(String(i.id))}"><input type="checkbox" data-detail-check data-item-id="${esc(String(i.id))}" ${i.done?'checked':''}><div style="flex:1"><div class="${i.done?'done':''}">${esc(i.text)}</div>${meta?`<div class="task-meta" style="margin-top:5px">${meta}</div>`:''}${i.moreInfo?`<div class="task-note" style="margin-top:5px">${esc(i.moreInfo)}</div>`:''}${i.note?`<div class="task-note" style="margin-top:5px"><b>Review note:</b> ${esc(i.note)}</div>`:''}</div><div class="action-row" style="gap:5px;flex-wrap:wrap">${itemDoc?`<button class="icon-btn" data-detail-source data-item-id="${esc(String(i.id))}">Source</button>`:''}<button class="icon-btn" data-detail-edit data-item-id="${esc(String(i.id))}">Edit</button></div></div>`;
         }).join('')||'<div class="empty">No items yet.</div>'}
       </div>
       <div class="detail-card"><div class="section-tools"><h3>Evidence / Supporting Files</h3><button class="icon-btn" id="ckUpload">+ Upload</button></div><div class="attach-drop" id="ckDrop">Attach photos, screenshots or reference files for this checklist</div><div id="attachments-checklist-${esc(String(c.id))}"></div></div>
@@ -168,6 +168,23 @@ function openChecklistDetail(id){
   }));
   box?.querySelectorAll('[data-detail-edit]').forEach(el=>el.addEventListener('click',()=>editChecklistItem(c.id,el.dataset.itemId)));
   Promise.resolve(renderAttachments('checklist',c.id)).catch(e=>console.warn('Checklist attachments failed',e));
+}
+
+
+function openChecklistDetailAtItem(cid,iid){
+  openChecklistDetail(cid);
+  const focusItem=()=>{
+    const box=document.getElementById('modalBox');if(!box)return;
+    const target=[...box.querySelectorAll('[data-checklist-item-id]')]
+      .find(el=>String(el.dataset.checklistItemId)===String(iid));
+    if(!target)return;
+    target.classList.add('commissioning-focus');
+    target.setAttribute('tabindex','-1');
+    try{target.scrollIntoView?.({block:'center',behavior:'smooth'})}catch(_e){target.scrollIntoView?.()}
+    try{target.focus?.({preventScroll:true})}catch(_e){target.focus?.()}
+  };
+  if(typeof requestAnimationFrame==='function')requestAnimationFrame(focusItem);
+  else setTimeout(focusItem,0);
 }
 
 function addChecklistItem(cid){

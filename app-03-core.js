@@ -51,7 +51,7 @@ function modalSnapshot(){
   return {html:b.innerHTML,className:b.className,scrollTop:b.scrollTop,currentDetail:currentDetail?JSON.parse(JSON.stringify(currentDetail)):null};
 }
 function modalNavigationCodeIsDetail(code=''){
-  return /(?:openProjectDetail|openPartDetail|openOrderDetail|openLogDetail|openDocumentDetail|openChecklistDetail|openMaintenanceDetail|openPurchaseDetail|openEquipmentDetail|openComponentView|openInvoiceGroup|openPartPurchaseHistory)\s*\(/.test(code);
+  return /(?:openProjectDetail|openPartDetail|openOrderDetail|openLogDetail|openDocumentDetail|openChecklistDetailAtItem|openChecklistDetail|openCommissioningRequirementSource|openMaintenanceDetail|openPurchaseDetail|openEquipmentDetail|openComponentView|openInvoiceGroup|openPartPurchaseHistory)\s*\(/.test(code);
 }
 function armModalParentSnapshot(target){
   const m=document.getElementById('modal');
