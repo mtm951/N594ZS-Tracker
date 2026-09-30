@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.64** (commissioning recorder flow polish; PR #42 merged September 30 at `90a73836ab543514959f44f921d6161395a3735a`). PR regression CI passed.
+- Current release: **v5.19.65** (records / PDF-ready report generator; September 30).
 
 
 
@@ -45,6 +45,28 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.65 records / PDF-ready report generator (September 30)
+
+- Added `app-71-records-reports.js` to turn existing tracker records into print-ready reports that can be saved as PDF through the native browser/Windows print dialog. No third-party PDF writer dependency was added.
+- Project detail now has **Generate Records**.
+- Work Log detail now has **Generate Record** and **Draft Logbook Entry**.
+- Project reports pull together:
+  - project summary/status/progress;
+  - linked Work Log history;
+  - airframe/engine times recorded on those logs or the aircraft record;
+  - Parts & Materials Used, aggregated from Work Log consumption plus project-only material records without a linked consumption record;
+  - linked Orders / Procurement;
+  - linked Documents / References;
+  - blockers and optional additional record wording;
+  - optional cost information.
+- Individual Work Record reports include work performed, observations/settings, notes, hours, consumed parts/materials, blockers, next step, and linked references.
+- Draft Maintenance Record output includes performed-by, certificate/authorization number, certificate type, date, proposed work description, parts/materials, related project, and signature/date lines.
+- The generator intentionally labels outputs as drafts/summaries and explicitly does **not** determine maintenance classification, regulatory compliance, return-to-service authority, or approval wording.
+- No production aircraft records are created merely by generating a report. The first release is read-only with respect to tracker data.
+- v5.19.65 loads the new report module with cache-busting and updates the service-worker shell version.
+- Added `tests/records-reports.test.mjs` covering generator entrypoints, Project/Work Log button wiring, PDF path wording, and the maintenance-record safety language.
+- Owner acceptance: after v5.19.65 is Synced, open a real Project → **Generate Records**, fill or leave the record fields blank, and use **Generate Report / Save PDF**. Confirm the Windows/browser print dialog offers **Save as PDF** and that the report contains the linked Work Logs and Parts & Materials Used. Also open a Work Log → **Draft Logbook Entry** and verify it remains clearly a draft and does not automatically assert return-to-service approval.
 
 ## v5.19.64 commissioning recorder flow polish (September 30)
 
