@@ -134,7 +134,7 @@ function openProjectDetail(id){
       <div class="detail-card"><h3>Linked Checklists</h3>${checks.length?checks.map(c=>`<div class="kv click-row" onclick="openChecklistDetail(${c.id})"><span>${esc(c.name)}</span><b>${c.items.filter(i=>i.done).length}/${c.items.length}</b></div>`).join(''):'<div class="muted">No checklist linked.</div>'}</div>
       <div class="detail-card"><div class="section-tools"><h3>Project Updates</h3><button class="icon-btn" onclick="addEntityUpdate('project',${id})">+ Update</button></div>${p.updates.length?`<div class="timeline">${[...p.updates].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(u=>`<div class="timeline-item"><div class="timeline-date">${esc(u.date||'')}</div><div class="timeline-body">${esc(u.text||'')}</div></div>`).join('')}</div>`:'<div class="muted">No updates yet.</div>'}</div>
       ${projectCloseoutSummaryHTML(p)}
-      <div class="detail-card"><div class="action-row"><button class="btn secondary" onclick="openProjectModal(${id})">Edit Project</button><button class="btn ${p.status==='Done'?'secondary':'success'}" onclick="toggleProjectDone(${id})">${p.status==='Done'?'Reopen':'Mark Done'}</button></div></div>
+      <div class="detail-card"><div class="action-row"><button class="btn secondary" onclick="openProjectModal(${id})">Edit Project</button><button class="btn secondary" onclick="openProjectRecords(${id})">Generate Records</button><button class="btn ${p.status==='Done'?'secondary':'success'}" onclick="toggleProjectDone(${id})">${p.status==='Done'?'Reopen':'Mark Done'}</button></div></div>
     </div></div>`;
   openModal(detail,true);renderAttachments('project',id);
 }
