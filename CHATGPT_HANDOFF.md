@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.62** (inline Project task builder; PR #40 merged September 28 at `edcd0fa66aa9f4c23ae6f0c7721ecba675fa6208`). PR regression CI passed.
+- Current release: **v5.19.63** (actionable Commissioning Readiness drill-downs; PR #41 merged September 30 at `6b738be2085b189a6b5d0eb5ed6273bfd72b2239`). PR regression CI passed.
 
 
 
@@ -45,6 +45,28 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.63 actionable Commissioning Readiness (September 30)
+
+- Owner greenlit the next Commissioning Readiness polish/integration pass after re-orienting on the current repo and explicitly avoiding a duplicate commissioning architecture.
+- PR #41 `v5.19.63: make commissioning requirements actionable` merged to `main` at `6b738be2085b189a6b5d0eb5ed6273bfd72b2239`.
+- Final PR workflow run `36771267209` passed JavaScript syntax and the complete regression suite.
+- Gate requirement rows are now operational drill-downs instead of read-only status rows:
+  - clicking a requirement opens its source checklist and scrolls/highlights that exact checklist item;
+  - the requirement shows a concrete state explanation: **Complete**, **Pending verification**, **Finding open**, **Needs attention**, or **Source review required** when that metadata exists;
+  - saved `moreInfo` / acceptance detail and owner review notes are visible directly in the gate;
+  - source manual name/page and linked Project status are shown when available;
+  - **Source** routes through the existing generic source resolver (attached PDF exact-page mapping → attached PDF → manufacturer URL → Document fallback);
+  - **Project** opens the linked Project when the checklist has one.
+- Gate modals now show the exact **Next open requirement** at the top with **Open next requirement**, rather than forcing the owner to hunt through the grouped checklist packs.
+- The main Commissioning Readiness panel's Continue action also opens the exact next blocking requirement rather than only opening the parent checklist.
+- Generic checklist rows now carry stable item focus targets and `openChecklistDetailAtItem(checklistId,itemId)` provides exact-item navigation/highlighting.
+- Core nested-modal history now recognizes focused requirement navigation and commissioning Source navigation, so gate → requirement/source → Back/Escape returns through the prior gate context rather than losing the popup stack.
+- A clear **First Start** gate now exposes **Start / Resume First Start Recorder**, handing directly into the existing durable guided Run/Test recorder. The recorder's existing gate enforcement remains unchanged.
+- Added regressions for exact requirement focus, source routing, project/source context, state explanations, next-blocker routing, modal-history recognition and First Start recorder handoff.
+- No production checklist completion state, Project state, aircraft data, inventory data or Supabase records were changed by this release.
+- Main verified after merge: `APP_VERSION='5.19.63'`; `app-03-core.js`, `app-11-checklists.js`, and `app-69-commissioning-readiness.js` are cache-busted to `v=5.19.63`; service-worker shell `n594zs-v5-19-63-shell`.
+- Owner acceptance: once Synced, refresh normally and confirm footer **v5.19.63**. Open Readiness → Commissioning → **First Start**. Click an open requirement and verify its exact checklist row opens highlighted; Back/Escape should return to the gate. Try **Source** on a source-backed row, and when the First Start gate eventually reaches clear, verify the gate offers **Start / Resume First Start Recorder**.
 
 ## v5.19.62 inline Project task builder (September 28)
 
