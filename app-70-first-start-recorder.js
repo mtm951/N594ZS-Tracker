@@ -462,6 +462,7 @@
           ${!preview&&!final?'<button class="secondary" onclick="saveCommissioningMeasurement('+run.id+')">Log Reading</button>':''}
           ${!preview?'<button class="secondary" onclick="addCommissioningPhoto('+run.id+')">Photo / File</button>':''}
         </div>
+        ${recorderStepNavigatorHTML(run)}
         <div class="commissioning-readings">
           ${readingField('RPM','crRpm',fields.rpm,'rpm','1',readonly)}
           ${readingField('Oil pressure','crOilP',fields.oilPressure,'psi','0.1',readonly)}
@@ -497,6 +498,7 @@
           </div>
         </div>
         ${final?'<div class="notice"><b>Session '+E(s.status)+'.</b> Outcome: '+E(run.outcome||'—')+(s.workLogId?' • Work Log #'+E(String(s.workLogId)):'')+'</div>':''}
+        ${recorderAfterRunHTML(run)}
         <div class="tiny muted">Recorder timing is a workflow aid, not a substitute for observing the engine indications and following the applicable manufacturer/aircraft procedure.</div>
         <div class="commissioning-recorder-footer">
           <div class="commissioning-save-status">
