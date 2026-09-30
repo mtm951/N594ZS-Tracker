@@ -217,7 +217,13 @@
 
   window.openCommissioningGate=function(gateId){
     const info=commissioningGateInfo(gateId),dep=commissioningGateDependency(gateId);
-    const openRows=info.rows.filter(r=>r.open.length);
+    const nextRow=info.rows.find(r=>r.open.length),nextItem=nextRow?.next||null;
+    const nextAction=nextItem
+      ?`<button class="primary" onclick="openChecklistDetailAtItem(${inlineJsString(nextRow.checklist.id)},${inlineJsString(nextItem.id)})">Open next requirement</button>`
+      :'';
+    const recorderAction=gateId==='first-start'&&info.clear&&typeof openFirstStartRecorder==='function'
+      ?'<button class="primary" onclick="openFirstStartRecorder()">Start / Resume First Start Recorder</button>'
+      :'';
     const html=`${modalHeader(info.gate.label+' Gate',info.done+'/'+info.total+' required items complete • '+info.open+' open')}
       <div class="${info.clear?'notice':'danger-note'}"><b>${info.clear?'Gate requirements complete.':'Gate not clear.'}</b><br>
         ${E(info.gate.note)}
@@ -229,6 +235,10 @@
         <div><span>Open</span><b>${info.open}</b></div>
         <div><span>Packs involved</span><b>${info.rows.length}</b></div>
       </div>
+      ${nextItem?`<div class="commissioning-next-blocker">
+        <div><span>Next open requirement</span><b>${E(nextItem.text||'Untitled requirement')}</b><small>${E(nextRow.checklist.name)}</small></div>
+        ${nextAction}
+      </div>`:''}
       <div class="commissioning-requirements-head">
         <div><b>Requirements in this gate</b><small>Grouped by checklist • ${info.total} cumulative requirement${info.total===1?'':'s'}</small></div>
         <div class="commissioning-requirements-tools">
@@ -239,7 +249,7 @@
       <div class="commissioning-requirement-pack-list">
         ${info.rows.map((r,index)=>gateChecklistDetailsHtml(r,index)).join('')||'<div class="empty">No commissioning requirements are assigned to this gate.</div>'}
       </div>
-      <div class="modal-actions"><button class="secondary" data-commissioning-readiness>Readiness Overview</button><button class="secondary" onclick="navTo('checklists');closeModal()">All Checklists</button><button class="secondary" onclick="closeModal()">Close</button></div>`;
+      <div class="modal-actions"><button class="secondary" data-commissioning-readiness>Readiness Overview</button><button class="secondary" onclick="navTo('checklists');closeModal()">All Checklists</button>${recorderAction}<button class="secondary" onclick="closeModal()">Close</button></div>`;
     openModal(html,true);
     bindCommissioningButtons(document.getElementById('modalBox'));
   };
@@ -256,7 +266,7 @@
     if(!overall.total)return '';
     const infos=GATES.map(g=>commissioningGateInfo(g.id));
     const next=infos.find(x=>!x.clear)||infos[infos.length-1];
-    const nextRow=next.rows.find(r=>r.open.length);
+    const nextRow=next.rows.find(r=>r.open.length),nextItem=nextRow?.next||null;
     return `<div class="card commissioning-readiness-panel" id="commissioningReadinessPanel">
       <div class="section-head commissioning-head">
         <div>
@@ -269,8 +279,10 @@
       <div class="progress commissioning-overall-progress"><div style="width:${overall.pct}%"></div></div>
       <div class="commissioning-gate-grid">${infos.map(gateCard).join('')}</div>
       <div class="commissioning-next">
-        <div><span>Next gate</span><b>${E(next.gate.label)}</b><small>${next.clear?'All commissioning gates are complete.':next.open+' blocking item'+(next.open===1?'':'s')+' remain.'}</small></div>
-        ${nextRow?`<button class="primary" data-commissioning-checklist="${E(String(nextRow.checklist.id))}" onclick="openChecklistDetail('${E(String(nextRow.checklist.id))}')">Continue: ${E(nextRow.checklist.name)}</button>`:''}
+        <div><span>Next gate</span><b>${E(next.gate.label)}</b><small>${next.clear?'All commissioning gates are complete.':next.open+' blocking item'+(next.open===1?'':'s')+' remain.'}</small>
+          ${nextItem?`<small class="commissioning-next-item"><b>Next:</b> ${E(nextItem.text||'Untitled requirement')} • ${E(nextRow.checklist.name)}</small>`:''}
+        </div>
+        ${nextItem?`<button class="primary" onclick="openChecklistDetailAtItem(${inlineJsString(nextRow.checklist.id)},${inlineJsString(nextItem.id)})">Open next requirement</button>`:''}
       </div>
     </div>`;
   }
