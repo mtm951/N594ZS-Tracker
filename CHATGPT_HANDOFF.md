@@ -14,7 +14,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.63** (actionable Commissioning Readiness drill-downs; PR #41 merged September 30 at `6b738be2085b189a6b5d0eb5ed6273bfd72b2239`). PR regression CI passed.
+- Current release: **v5.19.64** (commissioning recorder flow polish; PR #42 merged September 30 at `90a73836ab543514959f44f921d6161395a3735a`). PR regression CI passed.
 
 
 
@@ -45,6 +45,30 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 
 
+
+## v5.19.64 commissioning recorder flow polish (September 30)
+
+- Owner approved continuing from the actionable Commissioning Readiness release into the existing First Start / Ground Run recorder and transition UX.
+- PR #42 `v5.19.64: tighten commissioning recorder flow` merged to `main` at `90a73836ab543514959f44f921d6161395a3735a`.
+- Final PR workflow run `36776283303` passed JavaScript syntax and the complete regression suite.
+- The guided recorder now includes a collapsible **Guided Session Checklist** above the current step:
+  - every recorder step is visible with **Open**, **Complete**, or **Finding** status;
+  - each row shows the checklist group and applicable readiness stage when present;
+  - clicking a row jumps directly to that recorded step without changing its completion state;
+  - normal active-run jumps preserve the current unsaved draft locally before switching steps;
+  - finalized-session step browsing is intentionally read-only and uses a local view index, so merely reviewing an old Run/Test does not mutate the saved Run record.
+- Finalized guided sessions now show a **Post-run readiness** section with live **Full-Power Ground Run** and **Flight Release** cumulative gate counts plus direct gate buttons and Readiness Overview.
+- The Run/Test detail card for a finalized guided session also shows those next workflow-gate counts and provides **Full-Power Gate** / **Flight Release Gate** actions, so the transition is visible immediately after Finish/Abort returns to Run/Test detail.
+- Core modal navigation now treats `openCommissioningGate(...)` as nested detail navigation, preserving Back/Escape history when opening a readiness gate from a recorder or Run/Test popup.
+- Repeated commissioning sessions no longer misleadingly keep saying **Start First Run**:
+  - after a prior guided run exists, Readiness shows the last Run number/outcome;
+  - the next action becomes **Start Run #N**;
+  - a **Last Run** button opens the prior Run/Test;
+  - the creation modal shows previous-run context.
+- No source procedure wording, timer limits, checklist completion state, aircraft data, Project state, inventory state, or Supabase records were changed by this release.
+- Added regression coverage for direct recorder-step jumps, finalized-session read-only browsing, post-run gate summaries, and recorder-to-gate modal history.
+- Main verified after merge: `APP_VERSION='5.19.64'`; `app-03-core.js` and `app-70-first-start-recorder.js` are cache-busted to `v=5.19.64`; service-worker shell `n594zs-v5-19-64-shell`.
+- Owner acceptance: once Synced, refresh and confirm footer **v5.19.64**. Preview or open a guided run and expand **Guided Session Checklist**; click several rows and verify direct navigation. On a finalized run, review several steps and confirm no record state changes, then use **Full-Power Gate** / **Flight Release Gate** and Back/Escape to verify navigation continuity.
 
 ## v5.19.63 actionable Commissioning Readiness (September 30)
 
