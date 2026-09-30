@@ -590,11 +590,18 @@
   function injectRecorderActions(){
     const panel=document.getElementById('commissioningReadinessPanel');if(!panel)return;
     panel.querySelector('.commissioning-recorder-entry')?.remove();
-    const active=activeRun(),gate=startGate(),row=document.createElement('div');row.className='commissioning-recorder-entry';
-    row.innerHTML=active?
-      '<div><span>Guided run recorder</span><b>Run #'+E(String(sessionOf(active).runNumber))+' — '+E(recorderStatus(active))+'</b><small>Durable session in Runs / Tests</small></div><button class="primary" onclick="openFirstStartRunRecorder('+active.id+')">Resume Recorder</button>':
-      '<div><span>Guided run recorder</span><b>'+(gate?.clear?'Ready to start':'Waiting on First Start gate')+'</b><small>'+(gate?.clear?'Create a durable guided engine-run session.':E(String(gate?.open??'—'))+' First Start blocker'+(gate?.open===1?'':'s')+' remain.')+'</small></div>'+
-      '<div class="action-row"><button class="secondary" onclick="openFirstStartRecorderPreview()">Preview Recorder</button><button class="'+(gate?.clear?'primary':'secondary')+'" onclick="openFirstStartRecorder()">'+(gate?.clear?'Start First Run':'Review / Start')+'</button></div>';
+    const active=activeRun(),gate=startGate(),row=document.createElement('div'),latest=latestCommissioningRun(),nextNumber=runNumber();
+    row.className='commissioning-recorder-entry';
+    if(active){
+      row.innerHTML='<div><span>Guided run recorder</span><b>Run #'+E(String(sessionOf(active).runNumber))+' — '+E(recorderStatus(active))+'</b><small>Durable session in Runs / Tests</small></div><button class="primary" onclick="openFirstStartRunRecorder('+active.id+')">Resume Recorder</button>';
+    }else{
+      const hasPrior=!!latest;
+      const readyLabel=hasPrior?'Ready for Run #'+nextNumber:'Ready for first run';
+      const readyNote=hasPrior?'Last Run #'+E(String(sessionOf(latest)?.runNumber||''))+' — '+E(latest.outcome||recorderStatus(latest))+'. Create another durable commissioning session when appropriate.':'Create a durable guided engine-run session.';
+      const startLabel=hasPrior?'Start Run #'+nextNumber:'Start First Run';
+      row.innerHTML='<div><span>Guided run recorder</span><b>'+(gate?.clear?readyLabel:'Waiting on First Start gate')+'</b><small>'+(gate?.clear?readyNote:E(String(gate?.open??'—'))+' First Start blocker'+(gate?.open===1?'':'s')+' remain.')+'</small></div>'+
+        '<div class="action-row">'+(latest?'<button class="secondary" onclick="openRunDetail('+latest.id+')">Last Run</button>':'')+'<button class="secondary" onclick="openFirstStartRecorderPreview()">Preview Recorder</button><button class="'+(gate?.clear?'primary':'secondary')+'" onclick="openFirstStartRecorder()">'+(gate?.clear?startLabel:'Review / Start')+'</button></div>';
+    }
     panel.appendChild(row);
   }
   const baseReadiness=window.renderReadiness;
