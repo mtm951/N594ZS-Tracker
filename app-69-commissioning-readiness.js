@@ -95,19 +95,63 @@
   function requirementGateLabel(gate){
     return {'first-start':'First Start','full-power':'Full-Power','flight':'Flight'}[String(gate||'')]||String(gate||'Requirement');
   }
-  function gateRequirementHtml(item){
-    const done=!!item?.done;
-    const label=requirementGateLabel(item?.requiredBefore);
+  function inlineJsString(value){
+    return E(JSON.stringify(String(value)));
+  }
+  function commissioningChecklistItem(checklist,itemId){
+    return A(checklist?.items).find(item=>String(item.id)===String(itemId))||null;
+  }
+  function commissioningRequirementProject(checklist){
+    if(checklist?.projectId===null||checklist?.projectId===undefined||checklist?.projectId==='')return null;
+    return typeof projectById==='function'?projectById(checklist.projectId):null;
+  }
+  function commissioningRequirementSourceDoc(checklist,item){
+    if(typeof checklistItemSourceDoc==='function')return checklistItemSourceDoc(checklist,item);
+    const id=item?.sourceDocumentId||checklist?.sourceDocumentId||checklist?.documentId||null;
+    return id!==null&&id!==undefined&&typeof docById==='function'?docById(id):null;
+  }
+  function commissioningRequirementState(item){
+    if(item?.done)return {label:'Complete',tone:'good',reason:'Requirement is checked complete in its source checklist.'};
+    const inspection=String(item?.inspectionStatus||'').trim().toLowerCase();
+    const review=String(item?.reviewStatus||'').trim().toLowerCase();
+    if(inspection==='finding'||item?.findingSquawkId||item?.findingId)
+      return {label:'Finding open',tone:'warn',reason:'A finding is recorded against this requirement and it is not complete.'};
+    if(review==='needs attention')
+      return {label:'Needs attention',tone:'warn',reason:'This requirement is marked Needs Attention in its source checklist.'};
+    if(item?.sourceGap)
+      return {label:'Source review required',tone:'warn',reason:'The source checklist identifies a source gap that still requires review.'};
+    return {label:'Pending verification',tone:'warn',reason:'Not yet checked complete in the source checklist.'};
+  }
+  function gateRequirementHtml(checklist,item){
+    const state=commissioningRequirementState(item);
+    const done=!!item?.done,label=requirementGateLabel(item?.requiredBefore);
+    const doc=commissioningRequirementSourceDoc(checklist,item);
+    const project=commissioningRequirementProject(checklist);
+    const cid=inlineJsString(checklist.id),iid=inlineJsString(item.id);
+    const sourceExpected=!!(item?.sourceDocumentId||checklist?.sourceDocumentId||checklist?.documentId);
     return `<div class="commissioning-requirement-row ${done?'is-done':'is-open'}">
-      <span class="commissioning-requirement-status" aria-label="${done?'Complete':'Open'}">${done?'✓':'○'}</span>
-      <span class="commissioning-requirement-main">
-        <span class="commissioning-requirement-text">${E(item?.text||'Untitled requirement')}</span>
-        <span class="task-meta">
-          <span class="mini-badge ${done?'good':'warn'}">${done?'Complete':'Open'}</span>
-          <span class="mini-badge">${E(label)}</span>
-          ${item?.group?`<span class="mini-badge">${E(item.group)}</span>`:''}
+      <button type="button" class="commissioning-requirement-open" onclick="openChecklistDetailAtItem(${cid},${iid})" title="Open this exact requirement in its checklist">
+        <span class="commissioning-requirement-status" aria-label="${done?'Complete':'Open'}">${done?'✓':'○'}</span>
+        <span class="commissioning-requirement-main">
+          <span class="commissioning-requirement-text">${E(item?.text||'Untitled requirement')}</span>
+          <span class="commissioning-requirement-why"><b>${E(state.label)}</b><span>${E(state.reason)}</span></span>
+          ${item?.moreInfo?`<span class="commissioning-requirement-detail">${E(item.moreInfo)}</span>`:''}
+          ${item?.note?`<span class="commissioning-requirement-detail"><b>Review note:</b> ${E(item.note)}</span>`:''}
+          <span class="task-meta">
+            <span class="mini-badge ${state.tone}">${E(state.label)}</span>
+            <span class="mini-badge">${E(label)}</span>
+            ${item?.group?`<span class="mini-badge">${E(item.group)}</span>`:''}
+            ${doc?`<span class="mini-badge">${E(doc.name)}</span>`:sourceExpected?'<span class="mini-badge warn">Source record missing</span>':''}
+            ${item?.sourcePage?`<span class="mini-badge">${E(item.sourcePage)}</span>`:''}
+            ${project?`<span class="mini-badge ${project.status==='Done'?'good':'warn'}">Project: ${E(project.status||'Open')}</span>`:''}
+          </span>
+          <span class="commissioning-open-cue">Open requirement →</span>
         </span>
-      </span>
+      </button>
+      <div class="commissioning-requirement-actions">
+        ${doc?`<button type="button" class="secondary" onclick="event.stopPropagation();openCommissioningRequirementSource(${cid},${iid})">Source</button>`:''}
+        ${project?`<button type="button" class="secondary" onclick="event.stopPropagation();openProjectDetail(${Number(project.id)})">Project</button>`:''}
+      </div>
     </div>`;
   }
   function gateChecklistDetailsHtml(row,index){
@@ -117,12 +161,27 @@
         <span><b>${E(row.checklist.name)}</b><small>${openCount?openCount+' open':'All requirements complete'}</small></span>
         <strong>${row.done}/${row.total}</strong>
       </summary>
-      <div class="commissioning-requirement-items">${row.items.map(gateRequirementHtml).join('')}</div>
+      <div class="commissioning-requirement-items">${row.items.map(item=>gateRequirementHtml(row.checklist,item)).join('')}</div>
       <div class="commissioning-requirement-pack-actions">
         <button class="secondary" data-commissioning-checklist="${E(String(row.checklist.id))}" onclick="openChecklistDetail('${E(String(row.checklist.id))}')">Open checklist</button>
       </div>
     </details>`;
   }
+
+  window.openCommissioningRequirementSource=async function(checklistId,itemId){
+    const checklist=commissioningPacks().find(c=>String(c.id)===String(checklistId));
+    const item=commissioningChecklistItem(checklist,itemId);
+    if(!checklist||!item)return false;
+    const doc=commissioningRequirementSourceDoc(checklist,item);
+    if(!doc){
+      if(typeof toast==='function')toast('Source document record could not be found.','bad');
+      return false;
+    }
+    if(typeof openSourceReference==='function')
+      return openSourceReference(doc,item.sourcePage||'',{fallbackToDocument:true});
+    if(typeof openDocumentDetail==='function'){openDocumentDetail(doc.id);return true}
+    return false;
+  };
 
   function bindCommissioningButtons(root=document){
     root?.querySelectorAll?.('[data-commissioning-gate]').forEach(el=>{
