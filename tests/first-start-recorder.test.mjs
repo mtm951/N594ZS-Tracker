@@ -104,6 +104,9 @@ function harness({gateClear=true}={}){
   h.ctx.jumpCommissioningRecorder(run.id,1);
   assert.equal(h.db.runs[0].commissioningRun.currentIndex,1);
   assert.match(h.modal,/STEP 2 OF 2/);
+  h.ctx.jumpCommissioningRecorder(run.id,0);
+  assert.equal(h.db.runs[0].commissioningRun.currentIndex,0);
+  assert.match(h.modal,/STEP 1 OF 2/);
 
   // Save Progress persists the current working state without advancing the checklist,
   // creating a formal reading snapshot, squawk, or Work Log.
