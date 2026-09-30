@@ -7,10 +7,10 @@ let modal='';
 const db={
   checklists:[
     {
-      id:'pack-a',name:'Engine prerequisites',commissioningReadinessPack:true,
+      id:'pack-a',name:'Engine prerequisites',commissioningReadinessPack:true,projectId:77,
       items:[
         {id:'a1',text:'Completed prerequisite',done:true,requiredBefore:'first-start'},
-        {id:'a2',text:'Open start blocker',done:false,requiredBefore:'first-start'},
+        {id:'a2',text:'Open start blocker',done:false,requiredBefore:'first-start',group:'Fuel',sourceDocumentId:'manual-1',sourcePage:'p.7',moreInfo:'Verify the installed configuration before proceeding.',note:'Owner review still pending.'},
         {id:'a3',text:'Open ground blocker',done:false,requiredBefore:'full-power'}
       ]
     },
@@ -21,15 +21,25 @@ const db={
       ]
     },
     {id:'ordinary',name:'Ordinary checklist',items:[{id:'x',done:false}]}
-  ]
+  ],
+  projects:[{id:77,title:'912 installation closeout',status:'In Progress'}],
+  docs:[{id:'manual-1',name:'Commissioning Source Manual'}]
 };
 const head={appendChild(){}};
+const openedRequirements=[],openedProjects=[],openedSources=[],recorderStarts=[];
 const ctx={
   console,window:null,db,
   esc:v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),
   modalHeader:(title,subtitle='')=>'<h2>'+title+'</h2><div>'+subtitle+'</div>',
   openModal:html=>{modal=html},
   closeModal(){},navTo(){},openChecklistDetail(){},
+  openChecklistDetailAtItem:(cid,iid)=>openedRequirements.push([String(cid),String(iid)]),
+  projectById:id=>db.projects.find(x=>String(x.id)===String(id))||null,
+  docById:id=>db.docs.find(x=>String(x.id)===String(id))||null,
+  checklistItemSourceDoc:(checklist,item)=>ctx.docById(item?.sourceDocumentId||checklist?.sourceDocumentId||checklist?.documentId),
+  openProjectDetail:id=>openedProjects.push(String(id)),
+  openSourceReference:async(doc,citation)=>{openedSources.push([String(doc.id),String(citation)]);return true},
+  openFirstStartRecorder:()=>recorderStarts.push('start'),
   pageTargets:[],
   goToTrackerPageFromModal(page){ctx.pageTargets.push(page);return true},
   renderReadiness(){},renderDashboard(){},
@@ -89,6 +99,24 @@ assert.match(modal,/Full-Power/);
 assert.match(modal,/Expand all/);
 assert.match(modal,/Collapse all/);
 assert.match(modal,/Open checklist/);
+assert.match(modal,/Pending verification/);
+assert.match(modal,/Not yet checked complete in the source checklist/);
+assert.match(modal,/Verify the installed configuration before proceeding/);
+assert.match(modal,/Review note:<\/b> Owner review still pending/);
+assert.match(modal,/Commissioning Source Manual/);
+assert.match(modal,/Project: In Progress/);
+assert.match(modal,/Open requirement →/);
+assert.match(modal,/Open next requirement/);
+assert.match(modal,/openChecklistDetailAtItem\(&quot;pack-a&quot;,&quot;a2&quot;\)/);
+assert.match(modal,/openCommissioningRequirementSource\(&quot;pack-a&quot;,&quot;a2&quot;\)/);
+assert.match(modal,/openProjectDetail\(77\)/);
+await ctx.openCommissioningRequirementSource('pack-a','a2');
+assert.deepEqual(openedSources,[['manual-1','p.7']],'requirement Source did not use the shared source resolver');
+
+db.checklists[0].items.find(x=>x.id==='a2').done=true;
+ctx.openCommissioningGate('first-start');
+assert.match(modal,/Gate requirements complete/);
+assert.match(modal,/Start \/ Resume First Start Recorder/,'clear First Start gate did not hand off to the guided recorder');
 assert.match(src,/View requirements →/,'gate cards do not visibly advertise drill-down behavior');
 
 ctx.openCommissioningReadiness();
