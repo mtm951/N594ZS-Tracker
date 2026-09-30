@@ -376,6 +376,11 @@
     .commissioning-requirement-pack>summary small{font-size:.73rem;color:var(--muted)}
     .commissioning-requirement-items{border-top:1px solid var(--border)}
     .commissioning-requirement-row{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border)}
+    .commissioning-requirement-open{flex:1 1 auto;min-width:0;border:0;background:transparent;color:inherit;padding:0;text-align:left;display:flex;align-items:flex-start;gap:9px;cursor:pointer;border-radius:8px}
+    .commissioning-requirement-open:hover .commissioning-requirement-text,.commissioning-requirement-open:focus-visible .commissioning-requirement-text{color:var(--accent,#1261a0);text-decoration:underline;text-underline-offset:2px}
+    .commissioning-requirement-open:focus-visible{outline:3px solid rgba(45,127,209,.18);outline-offset:3px}
+    .commissioning-requirement-actions{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+    .commissioning-requirement-actions button{white-space:nowrap}
     .commissioning-requirement-row:last-child{border-bottom:0}
     .commissioning-requirement-row.is-done{opacity:.68}
     .commissioning-requirement-status{font-size:1rem;line-height:1.3;min-width:18px;text-align:center;font-weight:800}
@@ -383,6 +388,16 @@
     .commissioning-requirement-row.is-open .commissioning-requirement-status{color:var(--warn,#b7791f)}
     .commissioning-requirement-main{display:flex;flex-direction:column;gap:5px;min-width:0}
     .commissioning-requirement-text{font-size:.86rem;line-height:1.35}
+    .commissioning-requirement-why{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;font-size:.74rem;color:var(--muted)}
+    .commissioning-requirement-why b{color:var(--text)}
+    .commissioning-requirement-detail{font-size:.74rem;color:var(--muted);line-height:1.35}
+    .commissioning-open-cue{font-size:.73rem;font-weight:750;color:var(--accent,#1261a0)}
+    .commissioning-next-blocker{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--warn,#d99a31);background:var(--soft,#fffaf0);border-radius:10px;padding:10px 12px;margin:10px 0 2px}
+    .commissioning-next-blocker>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .commissioning-next-blocker span,.commissioning-next-blocker small{font-size:.72rem;color:var(--muted)}
+    .commissioning-next-blocker b{font-size:.88rem;line-height:1.3}
+    .commissioning-next-item{margin-top:3px;line-height:1.35}
+    .check-item.commissioning-focus{border-radius:9px;outline:3px solid rgba(45,127,209,.22);outline-offset:2px;background:#f1f8fe}
     .commissioning-requirement-pack-actions{padding:9px 12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end}
     .dashboard-commissioning-readiness{display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:8px;padding:9px;margin-bottom:10px}
     .dashboard-commissioning-readiness>button,.dashboard-commissioning-main{border:0;background:transparent;border-radius:9px;padding:8px 10px;text-align:left;cursor:pointer;display:flex;flex-direction:column}
@@ -399,6 +414,9 @@
       .commissioning-requirements-head{align-items:stretch;flex-direction:column}
       .commissioning-requirements-tools button{flex:1 1 auto}
       .commissioning-requirement-pack>summary{align-items:flex-start}
+      .commissioning-requirement-row{flex-direction:column}
+      .commissioning-requirement-actions{width:100%;justify-content:flex-end}
+      .commissioning-next-blocker{align-items:stretch;flex-direction:column}
     }
   `;
   document.head.appendChild(style);
