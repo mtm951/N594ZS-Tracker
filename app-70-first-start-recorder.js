@@ -124,6 +124,52 @@
     ])];
   }
   function unresolvedStepCount(run){return A(sessionOf(run)?.steps).filter(s=>s.status!=='complete').length}
+  function commissioningRuns(){
+    return A(db?.runs).filter(r=>sessionOf(r)?.kind==='first-start')
+      .sort((a,b)=>(Number(sessionOf(a)?.runNumber)||0)-(Number(sessionOf(b)?.runNumber)||0));
+  }
+  function latestCommissioningRun(){
+    const rows=commissioningRuns();return rows.length?rows[rows.length-1]:null;
+  }
+  function recorderStepStatus(step){
+    if(step?.status==='complete')return {label:'Complete',tone:'good',symbol:'✓'};
+    if(step?.status==='finding')return {label:'Finding',tone:'warn',symbol:'!'};
+    return {label:'Open',tone:'',symbol:'○'};
+  }
+  function recorderStepNavigatorHTML(run){
+    const s=sessionOf(run),steps=A(s?.steps),current=Math.max(0,Math.min(steps.length-1,Number(s?.currentIndex)||0));
+    return `<details class="commissioning-session-checklist" open>
+      <summary><span><b>Guided Session Checklist</b><small>Jump directly to any recorded step without changing its completion state.</small></span><strong>${steps.filter(x=>x.status==='complete').length}/${steps.length}</strong></summary>
+      <div class="commissioning-session-step-list">${steps.map((step,index)=>{
+        const item=A(checklist()?.items).find(i=>sameId(i.id,step.itemId)),status=recorderStepStatus(step);
+        const gate=item?.requiredBefore&&typeof checklistReadinessGateLabel==='function'?checklistReadinessGateLabel(item.requiredBefore):item?.requiredBefore||'';
+        return `<button type="button" class="commissioning-session-step ${index===current?'is-current':''} ${step.status==='complete'?'is-complete':step.status==='finding'?'has-finding':''}" onclick="jumpCommissioningRecorder('${E(String(run.id))}',${index})">
+          <span class="commissioning-session-step-symbol">${status.symbol}</span>
+          <span class="commissioning-session-step-main"><b>${E(item?.text||step.text||'Untitled step')}</b><small>${E(item?.group||'Commissioning')}${gate?' • '+E(gate):''}</small></span>
+          <span class="mini-badge ${status.tone}">${status.label}</span>
+        </button>`;
+      }).join('')}</div>
+    </details>`;
+  }
+  function recorderGateSummary(id,label){
+    if(typeof commissioningGateInfo!=='function')return null;
+    const info=commissioningGateInfo(id);if(!info)return null;
+    return {id,label,open:Number(info.open)||0,clear:!!info.clear,done:Number(info.done)||0,total:Number(info.total)||0};
+  }
+  function recorderAfterRunHTML(run){
+    if(!isFinal(run))return '';
+    const ground=recorderGateSummary('full-power','Full-Power Ground Run');
+    const flight=recorderGateSummary('flight','Flight Release');
+    if(!ground&&!flight)return '';
+    const cards=[ground,flight].filter(Boolean).map(g=>`<button type="button" class="commissioning-next-gate ${g.clear?'is-clear':'is-open'}" onclick="openCommissioningGate('${g.id}')">
+      <span>${E(g.label)}</span><b>${g.clear?'READY':g.open+' open'}</b><small>${g.done}/${g.total} cumulative requirements complete</small>
+    </button>`).join('');
+    return `<div class="commissioning-after-run">
+      <div><span>Post-run readiness</span><b>Continue from the recorded session into the next commissioning gates.</b><small>These remain workflow gates only; open each gate to review the actual source-backed requirements.</small></div>
+      <div class="commissioning-next-gates">${cards}</div>
+      <div class="action-row commissioning-after-run-actions"><button class="secondary" onclick="openCommissioningReadiness()">Readiness Overview</button>${sessionOf(run)?.workLogId?'<button class="secondary" onclick="openLogDetail('+sessionOf(run).workLogId+')">Open Work Log</button>':''}</div>
+    </div>`;
+  }
 
   function setRecorderSaveState(text,kind=''){
     const el=document.getElementById('crSaveState');if(!el)return;
@@ -202,14 +248,19 @@
     }catch(error){alert('Engine-stop time was not saved: '+(error?.message||String(error)))}
   };
 
-  window.moveCommissioningRecorder=function(runId,delta){
+  window.jumpCommissioningRecorder=function(runId,index){
     const run=String(runId)==='preview'?previewRun:runById(runId);if(!run)return;
     const steps=A(sessionOf(run)?.steps);if(!steps.length)return;
-    const next=Math.max(0,Math.min(steps.length-1,(Number(sessionOf(run).currentIndex)||0)+Number(delta||0)));
+    const next=Math.max(0,Math.min(steps.length-1,Number(index)||0));
     if(String(runId)==='preview'){previewRun.commissioningRun.currentIndex=next;renderRecorder(previewRun,true);return}
-    writeDraft(run.id,collectFields());
+    if(!isFinal(run))writeDraft(run.id,collectFields());
     trackerStore.update('run',run.id,draft=>{draft.commissioningRun.currentIndex=next},{message:''});
     openFirstStartRunRecorder(run.id);
+  };
+  window.moveCommissioningRecorder=function(runId,delta){
+    const run=String(runId)==='preview'?previewRun:runById(runId);if(!run)return;
+    const current=Number(sessionOf(run)?.currentIndex)||0;
+    return jumpCommissioningRecorder(runId,current+Number(delta||0));
   };
 
   window.completeCommissioningStep=function(runId){
