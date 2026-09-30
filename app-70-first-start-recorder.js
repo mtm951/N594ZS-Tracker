@@ -614,13 +614,16 @@
     queueMicrotask(()=>{
       const box=document.getElementById('modalBox');if(!box)return;
       const card=document.createElement('div');card.className='notice';card.style.marginBottom='12px';
+      const ground=isFinal(run)?recorderGateSummary('full-power','Full-Power Ground Run'):null;
+      const flight=isFinal(run)?recorderGateSummary('flight','Flight Release'):null;
       card.innerHTML='<b>Guided commissioning Run #'+E(String(s.runNumber))+'</b><br>'+E(s.status)+' • '+A(s.steps).filter(x=>x.status==='complete').length+'/'+A(s.steps).length+' guided steps complete'+(findingIds(run).length?' • '+findingIds(run).length+' finding(s)':'')+
+        (isFinal(run)&&ground?'<div class="commissioning-run-detail-next"><span>Next workflow gates</span><b>Full-Power: '+(ground.clear?'READY':ground.open+' open')+' • Flight Release: '+(flight?.clear?'READY':String(flight?.open??'—')+' open')+'</b></div>':'')+
         '<div class="action-row" style="margin-top:8px"><button class="primary" onclick="openFirstStartRunRecorder('+run.id+')">'+(isFinal(run)?'View Guided Session':'Resume Guided Session')+'</button>'+
-        (s.workLogId?'<button class="secondary" onclick="openLogDetail('+s.workLogId+')">Open Work Log</button>':'')+'</div>';
+        (s.workLogId?'<button class="secondary" onclick="openLogDetail('+s.workLogId+')">Open Work Log</button>':'')+
+        (isFinal(run)?'<button class="secondary" onclick="openCommissioningGate(\'full-power\')">Full-Power Gate</button><button class="secondary" onclick="openCommissioningGate(\'flight\')">Flight Release Gate</button>':'')+'</div>';
       box.prepend(card);
     });
   };
-
   const baseReopenDetail=window.reopenDetail;
   window.reopenDetail=function(type,id){const run=type==='run'?runById(id):null;if(run&&isActive(run))return openFirstStartRunRecorder(run.id);return baseReopenDetail?.(type,id)};
 
