@@ -51,7 +51,7 @@ function harness({gateClear=true}={}){
     nextNumericId:(rows,start)=>Math.max(start-1,...rows.map(x=>Number(x.id)||0))+1,
     checklistById:id=>db.checklists.find(x=>same(x.id,id)),
     docById:id=>db.docs.find(x=>same(x.id,id)),
-    commissioningGateInfo:()=>({clear:gateClear,open:gateClear?0:1}),
+    commissioningGateInfo:id=>id==='first-start'?({clear:gateClear,open:gateClear?0:1,done:gateClear?1:0,total:1}):id==='full-power'?({clear:false,open:2,done:3,total:5}):({clear:false,open:4,done:5,total:9}),
     checklistReadinessGateLabel:g=>({'first-start':'Before First Start','full-power':'Before Full-Power','flight':'Before Flight'}[g]||g),
     modalHeader:(a,b='')=>'<h2>'+a+'</h2><div>'+b+'</div>',
     field:()=>'',textareaField:()=>'',openModal:html=>{lastModal=String(html)},closeModal(){},
@@ -62,7 +62,7 @@ function harness({gateClear=true}={}){
   ctx.window=ctx;
   vm.createContext(ctx);
   vm.runInContext(src,ctx,{filename:'app-70-first-start-recorder.js'});
-  return {ctx,db,elements,alerts,messages,get modal(){return lastModal},setGate(v){gateClear=v;ctx.commissioningGateInfo=()=>({clear:v,open:v?0:1})}};
+  return {ctx,db,elements,alerts,messages,get modal(){return lastModal},setGate(v){gateClear=v;ctx.commissioningGateInfo=id=>id==='first-start'?({clear:v,open:v?0:1,done:v?1:0,total:1}):id==='full-power'?({clear:false,open:2,done:3,total:5}):({clear:false,open:4,done:5,total:9})}};
 }
 
 // Blocked First Start gate cannot create a production run, but offers a complete preview.
@@ -96,6 +96,17 @@ function harness({gateClear=true}={}){
   assert.equal(run.commissioningRun.postPurgeFirstStart,true);
   assert.deepEqual(run.commissioningRun.steps.map(x=>x.itemId),['1','2']);
   assert.ok(h.messages.some(x=>/Run #1 started/.test(x)));
+
+  assert.match(h.modal,/Guided Session Checklist/);
+  assert.match(h.modal,/jumpCommissioningRecorder/);
+  assert.match(h.modal,/Fuel valve OPEN/);
+  assert.match(h.modal,/Oil pressure response/);
+  h.ctx.jumpCommissioningRecorder(run.id,1);
+  assert.equal(h.db.runs[0].commissioningRun.currentIndex,1);
+  assert.match(h.modal,/STEP 2 OF 2/);
+  h.ctx.jumpCommissioningRecorder(run.id,0);
+  assert.equal(h.db.runs[0].commissioningRun.currentIndex,0);
+  assert.match(h.modal,/STEP 1 OF 2/);
 
   // Save Progress persists the current working state without advancing the checklist,
   // creating a formal reading snapshot, squawk, or Work Log.
@@ -153,6 +164,18 @@ function harness({gateClear=true}={}){
   assert.equal(h.db.runs[0].commissioningRun.workLogId,h.db.logs[0].id);
   assert.equal(h.db.runs[0].commissioningRun.status,'Completed');
   assert.equal(h.db.runs[0].outcome,'Follow-up Needed');
+
+  h.ctx.openFirstStartRunRecorder(run.id);
+  assert.match(h.modal,/Post-run readiness/);
+  assert.match(h.modal,/Full-Power Ground Run/);
+  assert.match(h.modal,/2 open/);
+  assert.match(h.modal,/Flight Release/);
+  assert.match(h.modal,/4 open/);
+  assert.match(h.modal,/Readiness Overview/);
+  const beforeViewIndex=h.db.runs[0].commissioningRun.currentIndex;
+  h.ctx.jumpCommissioningRecorder(run.id,0);
+  assert.equal(h.db.runs[0].commissioningRun.currentIndex,beforeViewIndex,'viewing a finalized step mutated the saved run');
+  assert.match(h.modal,/STEP 1 OF 2/);
 
   // Calling Finish again cannot duplicate the Work Log.
   h.ctx.finishCommissioningRun(run.id);

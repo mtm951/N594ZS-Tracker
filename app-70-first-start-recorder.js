@@ -12,6 +12,7 @@
   let previewRun=null;
   let recorderTimer=null;
   let draftTimer=null;
+  const recorderViewIndexes=new Map();
 
   const A=v=>Array.isArray(v)?v:[];
   const E=v=>typeof esc==='function'?esc(v):String(v??'');
@@ -51,7 +52,9 @@
   function currentStep(run){
     const s=sessionOf(run),steps=A(s?.steps);
     if(!steps.length)return null;
-    const idx=Math.max(0,Math.min(steps.length-1,Number(s.currentIndex)||0));
+    const saved=Number(s.currentIndex)||0;
+    const viewed=isFinal(run)&&recorderViewIndexes.has(String(run.id))?Number(recorderViewIndexes.get(String(run.id))):saved;
+    const idx=Math.max(0,Math.min(steps.length-1,Number.isFinite(viewed)?viewed:saved));
     return {result:steps[idx],index:idx,item:A(checklist()?.items).find(i=>sameId(i.id,steps[idx].itemId))||null};
   }
   function draftKey(id){return DRAFT_PREFIX+String(id)}
@@ -124,6 +127,52 @@
     ])];
   }
   function unresolvedStepCount(run){return A(sessionOf(run)?.steps).filter(s=>s.status!=='complete').length}
+  function commissioningRuns(){
+    return A(db?.runs).filter(r=>sessionOf(r)?.kind==='first-start')
+      .sort((a,b)=>(Number(sessionOf(a)?.runNumber)||0)-(Number(sessionOf(b)?.runNumber)||0));
+  }
+  function latestCommissioningRun(){
+    const rows=commissioningRuns();return rows.length?rows[rows.length-1]:null;
+  }
+  function recorderStepStatus(step){
+    if(step?.status==='complete')return {label:'Complete',tone:'good',symbol:'✓'};
+    if(step?.status==='finding')return {label:'Finding',tone:'warn',symbol:'!'};
+    return {label:'Open',tone:'',symbol:'○'};
+  }
+  function recorderStepNavigatorHTML(run){
+    const s=sessionOf(run),steps=A(s?.steps),current=currentStep(run)?.index??Math.max(0,Math.min(steps.length-1,Number(s?.currentIndex)||0));
+    return `<details class="commissioning-session-checklist" open>
+      <summary><span><b>Guided Session Checklist</b><small>Jump directly to any recorded step without changing its completion state.</small></span><strong>${steps.filter(x=>x.status==='complete').length}/${steps.length}</strong></summary>
+      <div class="commissioning-session-step-list">${steps.map((step,index)=>{
+        const item=A(checklist()?.items).find(i=>sameId(i.id,step.itemId)),status=recorderStepStatus(step);
+        const gate=item?.requiredBefore&&typeof checklistReadinessGateLabel==='function'?checklistReadinessGateLabel(item.requiredBefore):item?.requiredBefore||'';
+        return `<button type="button" class="commissioning-session-step ${index===current?'is-current':''} ${step.status==='complete'?'is-complete':step.status==='finding'?'has-finding':''}" onclick="jumpCommissioningRecorder('${E(String(run.id))}',${index})">
+          <span class="commissioning-session-step-symbol">${status.symbol}</span>
+          <span class="commissioning-session-step-main"><b>${E(item?.text||step.text||'Untitled step')}</b><small>${E(item?.group||'Commissioning')}${gate?' • '+E(gate):''}</small></span>
+          <span class="mini-badge ${status.tone}">${status.label}</span>
+        </button>`;
+      }).join('')}</div>
+    </details>`;
+  }
+  function recorderGateSummary(id,label){
+    if(typeof commissioningGateInfo!=='function')return null;
+    const info=commissioningGateInfo(id);if(!info)return null;
+    return {id,label,open:Number(info.open)||0,clear:!!info.clear,done:Number(info.done)||0,total:Number(info.total)||0};
+  }
+  function recorderAfterRunHTML(run){
+    if(!isFinal(run))return '';
+    const ground=recorderGateSummary('full-power','Full-Power Ground Run');
+    const flight=recorderGateSummary('flight','Flight Release');
+    if(!ground&&!flight)return '';
+    const cards=[ground,flight].filter(Boolean).map(g=>`<button type="button" class="commissioning-next-gate ${g.clear?'is-clear':'is-open'}" onclick="openCommissioningGate('${g.id}')">
+      <span>${E(g.label)}</span><b>${g.clear?'READY':g.open+' open'}</b><small>${g.done}/${g.total} cumulative requirements complete</small>
+    </button>`).join('');
+    return `<div class="commissioning-after-run">
+      <div><span>Post-run readiness</span><b>Continue from the recorded session into the next commissioning gates.</b><small>These remain workflow gates only; open each gate to review the actual source-backed requirements.</small></div>
+      <div class="commissioning-next-gates">${cards}</div>
+      <div class="action-row commissioning-after-run-actions"><button class="secondary" onclick="openCommissioningReadiness()">Readiness Overview</button>${sessionOf(run)?.workLogId?'<button class="secondary" onclick="openLogDetail('+sessionOf(run).workLogId+')">Open Work Log</button>':''}</div>
+    </div>`;
+  }
 
   function setRecorderSaveState(text,kind=''){
     const el=document.getElementById('crSaveState');if(!el)return;
@@ -202,14 +251,20 @@
     }catch(error){alert('Engine-stop time was not saved: '+(error?.message||String(error)))}
   };
 
-  window.moveCommissioningRecorder=function(runId,delta){
+  window.jumpCommissioningRecorder=function(runId,index){
     const run=String(runId)==='preview'?previewRun:runById(runId);if(!run)return;
     const steps=A(sessionOf(run)?.steps);if(!steps.length)return;
-    const next=Math.max(0,Math.min(steps.length-1,(Number(sessionOf(run).currentIndex)||0)+Number(delta||0)));
+    const next=Math.max(0,Math.min(steps.length-1,Number(index)||0));
     if(String(runId)==='preview'){previewRun.commissioningRun.currentIndex=next;renderRecorder(previewRun,true);return}
+    if(isFinal(run)){recorderViewIndexes.set(String(run.id),next);renderRecorder(run,false);return}
     writeDraft(run.id,collectFields());
     trackerStore.update('run',run.id,draft=>{draft.commissioningRun.currentIndex=next},{message:''});
     openFirstStartRunRecorder(run.id);
+  };
+  window.moveCommissioningRecorder=function(runId,delta){
+    const run=String(runId)==='preview'?previewRun:runById(runId);if(!run)return;
+    const current=currentStep(run)?.index??0;
+    return jumpCommissioningRecorder(runId,current+Number(delta||0));
   };
 
   window.completeCommissioningStep=function(runId){
@@ -411,6 +466,7 @@
           ${!preview&&!final?'<button class="secondary" onclick="saveCommissioningMeasurement('+run.id+')">Log Reading</button>':''}
           ${!preview?'<button class="secondary" onclick="addCommissioningPhoto('+run.id+')">Photo / File</button>':''}
         </div>
+        ${recorderStepNavigatorHTML(run)}
         <div class="commissioning-readings">
           ${readingField('RPM','crRpm',fields.rpm,'rpm','1',readonly)}
           ${readingField('Oil pressure','crOilP',fields.oilPressure,'psi','0.1',readonly)}
@@ -446,6 +502,7 @@
           </div>
         </div>
         ${final?'<div class="notice"><b>Session '+E(s.status)+'.</b> Outcome: '+E(run.outcome||'—')+(s.workLogId?' • Work Log #'+E(String(s.workLogId)):'')+'</div>':''}
+        ${recorderAfterRunHTML(run)}
         <div class="tiny muted">Recorder timing is a workflow aid, not a substitute for observing the engine indications and following the applicable manufacturer/aircraft procedure.</div>
         <div class="commissioning-recorder-footer">
           <div class="commissioning-save-status">
@@ -503,9 +560,9 @@
         <div class="modal-actions"><button class="secondary" onclick="openFirstStartRecorderPreview()">Preview Recorder</button><button class="primary" onclick="openCommissioningGate('first-start')">Review First Start Blockers</button></div>`,true);
     }
     const purge=typeof checklistById==='function'?checklistById('rotax912-oil-purge-first-start'):null;
-    const purgeDone=A(purge?.items).length>0&&A(purge.items).every(i=>!!i.done),n=runNumber();
-    openModal(`${modalHeader('Start First Start / Ground Run','Create durable commissioning Run #'+n)}
-      <div class="notice"><b>First Start gate is clear.</b> Starting creates a Run/Test record immediately so progress survives refreshes and device changes.</div>
+    const purgeDone=A(purge?.items).length>0&&A(purge.items).every(i=>!!i.done),n=runNumber(),prior=latestCommissioningRun();
+    openModal(`${modalHeader(n===1?'Start First Start / Ground Run':'Start Commissioning Run #'+n,'Create durable commissioning Run #'+n)}
+      <div class="notice"><b>First Start gate is clear.</b> Starting creates a Run/Test record immediately so progress survives refreshes and device changes.${prior?'<br><span class="muted">Previous Run #'+E(String(sessionOf(prior)?.runNumber||''))+' — '+E(prior.outcome||recorderStatus(prior))+'</span>':''}</div>
       <div class="form-grid">
         ${field('Engine hours / tach start','crStartTach',db.aircraft?.engineHours||'','number','step="0.1" min="0"')}
         <label class="focus-toggle full"><input id="crPostPurge" type="checkbox" ${purgeDone?'checked':''}> <span>This is the first engine start immediately following the oil-system purge. Use the 5-second oil-pressure cue.</span></label>
@@ -537,11 +594,18 @@
   function injectRecorderActions(){
     const panel=document.getElementById('commissioningReadinessPanel');if(!panel)return;
     panel.querySelector('.commissioning-recorder-entry')?.remove();
-    const active=activeRun(),gate=startGate(),row=document.createElement('div');row.className='commissioning-recorder-entry';
-    row.innerHTML=active?
-      '<div><span>Guided run recorder</span><b>Run #'+E(String(sessionOf(active).runNumber))+' — '+E(recorderStatus(active))+'</b><small>Durable session in Runs / Tests</small></div><button class="primary" onclick="openFirstStartRunRecorder('+active.id+')">Resume Recorder</button>':
-      '<div><span>Guided run recorder</span><b>'+(gate?.clear?'Ready to start':'Waiting on First Start gate')+'</b><small>'+(gate?.clear?'Create a durable guided engine-run session.':E(String(gate?.open??'—'))+' First Start blocker'+(gate?.open===1?'':'s')+' remain.')+'</small></div>'+
-      '<div class="action-row"><button class="secondary" onclick="openFirstStartRecorderPreview()">Preview Recorder</button><button class="'+(gate?.clear?'primary':'secondary')+'" onclick="openFirstStartRecorder()">'+(gate?.clear?'Start First Run':'Review / Start')+'</button></div>';
+    const active=activeRun(),gate=startGate(),row=document.createElement('div'),latest=latestCommissioningRun(),nextNumber=runNumber();
+    row.className='commissioning-recorder-entry';
+    if(active){
+      row.innerHTML='<div><span>Guided run recorder</span><b>Run #'+E(String(sessionOf(active).runNumber))+' — '+E(recorderStatus(active))+'</b><small>Durable session in Runs / Tests</small></div><button class="primary" onclick="openFirstStartRunRecorder('+active.id+')">Resume Recorder</button>';
+    }else{
+      const hasPrior=!!latest;
+      const readyLabel=hasPrior?'Ready for Run #'+nextNumber:'Ready for first run';
+      const readyNote=hasPrior?'Last Run #'+E(String(sessionOf(latest)?.runNumber||''))+' — '+E(latest.outcome||recorderStatus(latest))+'. Create another durable commissioning session when appropriate.':'Create a durable guided engine-run session.';
+      const startLabel=hasPrior?'Start Run #'+nextNumber:'Start First Run';
+      row.innerHTML='<div><span>Guided run recorder</span><b>'+(gate?.clear?readyLabel:'Waiting on First Start gate')+'</b><small>'+(gate?.clear?readyNote:E(String(gate?.open??'—'))+' First Start blocker'+(gate?.open===1?'':'s')+' remain.')+'</small></div>'+
+        '<div class="action-row">'+(latest?'<button class="secondary" onclick="openRunDetail('+latest.id+')">Last Run</button>':'')+'<button class="secondary" onclick="openFirstStartRecorderPreview()">Preview Recorder</button><button class="'+(gate?.clear?'primary':'secondary')+'" onclick="openFirstStartRecorder()">'+(gate?.clear?startLabel:'Review / Start')+'</button></div>';
+    }
     panel.appendChild(row);
   }
   const baseReadiness=window.renderReadiness;
@@ -554,13 +618,16 @@
     queueMicrotask(()=>{
       const box=document.getElementById('modalBox');if(!box)return;
       const card=document.createElement('div');card.className='notice';card.style.marginBottom='12px';
+      const ground=isFinal(run)?recorderGateSummary('full-power','Full-Power Ground Run'):null;
+      const flight=isFinal(run)?recorderGateSummary('flight','Flight Release'):null;
       card.innerHTML='<b>Guided commissioning Run #'+E(String(s.runNumber))+'</b><br>'+E(s.status)+' • '+A(s.steps).filter(x=>x.status==='complete').length+'/'+A(s.steps).length+' guided steps complete'+(findingIds(run).length?' • '+findingIds(run).length+' finding(s)':'')+
+        (isFinal(run)&&ground?'<div class="commissioning-run-detail-next"><span>Next workflow gates</span><b>Full-Power: '+(ground.clear?'READY':ground.open+' open')+' • Flight Release: '+(flight?.clear?'READY':String(flight?.open??'—')+' open')+'</b></div>':'')+
         '<div class="action-row" style="margin-top:8px"><button class="primary" onclick="openFirstStartRunRecorder('+run.id+')">'+(isFinal(run)?'View Guided Session':'Resume Guided Session')+'</button>'+
-        (s.workLogId?'<button class="secondary" onclick="openLogDetail('+s.workLogId+')">Open Work Log</button>':'')+'</div>';
+        (s.workLogId?'<button class="secondary" onclick="openLogDetail('+s.workLogId+')">Open Work Log</button>':'')+
+        (isFinal(run)?'<button class="secondary" onclick="openCommissioningGate(\'full-power\')">Full-Power Gate</button><button class="secondary" onclick="openCommissioningGate(\'flight\')">Flight Release Gate</button>':'')+'</div>';
       box.prepend(card);
     });
   };
-
   const baseReopenDetail=window.reopenDetail;
   window.reopenDetail=function(type,id){const run=type==='run'?runById(id):null;if(run&&isActive(run))return openFirstStartRunRecorder(run.id);return baseReopenDetail?.(type,id)};
 
@@ -574,6 +641,33 @@
     .commissioning-recorder-top b{font-size:1.15rem}
     #crOilTimer.limit-exceeded{color:#b42318}
     .commissioning-engine-actions{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:10;background:var(--panel,#fff);padding:8px 0}
+    .commissioning-session-checklist{border:1px solid var(--border);border-radius:12px;background:var(--card);overflow:hidden}
+    .commissioning-session-checklist>summary{cursor:pointer;list-style:none;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .commissioning-session-checklist>summary::-webkit-details-marker{display:none}
+    .commissioning-session-checklist>summary>span{display:flex;flex-direction:column;min-width:0}
+    .commissioning-session-checklist>summary small{font-size:.72rem;color:var(--muted)}
+    .commissioning-session-step-list{border-top:1px solid var(--border);display:flex;flex-direction:column;max-height:280px;overflow:auto}
+    .commissioning-session-step{border:0;border-bottom:1px solid var(--border);background:transparent;color:inherit;padding:8px 10px;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;cursor:pointer}
+    .commissioning-session-step:last-child{border-bottom:0}
+    .commissioning-session-step:hover{background:var(--soft,#f5f7f8)}
+    .commissioning-session-step.is-current{background:#eef7ff;box-shadow:inset 3px 0 0 var(--accent,#1261a0)}
+    .commissioning-session-step.is-complete{opacity:.72}
+    .commissioning-session-step.has-finding{box-shadow:inset 3px 0 0 var(--warn,#d99a31)}
+    .commissioning-session-step-symbol{font-weight:900;text-align:center}
+    .commissioning-session-step-main{display:flex;flex-direction:column;min-width:0}
+    .commissioning-session-step-main b{font-size:.8rem;line-height:1.3}
+    .commissioning-session-step-main small{font-size:.7rem;color:var(--muted)}
+    .commissioning-after-run{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--soft,#f7f9fa);display:flex;flex-direction:column;gap:10px}
+    .commissioning-after-run>div:first-child{display:flex;flex-direction:column;gap:2px}
+    .commissioning-after-run>div:first-child span,.commissioning-after-run>div:first-child small{font-size:.72rem;color:var(--muted)}
+    .commissioning-next-gates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .commissioning-next-gate{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:10px;text-align:left;display:flex;flex-direction:column;cursor:pointer}
+    .commissioning-next-gate.is-clear{border-color:var(--good,#6c9)}
+    .commissioning-next-gate span,.commissioning-next-gate small{font-size:.72rem;color:var(--muted)}
+    .commissioning-next-gate b{font-size:.95rem}
+    .commissioning-after-run-actions{justify-content:flex-end}
+    .commissioning-run-detail-next{display:flex;flex-direction:column;margin-top:7px;padding-top:7px;border-top:1px solid rgba(0,0,0,.08)}
+    .commissioning-run-detail-next span{font-size:.72rem;color:var(--muted)}
     .commissioning-recorder-footer{position:sticky;bottom:0;z-index:15;display:flex;align-items:center;justify-content:space-between;gap:14px;margin:2px -15px -15px;padding:12px 15px;background:var(--panel,#fff);border-top:1px solid var(--border);box-shadow:0 -6px 18px rgba(0,0,0,.08)}
     .commissioning-save-status{display:flex;flex-direction:column;gap:2px;min-width:0}
     .commissioning-save-status b{font-size:.82rem}
@@ -602,6 +696,8 @@
     @media(max-width:800px){
       .commissioning-recorder-top{grid-template-columns:repeat(2,minmax(0,1fr))}
       .commissioning-readings{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .commissioning-next-gates{grid-template-columns:1fr}
+      .commissioning-session-step-list{max-height:220px}
       .commissioning-recorder-entry{align-items:stretch;flex-direction:column}
       .commissioning-recorder-footer{align-items:stretch;flex-direction:column;margin-left:-15px;margin-right:-15px}
       .commissioning-footer-actions{width:100%}

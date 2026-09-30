@@ -42,5 +42,6 @@ assert.match(checklistSource,/data-checklist-item-id=/,'checklist item rows do n
 const core=fs.readFileSync(new URL('../app-03-core.js',import.meta.url),'utf8');
 assert.match(core,/openChecklistDetailAtItem/,'nested modal history does not recognize focused checklist navigation');
 assert.match(core,/openCommissioningRequirementSource/,'nested modal history does not recognize commissioning source navigation');
+assert.match(core,/openCommissioningGate/,'nested modal history does not recognize recorder-to-gate navigation');
 
 console.log('focused commissioning requirement navigation and modal-history regression tests passed');
