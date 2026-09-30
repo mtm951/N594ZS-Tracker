@@ -12,6 +12,7 @@
   let previewRun=null;
   let recorderTimer=null;
   let draftTimer=null;
+  const recorderViewIndexes=new Map();
 
   const A=v=>Array.isArray(v)?v:[];
   const E=v=>typeof esc==='function'?esc(v):String(v??'');
@@ -51,7 +52,9 @@
   function currentStep(run){
     const s=sessionOf(run),steps=A(s?.steps);
     if(!steps.length)return null;
-    const idx=Math.max(0,Math.min(steps.length-1,Number(s.currentIndex)||0));
+    const saved=Number(s.currentIndex)||0;
+    const viewed=isFinal(run)&&recorderViewIndexes.has(String(run.id))?Number(recorderViewIndexes.get(String(run.id))):saved;
+    const idx=Math.max(0,Math.min(steps.length-1,Number.isFinite(viewed)?viewed:saved));
     return {result:steps[idx],index:idx,item:A(checklist()?.items).find(i=>sameId(i.id,steps[idx].itemId))||null};
   }
   function draftKey(id){return DRAFT_PREFIX+String(id)}
@@ -253,13 +256,14 @@
     const steps=A(sessionOf(run)?.steps);if(!steps.length)return;
     const next=Math.max(0,Math.min(steps.length-1,Number(index)||0));
     if(String(runId)==='preview'){previewRun.commissioningRun.currentIndex=next;renderRecorder(previewRun,true);return}
-    if(!isFinal(run))writeDraft(run.id,collectFields());
+    if(isFinal(run)){recorderViewIndexes.set(String(run.id),next);renderRecorder(run,false);return}
+    writeDraft(run.id,collectFields());
     trackerStore.update('run',run.id,draft=>{draft.commissioningRun.currentIndex=next},{message:''});
     openFirstStartRunRecorder(run.id);
   };
   window.moveCommissioningRecorder=function(runId,delta){
     const run=String(runId)==='preview'?previewRun:runById(runId);if(!run)return;
-    const current=Number(sessionOf(run)?.currentIndex)||0;
+    const current=currentStep(run)?.index??0;
     return jumpCommissioningRecorder(runId,current+Number(delta||0));
   };
 
