@@ -148,6 +148,10 @@ const rotaxDoc={
   }
 };
 assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'73-00-00 p.7'),107);
+assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'79-00-00 p.3–4'),181,
+  'oil-system connection source should open at Chapter 79 physical PDF page 181');
+assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'79-00-00 p.24–25'),202,
+  'oil-system purge source should open at Chapter 79 physical PDF page 202');
 assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'78–00–00 p.5'),169);
 assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'10-10-00 p.12–13'),42);
 
