@@ -35,3 +35,10 @@ assert.ok(inventoryWorkflow.includes('function blockWhileAtomicPending(action)')
 assert.ok(inventoryWorkflow.includes("blockWhileAtomicPending('adding or changing a reservation')"));
 assert.ok(workflow.includes('function blockPendingProjectEdit(projectId)'));
 assert.ok(projects.includes("atomicReceiptOutbox?.isPendingRecord?.('project',id)"));
+
+const logbook=fs.readFileSync(new URL('../app-09-logbook.js',import.meta.url),'utf8');
+
+assert.ok(atomic.includes('async function settleUI(after)'));
+assert.ok(inventoryWorkflow.includes("atomicReceiptOutbox?.settleUI==='function'"));
+assert.ok(logbook.includes("atomicReceiptOutbox?.settleUI==='function'"));
+assert.ok(logbook.includes('already reserved on the linked Project'));

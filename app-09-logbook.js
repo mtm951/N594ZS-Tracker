@@ -69,12 +69,16 @@ function saveConsumedPart(logId){
     openLogDetail(logId);return;
   }
   const part=partById(partId);if(!part)return alert('The linked inventory Part is missing.');
+  const projectIds=arr(l.projectIds).map(Number).filter(Number.isFinite);
+  const reservedProject=projectIds.map(projectById).filter(Boolean).find(project=>
+    arr(project.plannedParts).some(x=>String(x.partId)===String(partId)&&num(x.qty)>0));
+  if(reservedProject)
+    return alert('This Part is already reserved on the linked Project "'+reservedProject.title+'". Record it from Project Parts → Reserved → Use so the reservation, Parts Used record, Work Log and inventory stay synchronized.');
   const preview=typeof window.previewPartForPhysicalUse==='function'?
     window.previewPartForPhysicalUse(part,qty):{credited:0,sources:[]};
   const on=typeof partAvailable==='function'?partAvailable(part):null;
   if(on!==null&&on!==undefined&&qty>num(on)+num(preview.credited)+1e-9&&
      !confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
-  const projectIds=arr(l.projectIds).map(Number).filter(Number.isFinite);
   const work=tx=>{
     const currentLog=tx.read('log',logId),currentPart=tx.read('part',partId);
     if(!currentLog||!currentPart)throw new Error('The Work Log or Part changed; reopen before recording use.');
@@ -95,14 +99,18 @@ function saveConsumedPart(logId){
     });
   };
   const meta={mode:'log-add',partId,logId,consumedItemId:itemId,qty,projectIds};
+  let atomic=false;
   try{
-    if(window.atomicReceiptOutbox?.shouldHandle('consumption'))
+    if(window.atomicReceiptOutbox?.shouldHandle('consumption')){
+      atomic=true;
       window.atomicReceiptOutbox.stageConsumption(work,'Consumed item recorded.',meta);
-    else trackerStore.batch(work,{message:'Consumed item recorded.'});
+    }else trackerStore.batch(work,{message:'Consumed item recorded.'});
   }catch(error){
     return alert('Consumed item was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.');
   }
-  openLogDetail(logId);
+  const finish=()=>openLogDetail(logId);
+  if(atomic&&typeof window.atomicReceiptOutbox?.settleUI==='function')window.atomicReceiptOutbox.settleUI(finish);
+  else finish();
 }
 function removeConsumedPart(logId,itemId){
   if(atomicWorkLogEditGuard(logId))return;
