@@ -67,7 +67,7 @@ window.projectCloseoutAudit=projectCloseoutAudit;
 
 function projectCloseoutSummaryHTML(project){
   const a=projectCloseoutAudit(project);
-  const state=project.status==='Done'?'Completed':a.ready?'Ready to close':a.warnings.length+' warning'+(a.warnings.length===1?'':'s');
+  const state=project.status==='Done'?(a.warnings.length?'Completed with Warning':'Completed'):a.ready?'Ready to close':a.warnings.length+' warning'+(a.warnings.length===1?'':'s');
   const detail=a.issues.length
     ?a.issues.slice(0,3).map(x=>esc(x.label)).join(' • ')+(a.issues.length>3?' • +'+(a.issues.length-3)+' more':'')
     :'No open closeout items detected.';
