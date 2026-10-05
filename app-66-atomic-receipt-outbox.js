@@ -1277,6 +1277,18 @@
     toast('Atomic part-use transactions are now automatic whenever cloud sync is connected.','good');
     openSettings();
   }
+  async function settleUI(after){
+    let result;
+    try{
+      result=await window.saveCloudState();
+    }catch(error){
+      result={pending:true,error:error?.message||String(error)};
+    }
+    if(typeof after==='function'){
+      try{after(result)}catch(_e){}
+    }
+    return result;
+  }
   async function retryFromUI(){
     if(!cloudSession||!cloudWorkspaceId)return alert('Sign in to your original workspace first.');
     const result=await window.saveCloudState();
@@ -1355,6 +1367,6 @@
   };
   window.atomicReceiptOutbox=Object.freeze({
     enabled,adjustmentsEnabled,consumptionEnabled,purchaseReceiptsEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,stagePurchaseReceipt,flush,recoverLocal,
-    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,reviewLocalDrift,openConflictReview,resolvePostStagedReservations,exportPendingJournal,restorePendingWorkLog
+    openSettings,toggle,toggleAdjustments,toggleConsumption,settleUI,retryFromUI,reviewConflict,reviewLocalDrift,openConflictReview,resolvePostStagedReservations,exportPendingJournal,restorePendingWorkLog
   });
 })();
