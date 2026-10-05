@@ -20,6 +20,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 ## v5.19.72 Rotax oil-system source-page correction (October 5)
 
+- Final v5.19.72 source-routing PR #49 squash-merged to `main` at `722766879e5f68f01c436d9d6533496a9c405205`. Exact pre-merge full regression run `37329137424` passed; main GitHub Pages deployment `37329347854` completed successfully.
 - Owner noticed that the Commissioning / Pre-Trial-Run oil-system source button was landing on the generic **10-10-00 p.12–13 Checks before trial run** list instead of the detailed lubrication chapter. Owner screenshot showed the relevant **79-00-00 p.3 System Description** page (physical PDF page 181).
 - Source review confirmed the generic pre-trial page literally lists “Check oil hose connections are correct” and “Check for correct oil system purging,” but the detailed technical material lives in Chapter 79:
   - **79-00-00 p.3–4** = lubrication-system diagram/system description and the required external circuit connections (tank outlet → cooler → pump inlet; engine return → tank inlet; tank vent → atmosphere).
