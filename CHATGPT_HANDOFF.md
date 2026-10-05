@@ -20,6 +20,8 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 ## v5.19.74 atomic-use UI acknowledgement + duplicate-reservation guard (October 5)
 
+- Owner confirmed the physical truth: **only 2 total OETIKER 155 SS CLAMP 22.6MM clamps were used**. With explicit owner authorization to fix the duplicate, the earlier accidental Oetiker consumed-item row was removed directly from cloud Work Log `1791166345591` (**Parker hose**), using an exact version-3 predicate; that Work Log is now version **4** and contains only the Parker hose consumption. The later proper Reserve → Use Work Log `1791220471435` remains unchanged and is the sole clamp-consumption record.
+- Post-fix read-only verification: Oetiker Part `1789662605156` recorded stock baseline remains **10**; total Work Log clamp consumption is now **2**; calculated on hand is **8**; Project `1789745161554` shows **2** Oetiker clamps in Parts Used; exactly one clamp-consumption Work Log remains. No Project, Part baseline, or proper Reserve → Use record was otherwise changed.
 - Owner recorded 2 ea **OETIKER 155 SS CLAMP 22.6MM MECH INTERLOCK 1EAR** from Project **Redo oil cooler to oil pump hose** and immediately saw the new Work Log with a red **unsynced atomic transaction** banner.
 - Read-only cloud verification showed the new transaction actually committed successfully:
   - operation `8a628601-a5c5-4cd4-934d-dd19436c3816` exists in `tracker_atomic_operations` with no conflicts;
