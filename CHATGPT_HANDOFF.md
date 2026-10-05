@@ -20,6 +20,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 ## v5.19.69 atomic recovery / release-cache repair (October 5)
 
+- Release-hygiene cleanup PR #43 merged to `main` at `cdb6165840a529eb5e6bd0b24cae5119f1532bb5`. PR regression run `37317591882` passed; main GitHub Pages deployment `37317670698` passed JavaScript syntax, the dedicated release/cache consistency check, the complete regression suite, artifact upload, and Pages deployment.
 - An unresolved owner-side atomic **consumption** journal remains protected in the browser. It involves Project `1789745161554` (**Redo oil cooler to oil pump hose**), Part `1790029520392` (**Parker 836-8 1/2" ID Oil Line**), and pending Work Log `1791166345591`. Do **not** manually consume the part again, clear site/browser data, force a cloud reload, delete the pending Work Log, or discard the journal while it remains unresolved.
 - Read-only Supabase inspection during recovery found the Project and Part in the cloud at record version 4, with the Part at `stockQty: 0` and the Project Open at 67%. The queried pending Work Log ID was not present in that read. Treat that as diagnostic evidence only; the protected browser journal is still required to resolve the transaction safely.
 - v5.19.66 added direct pending-transaction recovery from the Work Log, an attachment-fetch Retry action, and **Completed with Warning** closeout wording.
