@@ -33,11 +33,18 @@ jobs:
             node --check "$file"
           done
 
+      - name: Validate release/cache consistency
+        shell: bash
+        run: node tests/release-cache-consistency.test.mjs
+
       - name: Run regression tests
         shell: bash
         run: |
           set -e
           for file in tests/*.test.mjs; do
+            if [ "$file" = "tests/release-cache-consistency.test.mjs" ]; then
+              continue
+            fi
             echo "Running $file"
             node "$file"
           done
