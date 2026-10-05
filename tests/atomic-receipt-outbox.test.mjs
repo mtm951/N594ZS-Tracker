@@ -374,7 +374,7 @@ function receiptWork(tx){
   const journal=JSON.parse(h.localStorage.getItem(OUTBOX));
   h.localStorage.setItem(OUTBOX,JSON.stringify({...journal,blocked:true}));
   h.ctx.atomicReceiptOutbox.openSettings();
-  assert.match(h.lastModal(),/Compare with Cloud Safely/);
+  assert.match(h.lastModal(),/Open Supervised Conflict Review/);
   assert.doesNotMatch(h.lastModal(),/Retry Pending Receipt/);
   const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
   assert.equal(result.matched,true);
