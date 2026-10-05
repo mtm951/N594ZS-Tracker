@@ -92,7 +92,8 @@ function makeHarness({db:input=null,stored=null,online=true,failKey=null,onRpc=n
     },
     arr:x=>Array.isArray(x)?x:[],clone:structuredClone,canCloudEdit:()=>true,
     cloudStatusLabel:x=>statuses.push(x),toast:()=>{},
-    saveDB:message=>{assert.ok(localStorage.getItem(KEY),'journal was not saved first');
+    saveDB:message=>{if(message!=='Original consumption recovered; later reservations preserved.')
+        assert.ok(localStorage.getItem(KEY),'journal was not saved first');
       saves.push({message,db:structuredClone(ctx.db)})},
     persistBrowserData:async data=>{localStorage.setItem('test-cache',JSON.stringify(data))},
     renderAll:()=>{},alert:x=>alerts.push(String(x)),confirm:()=>true,
@@ -162,6 +163,42 @@ function consumeWork(installed=true){
   await h.ctx.saveCloudState();
   assert.equal(h.rpcCalls.length,1,'repeated sync duplicated a consumption');
   assert.equal(h.db.logs.length,1);
+}
+
+// Supervised recovery: if the atomic use is still intact locally and the
+// only newer Project edit is a later reservation, replay the ORIGINAL
+// operation and then restore that reservation as a separate local edit.
+{
+  const db=makeDb({installed:false,stockQty:5});
+  db.parts.push({id:22,name:'LATER CLAMP',unit:'ea',stockQty:10,
+    linkedProjectIds:[41],inventoryAdjustments:[]});
+  const h=makeHarness({db,onCloudRead:e=>{
+    const rows=[];
+    for(const change of e.changes){
+      const prior=e.before.find(x=>x.key===change.record_type+':'+String(change.record_id));
+      if(prior?.data!==null)rows.push({record_type:change.record_type,
+        record_id:change.record_id,data:structuredClone(prior.data),
+        deleted_at:null,record_version:change.expected_version});
+    }
+    rows.push({record_type:'part',record_id:'22',data:structuredClone(db.parts[1]),
+      deleted_at:null,record_version:1});
+    return {data:rows,error:null};
+  }});
+  h.ctx.atomicReceiptOutbox.stageConsumption(consumeWork(false),'TEST later-reservation recovery',META);
+  const operationId=JSON.parse(h.localStorage.getItem(KEY)).operationId;
+  h.db.projects[0].plannedParts=[{id:777,partId:22,qty:2,unit:'ea',name:'LATER CLAMP'}];
+
+  const result=await h.ctx.atomicReceiptOutbox.resolvePostStagedReservations();
+  assert.equal(result.resolved,true);
+  assert.equal(h.rpcCalls.length,1,'recovery sent more than the original atomic operation');
+  assert.equal(h.rpcCalls[0].operation_id,operationId,'recovery changed the atomic operation ID');
+  assert.equal(h.localStorage.getItem(KEY),null,'successful recovery retained the live journal');
+  assert.equal(h.db.logs.filter(x=>x.id===888).length,1,'recovery duplicated the Work Log');
+  assert.equal(h.db.projects[0].partsUsed.filter(x=>x.logId===888).length,1,'recovery duplicated Parts Used');
+  assert.deepEqual(h.db.projects[0].plannedParts,
+    [{id:777,partId:22,qty:2,unit:'ea',name:'LATER CLAMP'}],
+    'later reservation was not restored after atomic acknowledgement');
+  assert.equal(h.localStorage.getItem(PENDING),'1','later reservation should remain queued for normal sync');
 }
 
 // Assigned -> Used: Part + Project + new Work Log + Installed Purchase

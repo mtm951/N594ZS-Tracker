@@ -24,3 +24,14 @@ assert.ok(atomic.includes('nothing will be changed'));
 assert.ok(atomic.includes('Download Safety Copy'));
 
 console.log('recovery, attachment retry, closeout-status and supervised-review UX tests passed');
+
+const inventoryWorkflow=fs.readFileSync(new URL('../app-42-inventory-workflow.js',import.meta.url),'utf8');
+const workflow=fs.readFileSync(new URL('../app-20-workflow.js',import.meta.url),'utf8');
+
+assert.ok(atomic.includes('Resolve Original Use + Keep Later Reservation'));
+assert.ok(atomic.includes('function resolvePostStagedReservations()'));
+assert.ok(atomic.includes('function postStagedReservationDrift(e)'));
+assert.ok(inventoryWorkflow.includes('function blockWhileAtomicPending(action)'));
+assert.ok(inventoryWorkflow.includes("blockWhileAtomicPending('adding or changing a reservation')"));
+assert.ok(workflow.includes('function blockPendingProjectEdit(projectId)'));
+assert.ok(projects.includes("atomicReceiptOutbox?.isPendingRecord?.('project',id)"));

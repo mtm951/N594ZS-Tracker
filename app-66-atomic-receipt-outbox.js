@@ -806,6 +806,171 @@
       field:k,staged:staged?.[k],cloud:cloud?.[k]
     }));
   }
+  function postStagedReservationDrift(e){
+    if(e?.operationKind!=='consumption')return null;
+    const projects=e.changes.filter(r=>r.record_type==='project');
+    const logs=e.changes.filter(r=>r.record_type==='log');
+    if(projects.length!==1||logs.length!==1||Number(logs[0].expected_version)!==0)return null;
+    const projectChange=projects[0],projectKey=key('project',projectChange.record_id);
+    const current=snapshot(),localProject=current.get(projectKey)?.data;
+    if(!localProject)return null;
+    // Every non-Project member must still be the exact staged payload.
+    for(const r of e.changes){
+      if(r===projectChange)continue;
+      const now=current.get(key(r.record_type,r.record_id))?.data??null;
+      if(stable(now)!==stable(r.data))return null;
+    }
+    const stagedProject=projectChange.data;
+    const localClean=copy(localProject),stagedClean=copy(stagedProject);
+    const localPlans=arr(localClean.plannedParts),stagedPlans=arr(stagedClean.plannedParts);
+    delete localClean.plannedParts;delete stagedClean.plannedParts;
+    if(stable(localClean)!==stable(stagedClean))return null;
+    const localById=new Map(localPlans.map(x=>[String(x?.id),x]));
+    for(const plan of stagedPlans){
+      const found=localById.get(String(plan?.id));
+      if(!found||stable(found)!==stable(plan))return null;
+    }
+    const stagedIds=new Set(stagedPlans.map(x=>String(x?.id)));
+    const beforeProject=e.before.find(x=>x.key===projectKey)?.data;
+    const beforeIds=new Set(arr(beforeProject?.plannedParts).map(x=>String(x?.id)));
+    const extras=localPlans.filter(x=>!stagedIds.has(String(x?.id)));
+    if(!extras.length||extras.some(x=>x?.id==null||x?.partId==null||
+       !Number.isFinite(Number(x.qty))||Number(x.qty)<=0||beforeIds.has(String(x.id))))return null;
+    return {
+      projectId:String(projectChange.record_id),projectChange,
+      localProject:copy(localProject),stagedProject:copy(stagedProject),
+      preservedPlans:copy(localPlans),extras:copy(extras)
+    };
+  }
+
+  async function resolvePostStagedReservations(){
+    let e,drift,oldDB;
+    try{
+      e=read();
+      if(!e)throw new Error('There is no pending atomic transaction.');
+      validateIdentity(e);
+      drift=postStagedReservationDrift(e);
+      if(!drift)throw new Error('This transaction no longer matches the guarded later-reservation recovery pattern.');
+      if(!supa||!cloudSession||!cloudWorkspaceId||!navigator.onLine)
+        throw new Error('Reconnect to the original workspace before resolving the transaction.');
+
+      const journalIds=[...new Set(e.changes.map(r=>String(r.record_id)))];
+      const extraPartIds=[...new Set(drift.extras.map(x=>String(x.partId)))];
+      const ids=[...new Set([...journalIds,...extraPartIds])];
+      const {data,error}=await supa.from('tracker_records')
+        .select('record_type,record_id,data,deleted_at,record_version')
+        .eq('workspace_id',e.workspaceId).in('record_id',ids);
+      if(error)throw error;
+      const serverRows=new Map(arr(data).map(r=>[key(r.record_type,r.record_id),r]));
+
+      // The original atomic operation may be replayed ONLY while every cloud
+      // member is still exactly at the journal's saved before-state/version.
+      for(const staged of e.changes){
+        const k=key(staged.record_type,staged.record_id);
+        const prior=e.before.find(x=>x.key===k);
+        if(!prior)throw new Error('The pending journal is missing its saved before-state for '+k+'.');
+        const remote=serverRows.get(k);
+        if(prior.data===null){
+          if(remote)throw new Error('The new '+staged.record_type+' already exists in the cloud; reopen supervised review.');
+        }else{
+          if(!remote||remote.deleted_at||Number(remote.record_version)!==Number(staged.expected_version)||
+             stable(remote.data)!==stable(prior.data))
+            throw new Error('Cloud '+k+' changed since this transaction was staged; nothing was replayed.');
+        }
+      }
+      // Later reservations are preserved only when their referenced Part
+      // already exists in the cloud and is already linked to this Project.
+      for(const plan of drift.extras){
+        const remote=serverRows.get(key('part',plan.partId));
+        if(!remote||remote.deleted_at)
+          throw new Error('Later reservation Part '+plan.partId+' is not safely available in the cloud.');
+        if(!arr(remote.data?.linkedProjectIds).map(String).includes(String(drift.projectId)))
+          throw new Error('Later reservation Part '+plan.partId+' is not yet linked to this Project in the cloud.');
+      }
+
+      const current=read();
+      const freshDrift=postStagedReservationDrift(current);
+      if(!current||current.operationId!==e.operationId||
+         stable(current.changes)!==stable(e.changes)||!freshDrift||
+         stable(freshDrift.preservedPlans)!==stable(drift.preservedPlans))
+        throw new Error('The pending transaction or later reservations changed during review. Reopen the conflict review.');
+
+      const summary=drift.extras.map(x=>Number(x.qty)+' '+String(x.unit||'ea')+' '+String(x.name||('Part '+x.partId))).join('; ');
+      if(!confirm('Safe recovery is available. The original consumption transaction is still unapplied in the cloud. The only newer edit on its Project is this later reservation: '+summary+'.\n\nThis will submit the ORIGINAL atomic transaction with the SAME operation ID, then restore that later reservation locally. It will NOT consume the later reservation. Continue only if you saved the Pending Atomic Safety Copy.'))
+        return {resolved:false,cancelled:true};
+
+      // Archive the evidence before touching the local Project. If storage
+      // cannot retain this trail, fail closed and leave the live journal.
+      let archived=[];
+      const existing=localStorage.getItem(RESOLVED);
+      if(existing){archived=JSON.parse(existing);if(!Array.isArray(archived))throw new Error('Stored receipt recovery archive is invalid.');}
+      archived=archived.filter(x=>x.operationId!==e.operationId);
+      archived.push({operationId:e.operationId,preparedAt:new Date().toISOString(),
+        reason:'supervised-preserve-later-reservations',journal:copy(e),
+        preservedProject:copy(drift.localProject),preservedReservations:copy(drift.extras)});
+      const archiveJSON=JSON.stringify(archived.slice(-3));
+      localStorage.setItem(RESOLVED,archiveJSON);
+      if(localStorage.getItem(RESOLVED)!==archiveJSON)
+        throw new Error('Could not verify the supervised recovery archive.');
+
+      oldDB=copy(db);
+      // Temporarily reconcile only the journal members to their exact staged
+      // payload. This makes recoverLocal()/flush deterministic; it does not
+      // invent or merge a different atomic request.
+      for(const r of e.changes){
+        const rows={part:db.parts,project:db.projects,log:db.logs,purchase:db.purchases,order:db.orders}[r.record_type];
+        if(!rows)throw new Error('Unsupported pending record type: '+r.record_type);
+        const idx=rows.findIndex(x=>String(x.id)===String(r.record_id));
+        if(idx<0)rows.push(copy(r.data));else rows[idx]=copy(r.data);
+      }
+      if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});
+      else localStorage.setItem(DB_KEY,JSON.stringify(db));
+      renderAll();
+
+      const outcome=await flush();
+      if(!outcome?.success){
+        restore(oldDB);
+        if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});
+        else localStorage.setItem(DB_KEY,JSON.stringify(db));
+        renderAll();
+        throw new Error(outcome?.error||'The original atomic transaction remains pending.');
+      }
+
+      // The atomic operation is now acknowledged. Restore ONLY the later
+      // reservation list onto the newly applied Project and let normal guarded
+      // sync carry that post-transaction edit separately.
+      const projectRows=db.projects;
+      const project=projectRows.find(x=>String(x.id)===String(drift.projectId));
+      if(!project)throw new Error('The recovered Project is missing after atomic acknowledgement.');
+      project.plannedParts=copy(drift.preservedPlans);
+      if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});
+      else localStorage.setItem(DB_KEY,JSON.stringify(db));
+      localStorage.setItem(PENDING,'1');cloudDirty=true;
+      renderAll();
+      try{saveDB('Original consumption recovered; later reservations preserved.')}catch(saveError){
+        cloudStatusLabel('Sync pending');
+        alert('The original consumption was safely applied. The later reservation is preserved locally, but normal cloud sync still needs attention: '+(saveError?.message||String(saveError)));
+        openSettings();
+        return {resolved:true,laterSyncPending:true};
+      }
+      cloudStatusLabel('Sync pending');
+      toast('Original consumption recovered. Later reservation preserved and queued for normal sync.','good');
+      openSettings();
+      return {resolved:true,laterSyncPending:true};
+    }catch(err){
+      if(oldDB&&pending()){
+        try{
+          restore(oldDB);
+          if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});
+          else localStorage.setItem(DB_KEY,JSON.stringify(db));
+          renderAll();
+        }catch(_restoreError){}
+      }
+      alert('Supervised recovery stopped safely: '+(err?.message||String(err))+'. The pending journal was retained unless the original atomic transaction had already been acknowledged.');
+      return {resolved:false,error:err?.message||String(err)};
+    }
+  }
+
   async function openConflictReview(){
     let e;
     try{
@@ -820,8 +985,13 @@
         .eq('workspace_id',e.workspaceId).in('record_id',ids);
       if(error)throw error;
       const serverRows=new Map(arr(data).map(r=>[key(r.record_type,r.record_id),r]));
+      const reservationDrift=postStagedReservationDrift(e);
       let html=modalHeader('Supervised Transaction Conflict Review','Read-only comparison — nothing will be changed')+
         '<div class="notice"><b>Safety mode:</b> this screen only compares the original staged transaction with the current cloud records. It will not write, delete, consume, receive, or overwrite anything.</div>';
+      if(reservationDrift){
+        const later=reservationDrift.extras.map(x=>esc(String(x.qty)+' '+String(x.unit||'ea')+' '+String(x.name||('Part '+x.partId)))).join(' • ');
+        html+='<div class="notice" style="margin-top:8px"><b>Recognized later local edit.</b> The staged consumption itself is intact on this device. After it was staged, this Project gained a later reservation: '+later+'. A guarded recovery can preserve that reservation while replaying only the original atomic transaction.</div>';
+      }
       for(const staged of e.changes){
         const k=key(staged.record_type,staged.record_id),remote=serverRows.get(k);
         html+='<div class="detail-section"><h3 style="margin:0 0 6px">'+esc(staged.record_type.toUpperCase())+' · '+esc(staged.record_id)+'</h3>';
@@ -843,7 +1013,9 @@
         html+='</div>';
       }
       html+='<div class="notice"><b>Recommended next step:</b> review the differences above. Do not retry or manually repeat the inventory operation until we determine which version represents the intended work. The original atomic journal remains protected.</div>'+
-        '<div class="modal-actions"><button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">Download Safety Copy</button><button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Back to Transaction Safety</button></div>';
+        '<div class="modal-actions">'+
+        (reservationDrift?'<button class="primary" onclick="atomicReceiptOutbox.resolvePostStagedReservations()">Resolve Original Use + Keep Later Reservation</button>':'')+
+        '<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">Download Safety Copy</button><button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Back to Transaction Safety</button></div>';
       openModal(html);
       return true;
     }catch(err){
@@ -1183,6 +1355,6 @@
   };
   window.atomicReceiptOutbox=Object.freeze({
     enabled,adjustmentsEnabled,consumptionEnabled,purchaseReceiptsEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,stagePurchaseReceipt,flush,recoverLocal,
-    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,reviewLocalDrift,openConflictReview,exportPendingJournal,restorePendingWorkLog
+    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,reviewLocalDrift,openConflictReview,resolvePostStagedReservations,exportPendingJournal,restorePendingWorkLog
   });
 })();

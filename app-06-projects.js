@@ -12,6 +12,8 @@ function openProjectModal(id=null){
   </div><div class="modal-actions"><button class="btn secondary" onclick="closeModal()">Cancel</button>${id?`<button class="btn danger" onclick="deleteProject(${id})">Delete</button>`:''}<button class="btn primary" onclick="saveProject(${id||'null'})">Save Project</button></div>`);
 }
 function saveProject(id){
+  if(id&&window.atomicReceiptOutbox?.isPendingRecord?.('project',id))
+    return alert('This Project belongs to a pending inventory transaction. Finish or review that transaction before editing the Project.');
   const o={title:val('prTitle'),system:val('prSystem')||'General',priority:val('prPriority'),status:val('prStatus'),trigger:val('prTrigger'),percent:Math.max(0,Math.min(100,num(val('prPercent')))),summary:val('prSummary'),plan:val('prPlan'),blockers:val('prBlockers'),nextStep:val('prNext')};
   // Store the selected canonical Readiness stage with the trigger in the
   // SAME Project write. app-20 still supplies the remaining workflow fields,
@@ -33,7 +35,7 @@ function saveProject(id){
     trackerStore.write('project',newId,{id:newId,...o,partsUsed:[],updates:[]},{message:'Project created.'});
   }
 }
-function deleteProject(id){if(!confirm('Delete this project? Linked parts, orders, logs and documents will remain but may show as unlinked.'))return;db.projects=db.projects.filter(x=>x.id!==id);db.orders.forEach(o=>{const remaining=orderProjectIds(o).filter(pid=>pid!==Number(id));o.projectId=remaining[0]??null;o.linkedProjectIds=remaining.slice(1)});db.logs.forEach(l=>{l.projectIds=l.projectIds.filter(x=>x!==id)});db.docs.forEach(d=>{d.linkedProjectIds=d.linkedProjectIds.filter(x=>x!==id)});db.parts.forEach(p=>{p.linkedProjectIds=p.linkedProjectIds.filter(x=>x!==id)});db.checklists.forEach(c=>{if(c.projectId===id)c.projectId=null});closeModal();saveDB('Project deleted.');}
+function deleteProject(id){if(window.atomicReceiptOutbox?.isPendingRecord?.('project',id))return alert('This Project belongs to a pending inventory transaction. Resolve that transaction before deleting the Project.');if(!confirm('Delete this project? Linked parts, orders, logs and documents will remain but may show as unlinked.'))return;db.projects=db.projects.filter(x=>x.id!==id);db.orders.forEach(o=>{const remaining=orderProjectIds(o).filter(pid=>pid!==Number(id));o.projectId=remaining[0]??null;o.linkedProjectIds=remaining.slice(1)});db.logs.forEach(l=>{l.projectIds=l.projectIds.filter(x=>x!==id)});db.docs.forEach(d=>{d.linkedProjectIds=d.linkedProjectIds.filter(x=>x!==id)});db.parts.forEach(p=>{p.linkedProjectIds=p.linkedProjectIds.filter(x=>x!==id)});db.checklists.forEach(c=>{if(c.projectId===id)c.projectId=null});closeModal();saveDB('Project deleted.');}
 
 let pendingProjectCompletion=null;
 function projectCloseoutAudit(project){

@@ -14,9 +14,47 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.70** (supervised atomic conflict review accessibility; October 5).
+- Current release: **v5.19.71** (safe consumption recovery + pending-record edit freeze; October 5).
 
 
+
+## v5.19.71 safe consumption recovery + pending-record edit freeze (October 5)
+
+- Owner exported the actual v5.19.70 Pending Atomic Safety Copy for operation `f00fcffd-c977-4454-a8a4-4973b86503e9` and supplied it for review.
+- Exact local/staged diagnosis from that safety export:
+  - pending operation is a **reserved-part consumption** of 1 ea `Parker 836-8 1/2" ID Oil Line` from Project `1789745161554` with new Work Log `1791166345591`;
+  - the staged Project correctly appends one `partsUsed` row linked to that Work Log and removes the Parker reservation;
+  - the local Work Log is an exact match to the staged Work Log;
+  - the local Parker Part is an exact match to the staged Part;
+  - the **only** local-vs-staged difference among journal members is `project.plannedParts`: after the Parker use was staged, the owner added a later reservation for **2 ea OETIKER 155 SS CLAMP 22.6MM MECH INTERLOCK 1EAR** (Part `1789662605156`, reservation `1791166410747`).
+- Read-only Supabase verification immediately after reviewing the export showed:
+  - the atomic-operation ledger still has no entry for operation `f00fcffd-c977-4454-a8a4-4973b86503e9`;
+  - cloud Project `1789745161554` is still exactly at the journal before-state / record version 4 with Parker reserved and no Parts Used entry;
+  - cloud Work Log `1791166345591` does not exist;
+  - cloud Parker Part `1790029520392` is record version 4 and matches the journal;
+  - cloud Oetiker Part `1789662605156` exists, has 10 on hand, and is already linked to Project `1789745161554`.
+- Root cause: the original atomic transaction itself is intact and unapplied. A **later legitimate Project reservation edit** was allowed while that Project was protected by the pending journal, so `recoverLocal()` correctly refused to overwrite the newer local Project.
+- v5.19.71 adds a guarded recovery path detected only when:
+  - the pending operation is a consumption with one new Work Log;
+  - every non-Project journal member is still the exact staged payload;
+  - the affected Project differs from staged data **only** by one or more newly added reservation rows;
+  - those later reservation IDs were not present in the journal before-state.
+- Supervised Conflict Review then shows **Resolve Original Use + Keep Later Reservation**. On activation it:
+  1. re-fetches all journal members and later-reservation Parts;
+  2. requires every existing journal member in cloud to still equal the saved before-state at the exact expected version and the new Work Log to still be absent;
+  3. requires later-reservation Parts to exist and already be linked to the Project;
+  4. revalidates the journal and local reservation drift after the async fetch;
+  5. requires explicit user confirmation that the external Pending Atomic Safety Copy was saved;
+  6. archives the original journal + later local Project state in browser recovery storage;
+  7. temporarily reconciles only journal members to their exact staged payload;
+  8. replays the **original operation ID and exact original change payload** through the existing idempotent atomic RPC;
+  9. on success, restores the later reservation list onto the now-applied Project as a separate normal local edit and queues it for ordinary guarded cloud sync;
+  10. on any preflight/RPC failure while the journal is still live, restores the prior local DB and keeps the journal.
+- The recovery never folds later reservations into the old atomic request, never changes the operation ID, never consumes the later reservation, and never creates a second Work Log / Parts Used row.
+- Prevention: Project reservations/assignments are now blocked while any atomic inventory journal is pending; ordinary Edit Project/delete and workflow step/focus/progress edits are also blocked when that specific Project is a pending-journal member. This prevents the same post-staging drift from recurring through normal Project UI.
+- Added production-harness regression coverage proving the original operation is sent exactly once with the original operation ID, the new Work Log and Parts Used row are not duplicated, and the later reservation is restored after acknowledgement.
+- Release metadata is coherently bumped to **v5.19.71** for APP_VERSION, changed Project/workflow/inventory/atomic modules, and the service-worker shell.
+- No production Supabase aircraft/inventory record is changed merely by deploying v5.19.71. The owner must explicitly run the supervised recovery after reviewing the conflict screen.
 
 ## v5.19.70 supervised atomic conflict review accessibility (October 5)
 
