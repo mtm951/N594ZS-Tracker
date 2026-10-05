@@ -733,6 +733,65 @@
     return {matched:false,deleted:true,resolved:true};
   }
 
+  async function reviewLocalDrift(){
+    let e;
+    try{
+      e=read();
+      if(!e)return alert('There is no pending transaction to review.');
+      validateIdentity(e);
+      if(!supa||!cloudSession||!cloudWorkspaceId||!navigator.onLine)
+        return alert('Reconnect to the original workspace before comparing the pending transaction.');
+      const ids=[...new Set(e.changes.map(r=>String(r.record_id)))];
+      const {data,error}=await supa.from('tracker_records')
+        .select('record_type,record_id,data,deleted_at,record_version')
+        .eq('workspace_id',e.workspaceId).in('record_id',ids);
+      if(error)throw error;
+      const serverRows=new Map(arr(data).map(r=>[key(r.record_type,r.record_id),r]));
+      const differing=e.changes.filter(r=>{
+        const row=serverRows.get(key(r.record_type,r.record_id));
+        return !row||!!row.deleted_at||!(Number(row.record_version)>0)||stable(row.data)!==stable(r.data);
+      });
+      if(differing.length){
+        alert('The cloud does not exactly match the pending transaction for '+differing.map(r=>r.record_type+' '+r.record_id).join(', ')+'. Nothing was changed or discarded. Keep the safety copy and request a supervised conflict review.');
+        return {matched:false,differing:differing.map(r=>key(r.record_type,r.record_id))};
+      }
+      const local=snapshot();
+      const localDrift=e.changes.filter(r=>stable(local.get(key(r.record_type,r.record_id))?.data??null)!==stable(r.data));
+      if(!localDrift.length)return retryFromUI();
+      const names=localDrift.map(r=>r.record_type+' '+r.record_id).join(', ');
+      if(!confirm('The cloud ALREADY contains the exact pending transaction, but this device has newer local data for '+names+'. Replace only those local records with the exact cloud transaction and acknowledge it? This will NOT receive or consume anything again.'))return {matched:true,resolved:false};
+      const current=read();
+      if(!current||current.operationId!==e.operationId||stable(current.changes)!==stable(e.changes))throw new Error('Pending transaction changed during review. Reopen Inventory Transaction Safety.');
+      for(const r of e.changes){
+        const k=key(r.record_type,r.record_id),rows={part:db.parts,project:db.projects,log:db.logs,purchase:db.purchases,order:db.orders}[r.record_type];
+        if(!rows)throw new Error('Unsupported pending record type: '+r.record_type);
+        const idx=rows.findIndex(x=>String(x.id)===String(r.record_id));
+        if(idx<0)rows.push(copy(r.data));else rows[idx]=copy(r.data);
+      }
+      if(typeof persistBrowserData==='function')await persistBrowserData(db,{quiet:true});else localStorage.setItem(DB_KEY,JSON.stringify(db));
+      renderAll();
+      let archived=[];const existing=localStorage.getItem(RESOLVED);
+      if(existing){archived=JSON.parse(existing);if(!Array.isArray(archived))throw new Error('Stored receipt recovery archive is invalid.')}
+      archived=archived.filter(x=>x.operationId!==e.operationId);
+      archived.push({operationId:e.operationId,resolvedAt:new Date().toISOString(),reason:'cloud-identical-local-drift-reconciled',journal:current});
+      const archiveJSON=JSON.stringify(archived.slice(-3));localStorage.setItem(RESOLVED,archiveJSON);
+      if(localStorage.getItem(RESOLVED)!==archiveJSON)throw new Error('Could not verify the local receipt recovery archive.');
+      for(const r of e.changes){
+        const k=key(r.record_type,r.record_id),server=serverRows.get(k);
+        cloudRecordSnapshot.set(k,stable(server.data));cloudRecordVersions.set(k,Number(server.record_version));
+      }
+      const snapshots=JSON.stringify(Object.fromEntries(cloudRecordSnapshot)),versions=JSON.stringify(Object.fromEntries(cloudRecordVersions));
+      localStorage.setItem(SNAP,snapshots);localStorage.setItem(VERS,versions);
+      if(localStorage.getItem(SNAP)!==snapshots||localStorage.getItem(VERS)!==versions)throw new Error('Could not safely update the cloud baseline; original journal was retained.');
+      localStorage.removeItem(KEY);if(localStorage.getItem(KEY))throw new Error('Could not safely clear the acknowledged journal.');
+      localStorage.removeItem(PENDING);cloudStatusLabel('Synced');openSettings();toast('Cloud-identical pending transaction safely acknowledged.','good');
+      return {matched:true,resolved:true};
+    }catch(err){
+      alert('Safe local/cloud comparison did not complete: '+(err?.message||String(err))+'. Keep the saved browser data and safety copy.');
+      return {matched:false,error:err?.message||String(err)};
+    }
+  }
+
   async function reviewConflict(){
     let e;
     try{
@@ -963,7 +1022,7 @@
         (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
       (e?(e.blocked?
         '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
-        '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Transaction</button>'):'')+
+        '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Transaction</button><button class="secondary" onclick="atomicReceiptOutbox.reviewLocalDrift()">Compare Local / Cloud Safely</button>'):'')+
       '<button class="secondary" onclick="openAdvancedTroubleshooting()">Back to Advanced</button><button class="secondary" onclick="openCloudAccount()">Cloud Account</button></div>');
   }
   // Compatibility shim for any older cached UI that still calls this method.
@@ -1064,6 +1123,6 @@
   };
   window.atomicReceiptOutbox=Object.freeze({
     enabled,adjustmentsEnabled,consumptionEnabled,purchaseReceiptsEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,stagePurchaseReceipt,flush,recoverLocal,
-    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,exportPendingJournal,restorePendingWorkLog
+    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,reviewLocalDrift,exportPendingJournal,restorePendingWorkLog
   });
 })();
