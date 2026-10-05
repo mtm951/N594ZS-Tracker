@@ -14,9 +14,26 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.71** (safe consumption recovery + pending-record edit freeze; October 5).
+- Current release: **v5.19.72** (Rotax oil-system source-page correction; October 5).
 
 
+
+## v5.19.72 Rotax oil-system source-page correction (October 5)
+
+- Owner noticed that the Commissioning / Pre-Trial-Run oil-system source button was landing on the generic **10-10-00 p.12–13 Checks before trial run** list instead of the detailed lubrication chapter. Owner screenshot showed the relevant **79-00-00 p.3 System Description** page (physical PDF page 181).
+- Source review confirmed the generic pre-trial page literally lists “Check oil hose connections are correct” and “Check for correct oil system purging,” but the detailed technical material lives in Chapter 79:
+  - **79-00-00 p.3–4** = lubrication-system diagram/system description and the required external circuit connections (tank outlet → cooler → pump inlet; engine return → tank inlet; tank vent → atmosphere).
+  - **79-00-00 p.24–25** = replenishing/purging procedure and closeout, including the explicit warning about incorrect line connections and the instruction to check lubrication-system connections/lines/clamps.
+- v5.19.72 therefore keeps the generic pre-trial checklist itself intact but adds effective item-level source overrides for checklist `82d7854b-4268-43cd-b04e-9b94ad793b81`:
+  - item **11 — Check oil-hose connections are correct** → source **79-00-00 p.3–4**, section **System description / oil-system connections**;
+  - item **12 — Check oil-system purging is complete** → source **79-00-00 p.24–25**, section **Replenishing and purging of the oil system**.
+- Item 10 (**Check oil-filter security**) remains on **10-10-00 p.12–13** because that page is the explicit source for the “tight fit of oil filter” pre-trial check; Chapter 79 shows the filter in the system but does not replace that specific security instruction.
+- The override is presentation/source-routing only in this release. It does not rewrite the existing production checklist row while the owner still has a protected pending atomic inventory journal. Both the normal Checklist detail view and Commissioning Readiness now display/use the effective source page, so Source opens directly at the detailed Chapter 79 location.
+- Added regression coverage for the oil-source overrides and direct PDF mapping:
+  - `79-00-00 p.3–4` → physical PDF page **181**;
+  - `79-00-00 p.24–25` → physical PDF page **202**.
+- Release metadata bumped coherently to **v5.19.72** for APP_VERSION, changed checklist/readiness modules, and service-worker shell.
+- No production Supabase aircraft/inventory/checklist records are modified by deploying this release.
 
 ## v5.19.71 safe consumption recovery + pending-record edit freeze (October 5)
 
