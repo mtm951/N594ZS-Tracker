@@ -125,10 +125,13 @@
   function gateRequirementHtml(checklist,item){
     const state=commissioningRequirementState(item);
     const done=!!item?.done,label=requirementGateLabel(item?.requiredBefore);
+    const sourceMeta=typeof window.checklistItemSourceMeta==='function'
+      ?window.checklistItemSourceMeta(checklist,item)
+      :{sourceDocumentId:item?.sourceDocumentId||checklist?.sourceDocumentId||checklist?.documentId||null,sourcePage:item?.sourcePage||'',sourceSection:item?.sourceSection||''};
     const doc=commissioningRequirementSourceDoc(checklist,item);
     const project=commissioningRequirementProject(checklist);
     const cid=inlineJsString(checklist.id),iid=inlineJsString(item.id);
-    const sourceExpected=!!(item?.sourceDocumentId||checklist?.sourceDocumentId||checklist?.documentId);
+    const sourceExpected=!!sourceMeta.sourceDocumentId;
     return `<div class="commissioning-requirement-row ${done?'is-done':'is-open'}">
       <button type="button" class="commissioning-requirement-open" onclick="openChecklistDetailAtItem(${cid},${iid})" title="Open this exact requirement in its checklist">
         <span class="commissioning-requirement-status" aria-label="${done?'Complete':'Open'}">${done?'✓':'○'}</span>
@@ -142,7 +145,7 @@
             <span class="mini-badge">${E(label)}</span>
             ${item?.group?`<span class="mini-badge">${E(item.group)}</span>`:''}
             ${doc?`<span class="mini-badge">${E(doc.name)}</span>`:sourceExpected?'<span class="mini-badge warn">Source record missing</span>':''}
-            ${item?.sourcePage?`<span class="mini-badge">${E(item.sourcePage)}</span>`:''}
+            ${sourceMeta.sourcePage?`<span class="mini-badge">${E(sourceMeta.sourcePage)}</span>`:''}
             ${project?`<span class="mini-badge ${project.status==='Done'?'good':'warn'}">Project: ${E(project.status||'Open')}</span>`:''}
           </span>
           <span class="commissioning-open-cue">Open requirement →</span>
@@ -173,12 +176,15 @@
     const item=commissioningChecklistItem(checklist,itemId);
     if(!checklist||!item)return false;
     const doc=commissioningRequirementSourceDoc(checklist,item);
+    const sourceMeta=typeof window.checklistItemSourceMeta==='function'
+      ?window.checklistItemSourceMeta(checklist,item)
+      :{sourcePage:item.sourcePage||''};
     if(!doc){
       if(typeof toast==='function')toast('Source document record could not be found.','bad');
       return false;
     }
     if(typeof openSourceReference==='function')
-      return openSourceReference(doc,item.sourcePage||'',{fallbackToDocument:true});
+      return openSourceReference(doc,sourceMeta.sourcePage||'',{fallbackToDocument:true});
     if(typeof openDocumentDetail==='function'){openDocumentDetail(doc.id);return true}
     return false;
   };
