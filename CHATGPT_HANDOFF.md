@@ -14,9 +14,26 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.73** (pre-trial detailed source audit; October 5).
+- Current release: **v5.19.74** (atomic-use UI acknowledgement + duplicate-reservation guard; October 5).
 
 
+
+## v5.19.74 atomic-use UI acknowledgement + duplicate-reservation guard (October 5)
+
+- Owner recorded 2 ea **OETIKER 155 SS CLAMP 22.6MM MECH INTERLOCK 1EAR** from Project **Redo oil cooler to oil pump hose** and immediately saw the new Work Log with a red **unsynced atomic transaction** banner.
+- Read-only cloud verification showed the new transaction actually committed successfully:
+  - operation `8a628601-a5c5-4cd4-934d-dd19436c3816` exists in `tracker_atomic_operations` with no conflicts;
+  - Project `1789745161554` advanced to version 7 with the 2-clamp Parts Used row and no remaining reservation;
+  - new Work Log `1791220471435` exists at version 1 with 2 clamps consumed;
+  - Oetiker Part `1789662605156` advanced to version 3.
+- Therefore the red banner in the owner's screenshot was a **stale modal presentation**, not evidence that this new Oetiker transaction failed. Atomic staging persists locally and opens the detail immediately while the async cloud save is still settling; the already-open modal did not refresh after acknowledgement.
+- v5.19.74 adds `atomicReceiptOutbox.settleUI(after)`. Atomic Reserve → Use, Assigned → Used, Quick Part Use, and existing-Work-Log consumption now wait/join the guarded cloud save before opening their result detail. If the transaction really remains pending the result view still shows the protection banner; if acknowledgement succeeds the owner sees the normal editable record instead of a stale warning.
+- A second issue was found during the same read-only cloud audit: the earlier Parker-hose Work Log `1791166345591` had already been edited at 2026-10-05 16:03 UTC to include **2 of the same Oetiker clamps**, while the later proper Reserve → Use transaction at 17:13 UTC recorded another 2 clamps. The tracker therefore currently has two Work Log consumption rows totaling 4 clamps. Do **not** silently change this production data: ask/confirm whether the owner physically used 2 total or 4 total. If only 2 total were physically used, retain the later Reserve → Use record because it correctly releases the Project reservation / Parts Used relationship, and remove the earlier duplicate Oetiker consumed-item row from the Parker Work Log after all pending browser journals are acknowledged.
+- Root workflow cause for that duplicate: **Add Consumed Item** on an existing Work Log could consume an inventory Part that was still actively reserved on a linked Project. That logged the physical outflow but did not release the Project reservation; a later normal Reserve → Use could therefore record the same physical use again.
+- Prevention in v5.19.74: existing Work Log → Add Consumed Item now refuses to record a Part when that Part has an active reservation on any linked Project, and directs the owner to **Project Parts → Reserved → Use** so reservation release, Project Parts Used, Work Log, and inventory stay synchronized in one guarded transaction.
+- Added regression coverage proving a directly added consumed item cannot bypass a matching linked-Project reservation, and static coverage that all atomic consumption result paths use the post-acknowledgement UI settle helper.
+- Release/cache metadata coherently bumped to **v5.19.74** for APP_VERSION, changed Logbook / Inventory Workflow / atomic modules, and service-worker shell.
+- No production Supabase aircraft/inventory/project/log data was changed by the v5.19.74 code work or diagnosis; all cloud inspection was read-only.
 
 ## v5.19.73 pre-trial detailed source audit (October 5)
 
