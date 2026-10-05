@@ -15,3 +15,9 @@ assert.ok(index.includes('app-13-attachments.js?v=5.19.67'));
 assert.ok(index.includes('app-09-logbook.js?v=5.19.67'));
 assert.ok(index.includes('app-06-projects.js?v=5.19.67'));
 console.log('v5.19.66 recovery UX tests passed');
+
+const atomic=fs.readFileSync(new URL('../app-66-atomic-receipt-outbox.js',import.meta.url),'utf8');
+assert.ok(atomic.includes('Open Supervised Conflict Review'));
+assert.ok(atomic.includes('function openConflictReview()'));
+assert.ok(atomic.includes('nothing will be changed'));
+assert.ok(atomic.includes('Download Safety Copy'));
