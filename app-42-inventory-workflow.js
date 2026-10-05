@@ -275,7 +275,9 @@
         '. The journal, if created, must finish syncing before retrying.');
       return;
     }
-    openLogDetail(logId);
+    const finish=()=>openLogDetail(logId);
+    if(typeof window.atomicReceiptOutbox?.settleUI==='function')window.atomicReceiptOutbox.settleUI(finish);
+    else finish();
   }
 
   window.saveReservedPartUse=function(projectId,itemId){
@@ -437,7 +439,9 @@
     };
     try{window.atomicReceiptOutbox.stageConsumption(work,'Assigned part moved to Parts Used and inventory history updated.',meta)}
     catch(error){alert('Atomic part use was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.');return}
-    openProjectDetail(project.id);
+    const finish=()=>openProjectDetail(project.id);
+    if(typeof window.atomicReceiptOutbox?.settleUI==='function')window.atomicReceiptOutbox.settleUI(finish);
+    else finish();
   }
 
   window.saveAssignedPartUse=function(projectId,partId){
@@ -709,7 +713,9 @@
     };
     try{window.atomicReceiptOutbox.stageConsumption(work,'Quick part use recorded.',meta)}
     catch(error){alert('Atomic part use was not safely saved: '+(error?.message||String(error))+'. Review the cloud status before retrying.');return}
-    openLogDetail(logId);
+    const finish=()=>openLogDetail(logId);
+    if(typeof window.atomicReceiptOutbox?.settleUI==='function')window.atomicReceiptOutbox.settleUI(finish);
+    else finish();
   }
 
   window.saveQuickPartUse=function(){
