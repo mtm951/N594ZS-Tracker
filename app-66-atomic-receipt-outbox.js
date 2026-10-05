@@ -1082,7 +1082,7 @@
         (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
       (e?(e.blocked?
         '<button class="primary" onclick="atomicReceiptOutbox.openConflictReview()">Open Supervised Conflict Review</button>':
-        '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Transaction</button><button class="secondary" onclick="atomicReceiptOutbox.reviewLocalDrift()">Compare Local / Cloud Safely</button>'):'')+
+        '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Transaction</button><button class="secondary" onclick="atomicReceiptOutbox.reviewLocalDrift()">Compare Local / Cloud Safely</button><button class="secondary" onclick="atomicReceiptOutbox.openConflictReview()">Open Supervised Conflict Review</button>'):'')+
       '<button class="secondary" onclick="openAdvancedTroubleshooting()">Back to Advanced</button><button class="secondary" onclick="openCloudAccount()">Cloud Account</button></div>');
   }
   // Compatibility shim for any older cached UI that still calls this method.
