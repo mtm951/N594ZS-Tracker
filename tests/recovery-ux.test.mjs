@@ -11,9 +11,9 @@ assert.ok(log.includes('atomicReceiptOutbox.openSettings()'));
 assert.ok(attachments.includes('Could not load attachments.</b>'));
 assert.ok(attachments.includes('renderAttachments('));
 assert.ok(projects.includes("project.status==='Done'?(a.warnings.length?'Completed with Warning':'Completed')"));
-assert.ok(index.includes('app-13-attachments.js?v=5.19.67'));
-assert.ok(index.includes('app-09-logbook.js?v=5.19.67'));
-assert.ok(index.includes('app-06-projects.js?v=5.19.67'));
+assert.ok(index.includes('app-13-attachments.js?v=5.19.68'));
+assert.ok(index.includes('app-09-logbook.js?v=5.19.68'));
+assert.ok(index.includes('app-06-projects.js?v=5.19.68'));
 console.log('v5.19.66 recovery UX tests passed');
 
 const atomic=fs.readFileSync(new URL('../app-66-atomic-receipt-outbox.js',import.meta.url),'utf8');
