@@ -792,6 +792,66 @@
     }
   }
 
+  function conflictValue(value){
+    if(value===undefined)return '—';
+    if(value===null)return 'null';
+    if(typeof value==='string')return value.length>220?value.slice(0,217)+'…':value;
+    let text;
+    try{text=JSON.stringify(value,null,2)}catch(_e){text=String(value)}
+    return text.length>900?text.slice(0,897)+'…':text;
+  }
+  function topLevelDiffs(staged,cloud){
+    const keys=[...new Set([...Object.keys(staged||{}),...Object.keys(cloud||{})])].sort();
+    return keys.filter(k=>stable(staged?.[k])!==stable(cloud?.[k])).map(k=>({
+      field:k,staged:staged?.[k],cloud:cloud?.[k]
+    }));
+  }
+  async function openConflictReview(){
+    let e;
+    try{
+      e=read();
+      if(!e)return alert('There is no pending transaction to review.');
+      validateIdentity(e);
+      if(!supa||!cloudSession||!cloudWorkspaceId||!navigator.onLine)
+        return alert('Reconnect to the original workspace before opening the supervised conflict review.');
+      const ids=[...new Set(e.changes.map(r=>String(r.record_id)))];
+      const {data,error}=await supa.from('tracker_records')
+        .select('record_type,record_id,data,deleted_at,record_version')
+        .eq('workspace_id',e.workspaceId).in('record_id',ids);
+      if(error)throw error;
+      const serverRows=new Map(arr(data).map(r=>[key(r.record_type,r.record_id),r]));
+      let html=modalHeader('Supervised Transaction Conflict Review','Read-only comparison — nothing will be changed')+
+        '<div class="notice"><b>Safety mode:</b> this screen only compares the original staged transaction with the current cloud records. It will not write, delete, consume, receive, or overwrite anything.</div>';
+      for(const staged of e.changes){
+        const k=key(staged.record_type,staged.record_id),remote=serverRows.get(k);
+        html+='<div class="detail-section"><h3 style="margin:0 0 6px">'+esc(staged.record_type.toUpperCase())+' · '+esc(staged.record_id)+'</h3>';
+        if(!remote){
+          html+='<div class="danger-note"><b>Cloud record not found.</b> The staged record exists locally in the pending transaction, but no matching cloud record was returned.</div>';
+        }else if(remote.deleted_at){
+          html+='<div class="danger-note"><b>Cloud record is deleted.</b> No automatic restoration will be attempted.</div>';
+        }else{
+          const diffs=topLevelDiffs(staged.data,remote.data);
+          html+='<div class="muted small">Cloud version: '+esc(String(remote.record_version))+' · '+(diffs.length?'Differences found: '+diffs.length:'<b>Exact data match</b>')+'</div>';
+          if(diffs.length){
+            html+='<div style="margin-top:8px">';
+            for(const d of diffs){
+              html+='<div class="notice" style="margin:6px 0"><b>'+esc(d.field)+'</b><div class="small"><b>Original staged:</b><pre style="white-space:pre-wrap;margin:4px 0 8px">'+esc(conflictValue(d.staged))+'</pre><b>Current cloud:</b><pre style="white-space:pre-wrap;margin:4px 0">'+esc(conflictValue(d.cloud))+'</pre></div></div>';
+            }
+            html+='</div>';
+          }
+        }
+        html+='</div>';
+      }
+      html+='<div class="notice"><b>Recommended next step:</b> review the differences above. Do not retry or manually repeat the inventory operation until we determine which version represents the intended work. The original atomic journal remains protected.</div>'+
+        '<div class="modal-actions"><button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">Download Safety Copy</button><button class="secondary" onclick="atomicReceiptOutbox.openSettings()">Back to Transaction Safety</button></div>';
+      openModal(html);
+      return true;
+    }catch(err){
+      alert('The supervised conflict review could not be loaded: '+(err?.message||String(err))+'. No records were changed.');
+      return false;
+    }
+  }
+
   async function reviewConflict(){
     let e;
     try{
@@ -1021,7 +1081,7 @@
       (pending()?'<button class="secondary" onclick="atomicReceiptOutbox.exportPendingJournal()">'+
         (e?.operationKind==='consumption'?'Download Pending Atomic Safety Copy':'Download Pending Receipt Safety Copy')+'</button>':'')+
       (e?(e.blocked?
-        '<button class="primary" onclick="atomicReceiptOutbox.reviewConflict()">Compare with Cloud Safely</button>':
+        '<button class="primary" onclick="atomicReceiptOutbox.openConflictReview()">Open Supervised Conflict Review</button>':
         '<button class="primary" onclick="atomicReceiptOutbox.retryFromUI()">Retry Pending Transaction</button><button class="secondary" onclick="atomicReceiptOutbox.reviewLocalDrift()">Compare Local / Cloud Safely</button>'):'')+
       '<button class="secondary" onclick="openAdvancedTroubleshooting()">Back to Advanced</button><button class="secondary" onclick="openCloudAccount()">Cloud Account</button></div>');
   }
@@ -1123,6 +1183,6 @@
   };
   window.atomicReceiptOutbox=Object.freeze({
     enabled,adjustmentsEnabled,consumptionEnabled,purchaseReceiptsEnabled,shouldHandle,hasPending:pending,isPendingRecord,stage,stageAdjustment,stageConsumption,stagePurchaseReceipt,flush,recoverLocal,
-    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,reviewLocalDrift,exportPendingJournal,restorePendingWorkLog
+    openSettings,toggle,toggleAdjustments,toggleConsumption,retryFromUI,reviewConflict,reviewLocalDrift,openConflictReview,exportPendingJournal,restorePendingWorkLog
   });
 })();
