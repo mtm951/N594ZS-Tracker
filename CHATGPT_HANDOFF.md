@@ -14,9 +14,22 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.65** (records / PDF-ready report generator; September 30).
+- Current release: **v5.19.69** (atomic recovery / release-cache repair; October 5).
 
 
+
+## v5.19.69 atomic recovery / release-cache repair (October 5)
+
+- An unresolved owner-side atomic **consumption** journal remains protected in the browser. It involves Project `1789745161554` (**Redo oil cooler to oil pump hose**), Part `1790029520392` (**Parker 836-8 1/2" ID Oil Line**), and pending Work Log `1791166345591`. Do **not** manually consume the part again, clear site/browser data, force a cloud reload, delete the pending Work Log, or discard the journal while it remains unresolved.
+- Read-only Supabase inspection during recovery found the Project and Part in the cloud at record version 4, with the Part at `stockQty: 0` and the Project Open at 67%. The queried pending Work Log ID was not present in that read. Treat that as diagnostic evidence only; the protected browser journal is still required to resolve the transaction safely.
+- v5.19.66 added direct pending-transaction recovery from the Work Log, an attachment-fetch Retry action, and **Completed with Warning** closeout wording.
+- v5.19.67 added a guarded local/cloud comparison for the case where cloud may already contain the exact staged transaction while the browser copy has drifted. It refuses to reconcile if the staged transaction and cloud are not exact matches.
+- v5.19.68 added **Open Supervised Conflict Review**, a read-only field-level comparison of the original staged transaction against current cloud records. It cannot receive, consume, overwrite, or delete records and retains the safety-copy path.
+- The release sequence exposed a cache/version hygiene problem: the atomic recovery module briefly remained referenced by an old cache-buster, and visible `APP_VERSION` / service-worker shell versions were not kept aligned with the recovery module. v5.19.69 aligns `APP_VERSION`, `app-01-seed.js`, `app-66-atomic-receipt-outbox.js`, and the service-worker shell at **5.19.69**.
+- Added `tests/release-cache-consistency.test.mjs` so the visible app version, safety-critical atomic module cache-buster, and service-worker shell must match; all local `app-*.js` script tags must also carry explicit semver cache-busters.
+- Recovery/report UI tests no longer hard-code historical unrelated release numbers merely to prove that a module is cache-busted. CI now runs the release/cache consistency check before the broader regression suite so version drift fails fast and clearly.
+- No Supabase aircraft/inventory records were modified as part of the recovery-code or release-hygiene work described above. Cloud inspection was read-only.
+- Next owner step after the correct v5.19.69 code is visibly loaded: open **Inventory Transaction Safety → Open Supervised Conflict Review**, inspect the exact Project / Work Log / Part differences, and continue only from that evidence. Do not use ordinary Retry as a substitute for supervised review while the records differ.
 
 ## September 28 source-faithful Kitfox checklist rebuild
 
