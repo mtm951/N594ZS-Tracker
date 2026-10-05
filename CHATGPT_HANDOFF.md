@@ -14,9 +14,20 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.69** (atomic recovery / release-cache repair; October 5).
+- Current release: **v5.19.70** (supervised atomic conflict review accessibility; October 5).
 
 
+
+## v5.19.70 supervised atomic conflict review accessibility (October 5)
+
+- Owner screenshot after the v5.19.69 cleanup still showed **Retry Pending Transaction** and **Compare Local / Cloud Safely**. This was **not** another stale-cache failure: current production code intentionally showed **Open Supervised Conflict Review** only when the journal's `blocked` flag was already set.
+- The owner's current pending consumption can fail the safe local/cloud comparison because Project / Work Log cloud data differs from the staged transaction without automatically setting `blocked=true`. That made the read-only supervised review inaccessible from exactly the state where it is useful.
+- v5.19.70 keeps ordinary Retry and Compare actions for an unblocked pending journal but also exposes **Open Supervised Conflict Review** at all times while a pending journal exists. Blocked journals still show the supervised review as the primary action and do not expose ordinary retry.
+- The supervised review remains read-only: it compares the staged transaction against current cloud records and cannot receive, consume, overwrite, delete, or acknowledge anything merely by opening the screen.
+- Added a production-harness regression proving that a normal nonblocked pending transaction renders **Retry Pending Transaction**, **Compare Local / Cloud Safely**, and **Open Supervised Conflict Review** together.
+- Release metadata is bumped coherently to **v5.19.70** for `APP_VERSION`, `app-01-seed.js`, `app-66-atomic-receipt-outbox.js`, and the service-worker shell.
+- No Supabase production aircraft/inventory data is modified by this release.
+- Owner acceptance: once v5.19.70 is visibly loaded, open **Inventory Transaction Safety**. The existing pending transaction should show **Open Supervised Conflict Review** alongside Retry/Compare. Use **Open Supervised Conflict Review** (not Retry) and send/review the resulting field-level differences before any recovery write is considered.
 
 ## v5.19.69 atomic recovery / release-cache repair (October 5)
 

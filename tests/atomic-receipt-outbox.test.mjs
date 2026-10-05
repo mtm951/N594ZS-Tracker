@@ -157,6 +157,18 @@ function receiptWork(tx){
   assert.equal(h.saved.length,0);
 }
 
+// Every pending transaction must expose the read-only supervised review,
+ // even before the journal is formally marked blocked. This prevents a safe
+ // cloud mismatch check from trapping the owner behind only Retry/Compare.
+ {
+   const h=makeHarness();
+   h.ctx.atomicReceiptOutbox.stage(receiptWork,'Pending review fixture');
+   h.ctx.atomicReceiptOutbox.openSettings();
+   assert.match(h.lastModal(),/Retry Pending Transaction/);
+   assert.match(h.lastModal(),/Compare Local \/ Cloud Safely/);
+   assert.match(h.lastModal(),/Open Supervised Conflict Review/);
+ }
+ 
 {
   const h=makeHarness();
   assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true);
