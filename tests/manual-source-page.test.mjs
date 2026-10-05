@@ -152,6 +152,12 @@ assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'79-00-00 p.3–4'),181,
   'oil-system connection source should open at Chapter 79 physical PDF page 181');
 assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'79-00-00 p.24–25'),202,
   'oil-system purge source should open at Chapter 79 physical PDF page 202');
+assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'73-00-00 p.19–22'),119,
+  'throttle/choke source should open at Chapter 73 physical PDF page 119');
+assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'10-10-00 p.5–8'),35,
+  'engine-suspension source should open at Chapter 10 physical PDF page 35');
+assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'24-00-00 p.2'),46,
+  'wiring source should open at Chapter 24 physical PDF page 46');
 assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'78–00–00 p.5'),169);
 assert.equal(ctx.sourcePdfPageFromCitation(rotaxDoc,'10-10-00 p.12–13'),42);
 
