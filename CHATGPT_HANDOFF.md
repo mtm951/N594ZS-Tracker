@@ -14,9 +14,40 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.72** (Rotax oil-system source-page correction; October 5).
+- Current release: **v5.19.73** (pre-trial detailed source audit; October 5).
 
 
+
+## v5.19.73 pre-trial detailed source audit (October 5)
+
+- Owner asked to apply the v5.19.72 oil-source principle to the rest of **ROTAX 912 Installation Manual — Pre-Trial-Run Closeout** rather than having every Source button blindly land on the generic 10-10-00 p.12–13 checklist.
+- Audited all 17 pre-trial items against the supplied **IM_912_Series_Ed3_R0.pdf**. Rule used: redirect only when the Installation Manual contains a more specific technical section that directly supports the same check; keep 10-10-00 p.12–13 when that pre-trial list is itself the most exact source or when a single detailed section would cover only part of a compound check.
+- Detailed source routing now covers:
+  - item **2 — throttle / choke controls** → **73-00-00 p.19–22**, throttle/choke Bowden-cable actuation, free travel and stops;
+  - item **9 — engine suspension** → **10-10-00 p.5–8**, engine suspension / mechanical interfaces;
+  - item **11 — oil-hose connections** → **79-00-00 p.3–4**, lubrication-system description / external oil connections;
+  - item **12 — oil-system purging** → **79-00-00 p.24–25**, replenishing and purging procedure;
+  - item **15 — wiring routed / secured** → **24-00-00 p.2**, circuit-wiring routing, clamping and strain relief.
+- The remaining pre-trial checks intentionally retain **10-10-00 p.12–13** because that is the exact instruction and the manual does not provide one more-specific section that fully covers the whole check:
+  - fluids (oil/coolant/fuel as one compound item);
+  - tools / foreign / loose objects;
+  - propeller security + pitch;
+  - optional propeller-control stop/range check;
+  - aircraft/chock/propeller-area security;
+  - general visual inspection;
+  - general leak check;
+  - oil-filter security;
+  - broad systems/instruments-installed check;
+  - broad gauges-accuracy check;
+  - exhaust security + blockage as one compound check;
+  - cold-weather engine preheat.
+- Source routing remains an app-side effective override while the owner has the protected pending atomic inventory journal. This release does **not** rewrite production checklist data in Supabase or touch inventory/Project/Work Log records.
+- Added regression coverage for all detailed overrides and direct PDF targets:
+  - 73-00-00 p.19 → physical PDF page **119**;
+  - 10-10-00 p.5 → physical PDF page **35**;
+  - 24-00-00 p.2 → physical PDF page **46**;
+  - existing Chapter 79 oil routes remain protected.
+- Release metadata/cache state bumped coherently to **v5.19.73** for APP_VERSION, changed checklist module, atomic safety module cache-buster, and service-worker shell.
 
 ## v5.19.72 Rotax oil-system source-page correction (October 5)
 
