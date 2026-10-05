@@ -16,4 +16,12 @@ assert.equal(seedTag,appVersion,'seed cache-buster must match visible APP_VERSIO
 assert.equal(atomicTag,appVersion,'atomic recovery cache-buster must match visible APP_VERSION');
 assert.equal(swVersion,appVersion,'service-worker shell version must match visible APP_VERSION');
 
+const appScripts=[...index.matchAll(/<script\s+src="(app-[^"]+)"/g)].map(m=>m[1]);
+assert.ok(appScripts.length>50,'expected the local application module set');
+for(const src of appScripts){
+  assert.match(src,/^app-[^?]+\.js\?v=\d+\.\d+\.\d+$/,src+' must use an explicit semver cache-buster');
+}
+const moduleNames=appScripts.map(src=>src.split('?')[0]);
+assert.equal(new Set(moduleNames).size,moduleNames.length,'local app modules must not be loaded twice');
+
 console.log('release/cache version consistency passed:',appVersion);

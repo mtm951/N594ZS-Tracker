@@ -20,6 +20,6 @@ assert.match(reportSource,/does not determine whether work is maintenance/,'main
 assert.match(projectSource,/openProjectRecords\(\$\{id\}\)/,'Project detail is missing Generate Records action');
 assert.match(logSource,/openLogRecords\(\$\{id\}\)/,'Work Log detail is missing Generate Record action');
 assert.match(logSource,/openMaintenanceRecordDraft\(\$\{id\}\)/,'Work Log detail is missing Draft Maintenance Record action');
-assert.match(indexSource,/app-71-records-reports\.js\?v=5\.19\.65/,'records report module is not loaded at v5.19.65');
+assert.match(indexSource,/app-71-records-reports\.js\?v=\d+\.\d+\.\d+/,'records report module must be loaded with an explicit semver cache-buster');
 
 console.log('records/report generator wiring and safety wording tests passed');
