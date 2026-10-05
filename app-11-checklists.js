@@ -3,6 +3,29 @@
 // Specialized checklist types (currently Annual Inspection) are dispatched explicitly.
 
 function checklistItemById(c,id){return c?.items?.find(x=>String(x.id)===String(id))||null}
+const CHECKLIST_SOURCE_OVERRIDES={
+  '82d7854b-4268-43cd-b04e-9b94ad793b81':{
+    '11':{
+      sourceDocumentId:301,
+      sourcePage:'79-00-00 p.3–4',
+      sourceSection:'System description / oil-system connections'
+    },
+    '12':{
+      sourceDocumentId:301,
+      sourcePage:'79-00-00 p.24–25',
+      sourceSection:'Replenishing and purging of the oil system'
+    }
+  }
+};
+function checklistItemSourceMeta(c,i){
+  const override=CHECKLIST_SOURCE_OVERRIDES[String(c?.id||'')]?.[String(i?.id||'')]||null;
+  return {
+    sourceDocumentId:override?.sourceDocumentId??i?.sourceDocumentId??c?.sourceDocumentId??c?.documentId??null,
+    sourcePage:override?.sourcePage??i?.sourcePage??'',
+    sourceSection:override?.sourceSection??i?.sourceSection??''
+  };
+}
+window.checklistItemSourceMeta=checklistItemSourceMeta;
 function isAnnualInspectionChecklist(c){return !!c?.inspectionMode&&Number(c.id)===503}
 function checklistSourceDocs(c){
   const ids=[c?.sourceDocumentId,c?.documentId,...arr(c?.sourceDocumentIds)].filter(x=>x!==null&&x!==undefined&&x!=='');
@@ -11,7 +34,7 @@ function checklistSourceDocs(c){
     .map(id=>typeof docById==='function'?docById(id):null).filter(Boolean);
 }
 function checklistItemSourceDoc(c,i){
-  const id=i?.sourceDocumentId||c?.sourceDocumentId||c?.documentId||null;
+  const id=checklistItemSourceMeta(c,i).sourceDocumentId;
   return id!==null&&id!==undefined&&typeof docById==='function'?docById(id):null;
 }
 function checklistReadinessGateLabel(gate){
@@ -126,13 +149,14 @@ function openChecklistDetail(id){
       <div class="detail-card"><div class="section-tools"><h3>Checklist Items</h3><button class="icon-btn" id="ckDetailAdd">+ Item</button></div>
         ${items.map(i=>{
           const itemDoc=checklistItemSourceDoc(c,i);
+          const sourceMeta=checklistItemSourceMeta(c,i);
           const gateLabel=checklistReadinessGateLabel(i.requiredBefore);
           const meta=[
             gateLabel?`<span class="mini-badge warn">${esc(gateLabel)}</span>`:'',
             i.group?`<span class="mini-badge">${esc(i.group)}</span>`:'',
             itemDoc?`<span class="mini-badge">${esc(itemDoc.name)}</span>`:'',
-            i.sourcePage?`<span class="mini-badge">${esc(i.sourcePage)}</span>`:'',
-            i.sourceSection?`<span class="mini-badge">${esc(i.sourceSection)}</span>`:''
+            sourceMeta.sourcePage?`<span class="mini-badge">${esc(sourceMeta.sourcePage)}</span>`:'',
+            sourceMeta.sourceSection?`<span class="mini-badge">${esc(sourceMeta.sourceSection)}</span>`:''
           ].filter(Boolean).join('');
           return `<div class="check-item" data-checklist-item-id="${esc(String(i.id))}"><input type="checkbox" data-detail-check data-item-id="${esc(String(i.id))}" ${i.done?'checked':''}><div style="flex:1"><div class="${i.done?'done':''}">${esc(i.text)}</div>${meta?`<div class="task-meta" style="margin-top:5px">${meta}</div>`:''}${i.moreInfo?`<div class="task-note" style="margin-top:5px">${esc(i.moreInfo)}</div>`:''}${i.note?`<div class="task-note" style="margin-top:5px"><b>Review note:</b> ${esc(i.note)}</div>`:''}</div><div class="action-row" style="gap:5px;flex-wrap:wrap">${itemDoc?`<button class="icon-btn" data-detail-source data-item-id="${esc(String(i.id))}">Source</button>`:''}<button class="icon-btn" data-detail-edit data-item-id="${esc(String(i.id))}">Edit</button></div></div>`;
         }).join('')||'<div class="empty">No items yet.</div>'}
@@ -160,8 +184,9 @@ function openChecklistDetail(id){
   box?.querySelectorAll('[data-detail-source]').forEach(el=>el.addEventListener('click',async()=>{
     const item=checklistItemById(c,el.dataset.itemId),doc=checklistItemSourceDoc(c,item);
     if(!doc)return;
+    const sourceMeta=checklistItemSourceMeta(c,item);
     if(typeof openSourceReference==='function'){
-      await openSourceReference(doc,item?.sourcePage||'',{fallbackToDocument:true});
+      await openSourceReference(doc,sourceMeta.sourcePage||'',{fallbackToDocument:true});
       return;
     }
     openDocumentDetail(doc.id);
