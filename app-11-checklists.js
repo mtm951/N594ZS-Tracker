@@ -5,6 +5,16 @@
 function checklistItemById(c,id){return c?.items?.find(x=>String(x.id)===String(id))||null}
 const CHECKLIST_SOURCE_OVERRIDES={
   '82d7854b-4268-43cd-b04e-9b94ad793b81':{
+    '2':{
+      sourceDocumentId:301,
+      sourcePage:'73-00-00 p.19–22',
+      sourceSection:'Throttle / choke Bowden-cable actuation and stops'
+    },
+    '9':{
+      sourceDocumentId:301,
+      sourcePage:'10-10-00 p.5–8',
+      sourceSection:'Engine suspension / mechanical interfaces'
+    },
     '11':{
       sourceDocumentId:301,
       sourcePage:'79-00-00 p.3–4',
@@ -14,6 +24,11 @@ const CHECKLIST_SOURCE_OVERRIDES={
       sourceDocumentId:301,
       sourcePage:'79-00-00 p.24–25',
       sourceSection:'Replenishing and purging of the oil system'
+    },
+    '15':{
+      sourceDocumentId:301,
+      sourcePage:'24-00-00 p.2',
+      sourceSection:'Guidelines for circuit wiring / routing and strain relief'
     }
   }
 };
