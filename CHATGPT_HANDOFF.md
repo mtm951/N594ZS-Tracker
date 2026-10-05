@@ -20,6 +20,7 @@ This file exists to preserve development continuity across ChatGPT conversations
 
 ## v5.19.73 pre-trial detailed source audit (October 5)
 
+- PR #50 squash-merged to `main` at `e2f13a355e27d6fc19fbde9c18ea4a0df3c758a6`. Exact final branch tip `d546a1265aa0d830851e2674a932abfdf53d8b04` passed the complete regression workflow in run `37331202873` before merge.
 - Owner asked to apply the v5.19.72 oil-source principle to the rest of **ROTAX 912 Installation Manual — Pre-Trial-Run Closeout** rather than having every Source button blindly land on the generic 10-10-00 p.12–13 checklist.
 - Audited all 17 pre-trial items against the supplied **IM_912_Series_Ed3_R0.pdf**. Rule used: redirect only when the Installation Manual contains a more specific technical section that directly supports the same check; keep 10-10-00 p.12–13 when that pre-trial list is itself the most exact source or when a single detailed section would cover only part of a compound check.
 - Detailed source routing now covers:
