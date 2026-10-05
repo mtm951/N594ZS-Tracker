@@ -6,6 +6,12 @@
   if(window.__n594zsV53InventoryWorkflowInstalled)return;
   window.__n594zsV53InventoryWorkflowInstalled=true;
 
+  function blockWhileAtomicPending(action){
+    if(!window.atomicReceiptOutbox?.hasPending?.())return false;
+    alert('Finish or review the pending inventory transaction before '+action+'. This prevents newer local edits from changing records protected by the atomic journal.');
+    return true;
+  }
+
   var style=document.createElement('style');
   style.textContent=`
     .assigned-part-row{grid-template-columns:minmax(0,1fr) auto auto!important}
@@ -571,6 +577,7 @@
   function assignedPartPickerId(){if(typeof partPickerId==='function')return partPickerId('apj');return selectedNumber('apjPartFallback')}
 
   window.saveAssignedPartToProject=function(projectId){
+    if(blockWhileAtomicPending('assigning another Part'))return;
     var project=projectById(Number(projectId)),partId=assignedPartPickerId(),part=partId?partById(Number(partId)):null;
     if(!project||!part)return alert('Choose an inventory part.');
     part.linkedProjectIds=arr(part.linkedProjectIds).map(Number).filter(Boolean);
@@ -580,6 +587,7 @@
   };
 
   window.unassignPartFromProject=function(projectId,partId){
+    if(blockWhileAtomicPending('changing Part assignments'))return;
     var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
     var hasReservation=arr(project.plannedParts).some(function(x){return Number(x.partId)===Number(part.id)});
     var hasUse=arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)});
@@ -600,6 +608,7 @@
   };
 
   window.saveReserveSpecificPart=function(projectId,partId){
+    if(blockWhileAtomicPending('adding or changing a reservation'))return;
     var project=projectById(Number(projectId)),part=partById(Number(partId)),qty=num(val('rspQty'));if(!project||!part)return;
     if(qty<=0)return alert('Enter a positive quantity.');
     var existing=arr(project.plannedParts).find(function(x){return Number(x.partId)===Number(part.id)});
@@ -741,5 +750,16 @@
     aps.textContent='.assigned-part-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid #edf1f4}.assigned-part-row:last-child{border-bottom:0}.assigned-part-stock{text-align:right}.assigned-part-stock small{display:block;color:var(--muted);margin-top:4px;white-space:nowrap}@media(max-width:700px){.assigned-part-row{grid-template-columns:1fr}.assigned-part-stock{text-align:left}.assigned-part-stock small{white-space:normal}}';
     document.head.appendChild(aps);
   }
+
+  const openReservePartModalBase=window.openReservePartModal;
+  if(typeof openReservePartModalBase==='function')window.openReservePartModal=function(...args){
+    if(blockWhileAtomicPending('adding a reservation'))return;
+    return openReservePartModalBase.apply(this,args);
+  };
+  const removeReservedPartBase=window.removeReservedPart;
+  if(typeof removeReservedPartBase==='function')window.removeReservedPart=function(...args){
+    if(blockWhileAtomicPending('releasing a reservation'))return;
+    return removeReservedPartBase.apply(this,args);
+  };
 
 })();
