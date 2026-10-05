@@ -418,7 +418,7 @@ function receiptWork(tx){
   assert.match(h.lastModal(),/Purchase stock receipts: Protected/);
   assert.doesNotMatch(h.lastModal(),/Enable Receipt Testing|Turn Off for New Receipts|Enable Atomic Adjustment Testing|Enable Atomic Reserve/);
   assert.match(h.lastModal(),/no linked Part update/);
-  assert.match(h.lastModal(),/Compare with Cloud Safely/);
+  assert.match(h.lastModal(),/Open Supervised Conflict Review/);
   const result=await h.ctx.atomicReceiptOutbox.reviewConflict();
   assert.equal(result.resolved,true);
   assert.equal(h.ctx.atomicReceiptOutbox.enabled(),true);
