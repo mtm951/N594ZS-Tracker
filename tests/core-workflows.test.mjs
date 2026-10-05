@@ -644,5 +644,32 @@ console.log('partial reserved use and warning cancellation passed');
   assert.equal(db.parts[0].stockQty,1);
   assert.equal(h.partAvailable(db.parts[0]),0);
 }
+// A linked Work Log must not record the same inventory Part directly when
+// that Part still has an active Project reservation. The Project Reserve → Use
+// path owns the reservation release and matching Parts Used record.
+{
+  const part={id:93,name:'Reserved clamp',unit:'ea',stockQty:10,unitCost:0.36,
+    linkedProjectIds:[94],inventoryAdjustments:[]};
+  const project={id:94,title:'Clamp install',system:'Engine',status:'In Progress',
+    plannedParts:[{id:940,partId:93,name:'Reserved clamp',qty:2,unit:'ea'}],partsUsed:[]};
+  const log={id:95,date:'2026-10-05',system:'Engine',projectIds:[94],work:'Existing hose work',
+    observations:'',blockers:'',nextStep:'',otherCost:'',notes:'',consumedParts:[]};
+  const db={parts:[part],projects:[project],logs:[log],purchases:[],orders:[],docs:[],settings:{showCosts:true}};
+  const values={cpPart:'93',cpName:'Reserved clamp',cpQty:'2',cpUnit:'ea',cpCost:'0.36',cpNotes:''};
+  const h=inventoryHarness(db,values);
+  h.RECORD_ARRAYS={part:'parts',project:'projects',log:'logs',purchase:'purchases',document:'docs'};
+  const alerts=[];h.alert=msg=>alerts.push(String(msg));
+  load(dataStoreSource,h,'app-17a-data-store.js');
+  load(logbookSource,h,'app-09-logbook.js');
+  let staged=0;
+  h.atomicReceiptOutbox={isPendingRecord:()=>false,shouldHandle:()=>true,
+    stageConsumption:()=>{staged++}};
+  h.saveConsumedPart(95);
+  assert.equal(staged,0,'direct Work Log add bypassed an active Project reservation');
+  assert.equal(db.logs[0].consumedParts.length,0,'reserved Part was double-recorded in Work Log');
+  assert.match(alerts[0],/already reserved on the linked Project/);
+  assert.match(alerts[0],/Reserved → Use/);
+}
+
 console.log('assigned, quick and Work Log production consumption handlers passed');
 
