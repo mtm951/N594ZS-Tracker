@@ -8,6 +8,8 @@ assert.match(checklist,/'11':\{[\s\S]*sourcePage:'79-00-00 p\.3–4'[\s\S]*sourc
   'oil-hose connection check must cite the detailed Chapter 79 system description');
 assert.match(checklist,/'12':\{[\s\S]*sourcePage:'79-00-00 p\.24–25'[\s\S]*sourceSection:'Replenishing and purging of the oil system'/,
   'oil-system purge check must cite the detailed Chapter 79 purge procedure');
+assert.doesNotMatch(checklist,/'10':\{/,
+  'oil-filter security should keep its explicit 10-10-00 pre-trial source rather than receive a Chapter 79 override');
 assert.ok(checklist.includes('checklistItemSourceMeta(c,i)'));
 assert.ok(checklist.includes('openSourceReference(doc,sourceMeta.sourcePage'));
 assert.ok(readiness.includes('window.checklistItemSourceMeta(checklist,item)'));
