@@ -14,9 +14,18 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.74** (atomic-use UI acknowledgement + duplicate-reservation guard; October 5).
+- Current release: **v5.19.75** (consumables date-range report; November 12).
 
 
+
+## v5.19.75 Parts & Consumables date-range report (November 12)
+
+- Added read-only reporting in **Aircraft Ops → Reports → Parts & Consumables Used** (new `app-72-consumption-report.js`). From/Through dates are inclusive; filter by system and group by Part, Project, or Date. All reports draw exclusively from dated `Work Log.consumedParts` entries. Project `partsUsed`, purchases, and reservations are deliberately not summed because they may describe the same physical usage.
+- Grouped rows are clickable: details list each consumed item with its source Work Log, with a direct Open Work Log action. Multi-project Work Logs remain a single consumption event, even when grouped by project. Part grouping separates units rather than adding feet and pieces.
+- Known material cost totals use the **historical cost recorded on each consumed item**, not current Part prices. Entries lacking a recorded unit cost are counted/disclosed, not treated as free. Undated entries and invalid/zero quantities are excluded and disclosed.
+- Export detail rows to CSV (with spreadsheet-formula escaping) and Print / Save PDF using the same native browser print pathway as existing report generator. No Supabase changes, no mutations to aircraft/inventory records, no new tab.
+- Added `tests/consumption-date-range-report.test.mjs` covering inclusive dates, grouped quantities, multi-project de-duplication, historical pricing, missing data, system selection, CSV escaping and wiring. Release metadata `APP_VERSION`, `index.html` script cache and `sw.js` shell updated consistently to **v5.19.75**.
+- **Validation still needed**: GitHub Actions full suite and real desktop/mobile acceptance. On a Synced device with no pending atomic journal, open Aircraft Ops → Reports, choose a date window covering known use, verify values against the original Work Logs, drill into at least one, then download CSV and Save as PDF. Report does not change cloud data.
 
 ## v5.19.74 atomic-use UI acknowledgement + duplicate-reservation guard (October 5)
 
