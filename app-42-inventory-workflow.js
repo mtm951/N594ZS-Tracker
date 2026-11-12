@@ -372,10 +372,12 @@
     var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
     var reserved=arr(project.plannedParts).find(function(x){return Number(x.partId)===Number(part.id)});
     if(reserved&&typeof openUseReservedPartModal==='function')return openUseReservedPartModal(project.id,reserved.id);
+    var previous=projectPartWorkspaceRows(project.id).find(function(row){return row.part&&Number(row.part.id)===Number(part.id)});
+    var alreadyUsed=num(previous?.usedQty);
     var qty=assignedUseDefaultQty(part),on=partAvailable(part),sources=installedPurchaseSourcesForPart(part);
     var installedSource=sources.length&&num(on)<=0;
     openModal(`${modalHeader('Move Assigned Part to Used',project.title)}
-      <div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>Calculated on hand: ${on===null?'—':esc(on+' '+(part.unit||'ea'))}.${installedSource?' This part came from a purchase already marked Installed; recording use will preserve the purchase receipt as an inventory inflow and record the installation/use as the matching outflow, so on-hand does not go negative.':''}</div>
+      <div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>${alreadyUsed>0?`<b>Already recorded as used on this project: ${esc(alreadyUsed+' '+(part.unit||'ea'))}.</b> Linked Work Log use is already reflected in Project Parts; do not record the same physical use twice.<br>`:''}Calculated on hand: ${on===null?'—':esc(on+' '+(part.unit||'ea'))}.${installedSource?' This part came from a purchase already marked Installed; recording use will preserve the purchase receipt as an inventory inflow and record the installation/use as the matching outflow, so on-hand does not go negative.':''}</div>
       <div class="form-grid">
         ${field('Date','apuDate',today(),'date')}
         ${field('Quantity used','apuQty',qty,'number','step="any" min="0.000001"')}
@@ -447,6 +449,8 @@
   window.saveAssignedPartUse=function(projectId,partId){
     var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
     var qty=Number(val('apuQty'));if(!Number.isFinite(qty)||qty<=0)return alert('Enter a positive quantity used.');
+    var previous=projectPartWorkspaceRows(project.id).find(function(row){return row.part&&Number(row.part.id)===Number(part.id)});
+    if(num(previous?.usedQty)>0&&!confirm('This part is already recorded as used on this Project ('+previous.usedQty+' '+(part.unit||'ea')+'). This action creates a NEW Work Log and an ADDITIONAL inventory deduction. Continue only if you physically used more of this part.'))return;
     if(window.atomicReceiptOutbox?.shouldHandle('consumption'))return saveAtomicAssignedPartUse(project,part,qty);
     var preview=previewPhysicalUseCredits(part,qty),on=partAvailable(part);
     if(on!==null&&qty>num(on)+preview.credited+1e-9&&!confirm('This use exceeds calculated physical inventory and will make the quantity negative. Record it anyway?'))return;
@@ -464,16 +468,48 @@
     openProjectDetail(project.id);
   };
 
+  // View-only reconciliation: a Work Log consumption is the physical inventory
+  // outflow. Project.partsUsed is a projection/link, never another deduction.
+  // Do not persist virtual rows: no new cloud operations or duplicate usage.
+  function projectLinkedLogUses(projectId){
+    var project=projectById(Number(projectId));if(!project)return [];
+    var linked=arr(db.logs).filter(function(log){
+      return arr(log.projectIds).some(function(id){return String(id)===String(project.id)});
+    });
+    var recorded=arr(project.partsUsed);
+    var out=[];
+    linked.forEach(function(log){
+      arr(log.consumedParts).forEach(function(item){
+        if(!(num(item.qty)>0))return;
+        var alreadyLinked=recorded.some(function(used){
+          return String(used.logId||'')===String(log.id)&&
+            String(used.partId||'')===String(item.partId||'')&&
+            (!used.consumedItemId||String(used.consumedItemId)===String(item.id));
+        });
+        if(alreadyLinked)return;
+        out.push({
+          id:'work-log:'+String(log.id)+':'+String(item.id),
+          partId:item.partId||null,name:item.name||(item.partId?partName(item.partId):'Material'),
+          qty:num(item.qty),unit:item.unit||'ea',unitCost:item.unitCost??'',
+          notes:item.notes||'',logId:log.id,consumedItemId:item.id,
+          consumptionRecorded:true,fromWorkLog:true
+        });
+      });
+    });
+    return out;
+  }
+
   function projectPartWorkspaceRows(projectId){
     var project=projectById(Number(projectId));if(!project)return [];
-    var ids=new Set();
+    var ids=new Set(),logUses=projectLinkedLogUses(projectId);
+    logUses.forEach(function(x){if(x.partId)ids.add(Number(x.partId))});
     projectLinkedInventoryParts(projectId).forEach(function(part){ids.add(Number(part.id))});
     arr(project.plannedParts).forEach(function(x){if(x.partId)ids.add(Number(x.partId))});
     arr(project.partsUsed).forEach(function(x){if(x.partId)ids.add(Number(x.partId))});
     var rows=[...ids].map(function(id){
       var part=partById(id);if(!part)return null;
       var reservations=arr(project.plannedParts).filter(function(x){return Number(x.partId)===Number(id)});
-      var uses=arr(project.partsUsed).filter(function(x){return Number(x.partId)===Number(id)});
+      var uses=arr(project.partsUsed).filter(function(x){return Number(x.partId)===Number(id)}).concat(logUses.filter(function(x){return Number(x.partId)===Number(id)}));
       var reservedQty=reservations.reduce(function(s,x){return s+num(x.qty)},0);
       var usedQty=uses.reduce(function(s,x){return s+num(x.qty)},0);
       var on=typeof partAvailable==='function'?partAvailable(part):part.stockQty;
@@ -481,7 +517,7 @@
       var stage=usedQty>0?(reservedQty>0?'Used + Reserved':'Used'):(reservedQty>0?'Reserved':'Assigned');
       return {part:part,reservations:reservations,uses:uses,reservedQty:reservedQty,usedQty:usedQty,on:on,free:free,stage:stage};
     }).filter(Boolean);
-    var custom=arr(project.partsUsed).filter(function(x){return !x.partId}).map(function(x){
+    var custom=arr(project.partsUsed).filter(function(x){return !x.partId}).concat(logUses.filter(function(x){return !x.partId||!partById(Number(x.partId))})).map(function(x){
       return {part:null,custom:x,reservations:[],uses:[x],reservedQty:0,usedQty:num(x.qty),on:null,free:null,stage:'Used'};
     });
     return rows.concat(custom).sort(function(a,b){
@@ -489,6 +525,9 @@
       return (order[a.stage]??9)-(order[b.stage]??9)||String(a.part?.name||a.custom?.name||'').localeCompare(String(b.part?.name||b.custom?.name||''),undefined,{numeric:true,sensitivity:'base'});
     });
   }
+
+  // Read-only helpers are exported for production regression checks.
+  window.N594ZSProjectConsumption=Object.freeze({linkedWorkLogUses:projectLinkedLogUses,workspaceRows:projectPartWorkspaceRows});
 
   function projectPartStageClass(stage){
     if(stage==='Used')return 'used';
@@ -507,7 +546,7 @@
     });
     return `<div class="detail-card project-parts-workspace" id="projectPartsWorkspace">
       <div class="section-tools project-parts-head">
-        <div><h3>Project Parts</h3><div class="tiny muted">One workflow: Assigned → Reserved → Used. Assignment links a part; reservation holds quantity; Used records the actual installation/consumption and work history.</div></div>
+        <div><h3>Project Parts</h3><div class="tiny muted">Assigned links a part; Reserved holds quantity. Used includes linked Work Log consumption automatically, without deducting it again. Use More is for additional physical use only.</div></div>
         <div class="action-row">
           <button class="icon-btn" onclick="openAssignPartToProject(${project.id})">+ Assign</button>
           <button class="icon-btn" onclick="openReservePartModal(${project.id})">+ Reserve</button>
@@ -526,7 +565,7 @@
             return `<div class="project-part-row custom-used">
               <div><div class="project-part-title">${esc(x.name||'Material')}</div><div class="task-note">${esc(x.notes||'Custom / unlinked material')}</div></div>
               <div class="project-part-qty"><span class="project-part-stage used">Used</span><small>${esc(x.qty)} ${esc(x.unit||'')}</small></div>
-              <div class="project-part-actions"><button class="icon-btn" onclick="removeProjectPart(${project.id},${JSON.stringify(x.id)})">Remove</button></div>
+              <div class="project-part-actions">${x.fromWorkLog?`<button class="secondary" onclick="openLogDetail(${JSON.stringify(x.logId)})">Work Log</button>`:`<button class="icon-btn" onclick="removeProjectPart(${project.id},${JSON.stringify(x.id)})">Remove</button>`}</div>
             </div>`;
           }
           var part=r.part,unit=part.unit||'ea',primaryReservation=r.reservations[0]||null;
@@ -556,13 +595,13 @@
 
   window.openProjectPartUseHistory=function(projectId,partId){
     var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
-    var uses=arr(project.partsUsed).filter(function(x){return Number(x.partId)===Number(part.id)});
+    var uses=arr(project.partsUsed).filter(function(x){return Number(x.partId)===Number(part.id)}).concat(projectLinkedLogUses(project.id).filter(function(x){return Number(x.partId)===Number(part.id)}));
     openModal(`${modalHeader('Part Usage History',project.title)}
-      <div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>These entries are actual recorded use/install events. Removing one also reverses its linked work-log inventory consumption when that link exists.</div>
+      <div class="notice" style="margin-bottom:12px"><b>${esc(part.name)}</b><br>Usage includes linked Work Log consumption. Work Log-only entries can be reviewed in their source log and are not removable from this Project view. Removing a Project use that has a linked Work Log follows the existing reversal workflow.</div>
       <div class="detail-card">
         ${uses.length?uses.map(function(x){
           var log=x.logId?logById(Number(x.logId)):null;
-          return `<div class="kv"><div><b>${esc((log?.date||'Date not recorded')+' • '+x.qty+' '+(x.unit||part.unit||'ea'))}</b><div class="task-note">${esc(x.notes||log?.work||'Recorded use')}</div></div><div class="action-row">${log?`<button class="secondary" onclick="openLogDetail(${log.id})">Work Log</button>`:''}<button class="danger" onclick="removeProjectPart(${project.id},${JSON.stringify(x.id)})">Remove</button></div></div>`;
+          return `<div class="kv"><div><b>${esc((log?.date||'Date not recorded')+' • '+x.qty+' '+(x.unit||part.unit||'ea'))}</b><div class="task-note">${esc(x.notes||log?.work||'Recorded use')}</div></div><div class="action-row">${log?`<button class="secondary" onclick="openLogDetail(${log.id})">Work Log</button>`:''}${x.fromWorkLog?'':`<button class="danger" onclick="removeProjectPart(${project.id},${JSON.stringify(x.id)})">Remove</button>`}</div></div>`;
         }).join(''):'<div class="empty">No recorded usage entries for this part.</div>'}
       </div>
       <div class="modal-actions"><button class="secondary" onclick="openProjectDetail(${project.id})">Back to Project</button></div>`,true);
@@ -594,7 +633,7 @@
     if(blockWhileAtomicPending('changing Part assignments'))return;
     var project=projectById(Number(projectId)),part=partById(Number(partId));if(!project||!part)return;
     var hasReservation=arr(project.plannedParts).some(function(x){return Number(x.partId)===Number(part.id)});
-    var hasUse=arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)});
+    var hasUse=arr(project.partsUsed).some(function(x){return Number(x.partId)===Number(part.id)})||projectLinkedLogUses(project.id).some(function(x){return Number(x.partId)===Number(part.id)});
     if(hasReservation||hasUse)return alert('Release the reservation first. Used parts remain related through project history.');
     if(!confirm('Remove this part assignment from the project? Inventory will not change.'))return;
     part.linkedProjectIds=arr(part.linkedProjectIds).filter(function(id){return Number(id)!==Number(project.id)});

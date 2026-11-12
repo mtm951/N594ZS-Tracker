@@ -14,9 +14,19 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.75** (consumables date-range report; November 12).
+- Current release: **v5.19.76** (Project Parts reads linked Work Log consumption; November 12).
 
 
+
+## v5.19.76 Project Parts visibility for linked Work Log use (November 12)
+
+- Read-only Project Parts reconciliation: Project Parts → Used now includes positive-quantity consumed items from Work Logs linked to the Project. Such virtual rows are deduplicated against explicit `project.partsUsed` entries only by their exact linked `logId` + `consumedItemId` (or legacy log/Part relation), and are never persisted as extra Project records. Physical stock remains sourced exclusively from Work Logs; no additional inventory outflow, baseline edits, or cloud migration.
+- Usage history opens the original Work Log for the virtual row and does not offer Project-side Remove for it. Unassigned Part and uncatalogued material consumption are shown too. A linked Work Log-only Part is not freely Unassignable.
+- Assigned → Used / Use More now warns when there is an existing Project use and requires explicit confirmation before creating another Work Log/deduction. Continue is appropriate only for additional physical consumption. This is a UX safeguard, not a guaranteed transaction-level cross-device duplicate detector.
+- New `tests/project-worklog-consumption-view.test.mjs` covers the user's November 12 Cooling case (19.8 mm clamp in Work Log becomes Used in Project), matching linked events counted once, unrelated multi-Work-Log duplicates retained for explicit review, unlinked consumables, no stock mutation, and the duplicate-use warning.
+- **Important:** This fixes the Project Parts *display projection*, not a bidirectional persistence mechanism. `project.partsUsed` cloud records remain unchanged for log-only events, so other features reading that raw array must be reviewed separately if they need matching derived totals. Historical duplicate Work Logs from Fuel System were not modified or silently deduplicated.
+- Owner acceptance: ensure cloud status Synced, no pending local atomic journal; open Project `Final coolant fill, purge and leak check` and confirm 19.8mm Oetiker clamp shows **Used 1**. Open Usage and source Work Log; the inventory should remain debited **once**. Review the November 12 Fuel System duplicate Work Logs separately after owner confirms physically used quantities. If an existing modal is stale, close/reopen it rather than clearing storage.
+- Release/cache alignment: APP_VERSION v5.19.76, `app-42`, `app-66` script cache-busters, seed tag and service-worker shell. No Supabase data modified.
 
 ## v5.19.75 Parts & Consumables date-range report (November 12)
 
