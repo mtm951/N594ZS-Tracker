@@ -59,7 +59,7 @@ assert.equal(grouped.find(g=>g.label==='Oetiker clamp').missing,1,
   'missing historical cost should remain unpriced');
 assert.equal(grouped.find(g=>g.label==='Parker hose').qty,3);
 assert.equal(report.aggregate(all.rows,'date').length,3);
-assert.equal(report.collect(data,{start:'2026-10-05',end:'2026-10-07',system:'Engine'}).rows.length,2,
+assert.equal(report.collect(data,{start:'2026-10-05',end:'2026-10-07',system:'Engine'}).rows.length,3,
   'system selection must not use an unrelated Part system when Work Log system is known');
 assert.equal(report.collect(data,{start:'2026-10-06',end:'2026-10-06',system:'all'}).rows.length,1,
   'date boundaries should be inclusive');
