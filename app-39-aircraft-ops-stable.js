@@ -96,6 +96,25 @@ function stableRunRichTab(tab){
     if(typeof fn!=='function')throw new Error(`${legacy||tab} is unavailable`);
     fn();
   }catch(e){stableOpsError(tab,e)}
+  finally{
+    // The rich Aircraft Ops runtime fetches its source asynchronously and can
+    // overwrite the report renderer after app-72 installs its wrapper.
+    // Mount from this stable tab lifecycle AFTER the tab content is rendered,
+    // regardless of which script finished loading last. mount() is idempotent.
+    if(tab==='reports'&&typeof window.N594ZSConsumptionReport?.mount==='function'){
+      try{window.N594ZSConsumptionReport.mount()}
+      catch(error){console.error('Consumables usage report mount failed',error)}
+    }
+    if(tab==='consumables'){
+      const box=stableOpsContent();
+      if(box&&!box.querySelector('#opsConsumablesReportShortcut')){
+        box.insertAdjacentHTML('afterbegin',
+          '<div id="opsConsumablesReportShortcut" class="notice" style="margin-bottom:13px">'+
+          '<b>Parts & Consumables Usage Report</b> — Review parts actually used across Work Logs, filter by date and system, and export CSV or PDF. '+
+          '<button type="button" class="secondary" onclick="setOpsTab(\'reports\')">Open Usage Report</button></div>');
+      }
+    }
+  }
 }
 
 setOpsTab=function(tab){

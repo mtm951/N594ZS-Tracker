@@ -68,5 +68,5 @@ assert.match(formulaCSV,/^\uFEFF/);
 assert.ok(formulaCSV.includes("'=HYPERLINK"),'CSV should neutralize spreadsheet formulas');
 assert.ok(!formulaCSV.includes('99'),'project-only used quantity should never appear in CSV');
 assert.match(source,/window\.renderOpsReports=/,'report must appear inside existing Aircraft Ops Reports tab');
-assert.match(index,/app-72-consumption-report\.js\?v=5\.19\.75/,'new report must be cache-busted and loaded');
+assert.match(index,/app-72-consumption-report\.js\?v=5\.19\.78/,'new report must be cache-busted and loaded');
 console.log('PASS: date-range consumption reporting, grouping, deduplication and safe CSV export');

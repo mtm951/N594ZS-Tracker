@@ -14,9 +14,18 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.77** (mobile Trash details and guarded Restore; November 13).
+- Current release: **v5.19.78** (consumables report async-mount fix; November 13).
 
 
+
+## v5.19.78 Parts & Consumables report visibility / async Ops fix (November 13)
+
+- Root cause: the legacy Aircraft Ops module is dynamically recovered from `app-33-aircraft-ops.js` via asynchronous fetch, exporting `renderOpsReports` onto `window`. The existing `app-72-consumption-report.js` wraps `window.renderOpsReports` at initial script execution, but this wrapper can be overwritten when that asynchronous recovery completes. Result: the code and data exist, but **Aircraft Ops → Reports** is missing the Parts & Consumables panel.
+- Fixed in `app-39-aircraft-ops-stable.js`: stable Reports tab lifecycle now calls `N594ZSConsumptionReport.mount()` after rich content rendering, including fallback rendering. `mount()` checks for an existing panel so even when the original wrapper remains present there is no duplicate. This survives load order and async runtime restoration.
+- Added prominent **Open Usage Report** navigation shortcut at the top of **Aircraft Ops → Consumables**, which switches to the Reports tab. There is no new top-level tab, no cloud record mutation and no inventory-impacting code change.
+- Added `tests/ops-consumption-report-race.test.mjs` simulating an overridden report renderer and late runtime availability, proving Report lifecycle still mounts; also checks discoverability and idempotent panel guard.
+- Updated version/cache stamps: visible `APP_VERSION=5.19.78`, atomic recovery script, stable Ops renderer, app-72 report script and `sw.js` shell cache. Previous source and reporting algorithms unchanged.
+- Acceptance: from a fully synced mobile or desktop device, check footer v5.19.78. Open Aircraft Ops → Consumables and tap **Open Usage Report**, or directly open Aircraft Ops → Reports; observe **Parts & Consumables Used** with dates, system, group, CSV and print/PDF. Compare an expected Work Log against report; if the report is still absent, collect the visible Ops fallback error and do not clear local storage.
 
 ## v5.19.77 mobile Trash record details & guarded Restore (November 13)
 
