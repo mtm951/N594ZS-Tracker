@@ -127,9 +127,64 @@ function deleteSpec(id){if(!confirm('Move this reference to Trash?'))return;db.s
 function openSpecDetail(id){const s=db.specs.find(x=>String(x.id)===String(id));if(!s)return;currentDetail={type:'spec',id};const e=s.equipmentId?equipmentById(Number(s.equipmentId)):null,d=s.documentId?docById(Number(s.documentId)):null;openModal(`${modalHeader(s.title,`${s.system} • ${s.status}`)}<div class="summary-strip"><div class="summary-cell"><div class="lab">Stored value</div><div class="val">${esc(s.value||'—')} ${esc(s.units||'')}</div></div><div class="summary-cell"><div class="lab">Status</div><div class="val">${pill(s.status)}</div></div></div><div class="detail-grid"><div><div class="detail-card"><div class="section-tools"><h3>Source & context</h3><button class="icon-btn" onclick="openSpecModal('${esc(s.id)}')">Edit</button></div><div class="kv"><span>Source</span><b>${esc(s.source||'Not recorded')}</b></div><div class="kv"><span>Revision / section</span><b>${esc(s.sourceRevision||'—')}</b></div>${isURL(s.sourceUrl)?`<button class="secondary" onclick="window.open('${esc(s.sourceUrl)}','_blank','noopener')">Open Source</button>`:''}<div class="detail-section"><label>Notes</label><div class="detail-text">${esc(s.notes||'No notes.')}</div></div></div><div class="detail-card"><div class="section-tools"><h3>Files / screenshots</h3><button class="icon-btn" onclick="chooseAttachments('spec','${esc(s.id)}')">+ Upload</button></div><div id="attachments-spec-${esc(s.id)}"></div></div></div><div><div class="detail-card"><h3>Applies to</h3>${e?`<div class="kv click-row" onclick="openEquipmentDetail(${e.id})"><span>Equipment</span><b>${esc(e.name)}</b></div>`:'<div class="kv"><span>Equipment</span><b>Not linked</b></div>'}${d?`<div class="kv click-row" onclick="openDocumentDetail(${d.id})"><span>Document</span><b>${esc(d.name)}</b></div>`:'<div class="kv"><span>Document</span><b>Not linked</b></div>'}</div></div></div>`,true);renderAttachments('spec',s.id)}
 
 // ---------- CONSUMABLES ----------
+
 function renderOpsConsumables(){
-  const box=document.getElementById('opsContent');if(!box)return;const rows=db.parts.filter(p=>p.partType==='Consumable'),low=rows.filter(p=>p.minQty!==''&&partAvailable(p)!==null&&partAvailable(p)<=num(p.minQty));
-  box.innerHTML=`<div class="ops-panel"><div class="toolbar"><div><h2>Consumables Ledger</h2><div class="muted">Consumable materials and service stock, tied to Parts and Work Log consumption.</div></div><button class="primary" onclick="openPartModal()">+ Add Part / Material</button></div><div class="summary-strip"><div><span>Consumables</span><b>${rows.length}</b></div><div><span>Low / reorder</span><b>${low.length}</b></div><div><span>Consumed in work logs</span><b>${rows.reduce((s,p)=>s+partConsumedQty(p.id),0)}</b></div></div><div class="notice">Set <b>Part type = Consumable</b> when editing an item in Parts. Work Log consumption then becomes its usage history.</div><div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Material</th><th>System</th><th>Available</th><th>Used</th><th>Reorder level</th><th>Vendor</th><th></th></tr></thead><tbody>${rows.map(p=>`<tr class="click-row" onclick="openPartDetail(${p.id})"><td><b>${esc(p.name)}</b><div class="task-note">${esc(p.description||p.notes||'')}</div></td><td>${esc(p.system)}</td><td>${partAvailable(p)===null?'—':esc(partAvailable(p)+' '+(p.unit||''))}</td><td>${esc(partConsumedQty(p.id)+' '+(p.unit||''))}</td><td>${p.minQty===''?'—':esc(p.minQty+' '+(p.unit||''))}</td><td>${esc(p.vendor||'—')}</td><td><button class="icon-btn" onclick="event.stopPropagation();openLogModal(null,null,${p.id})">Log Use</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">No Parts are classified as Consumable yet.</td></tr>'}</tbody></table></div></div>`;
+  const box=document.getElementById('opsContent');if(!box)return;
+  const rows=db.parts.filter(p=>p.partType==='Consumable');
+  const low=rows.filter(p=>p.minQty!==''&&partAvailable(p)!==null&&partAvailable(p)<=num(p.minQty));
+  const ids=new Set(rows.map(p=>String(p.id)));
+  // Never sum incompatible units such as feet and individual items.
+  const loggedEntries=db.logs.reduce((sum,l)=>sum+arr(l.consumedParts)
+    .filter(x=>ids.has(String(x.partId))&&num(x.qty)>0).length,0);
+  const usable=p=>partAvailable(p)===null?'Not recorded':partAvailable(p)+' '+(p.unit||'ea');
+  const consumed=p=>partConsumedQty(p.id)+' '+(p.unit||'ea');
+  box.innerHTML=`
+    <div class="ops-panel ops-consumables-ledger">
+      <div class="ops-ledger-head">
+        <div>
+          <div class="ops-eyebrow">INVENTORY · AIRCRAFT OPS</div>
+          <h2>Consumables Ledger</h2>
+          <p class="muted">Materials classified as consumables in Parts. Quantities come from inventory and Work Logs.</p>
+        </div>
+        <div class="ops-ledger-actions">
+          <button id="opsConsumptionGoReport" type="button" class="primary" onclick="setOpsTab('reports')">View Usage Report</button>
+          <button type="button" class="secondary" onclick="openPartModal()">+ Add Material</button>
+        </div>
+      </div>
+      <div class="ops-ledger-stats" aria-label="Consumables overview">
+        <div class="ops-ledger-stat"><span>Materials tracked</span><b>${rows.length}</b></div>
+        <div class="ops-ledger-stat"><span>Low stock</span><b>${low.length}</b></div>
+        <div class="ops-ledger-stat"><span>Work Log usage entries</span><b>${loggedEntries}</b></div>
+      </div>
+      <div class="ops-ledger-note">This ledger shows materials marked <b>Consumable</b>. The <b>Usage Report</b> includes parts and consumables of every type over your chosen dates.</div>
+      <div class="ops-consumables-mobile" aria-label="Consumables cards">
+        ${rows.map(p=>`
+          <article class="ops-material-card">
+            <button type="button" class="ops-material-title" onclick="openPartDetail(${p.id})">${esc(p.name)}</button>
+            <div class="ops-material-meta">${esc(p.system||'General')}${p.vendor?' · '+esc(p.vendor):''}</div>
+            ${p.description||p.notes?`<div class="ops-material-desc">${esc(p.description||p.notes)}</div>`:''}
+            <div class="ops-material-numbers">
+              <div><span>Available</span><b>${esc(usable(p))}</b></div>
+              <div><span>Used in logs</span><b>${esc(consumed(p))}</b></div>
+            </div>
+            <div class="ops-material-footer">
+              <span>${p.minQty===''||p.minQty==null?'No reorder minimum':'Reorder at '+esc(p.minQty+' '+(p.unit||'ea'))}</span>
+              <button type="button" class="secondary" onclick="openLogModal(null,null,${p.id})">Log Use</button>
+            </div>
+          </article>`).join('')||'<div class="empty">No Parts are classified as Consumable yet. Add a material or change a Part type to Consumable.</div>'}
+      </div>
+      <div class="table-wrap ops-consumables-desktop" style="margin-top:12px">
+        <table><thead><tr><th>Material</th><th>System</th><th>Available</th><th>Used</th><th>Reorder level</th><th>Vendor</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(p=>`<tr class="click-row" onclick="openPartDetail(${p.id})">
+            <td><b>${esc(p.name)}</b><div class="task-note">${esc(p.description||p.notes||'')}</div></td>
+            <td>${esc(p.system||'General')}</td><td>${partAvailable(p)===null?'—':esc(usable(p))}</td>
+            <td>${esc(consumed(p))}</td><td>${p.minQty===''?'—':esc(p.minQty+' '+(p.unit||'ea'))}</td>
+            <td>${esc(p.vendor||'—')}</td>
+            <td><button type="button" class="icon-btn" onclick="event.stopPropagation();openLogModal(null,null,${p.id})">Log Use</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">No Parts are classified as Consumable yet.</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>`;
 }
 
 // ---------- COST ACCOUNTING ----------

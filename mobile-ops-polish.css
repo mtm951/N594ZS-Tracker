@@ -1,0 +1,130 @@
+/* v5.19.79 — mobile readability and Aircraft Ops presentation. */
+/* Desktop keeps the existing full-width tab strip and data tables. */
+
+.ops-eyebrow{font-size:10px;line-height:1.4;letter-spacing:.09em;color:#5e7d94;font-weight:850;margin-bottom:5px}
+.ops-page-head{margin-bottom:14px}
+.ops-page-head h1{margin:0 0 3px;font-size:23px;letter-spacing:-.025em}
+.ops-page-head p{margin:0;color:#687e90;font-size:12px;line-height:1.45}
+.ops-mobile-workspace{display:none}
+.ops-ledger-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.ops-ledger-head>div:first-child{flex:1 1 280px;min-width:0}
+.ops-ledger-head h2{margin:0 0 7px;font-size:21px;letter-spacing:-.025em}
+.ops-ledger-head p{margin:0;line-height:1.5;font-size:12px;max-width:620px}
+.ops-ledger-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ops-ledger-actions button{min-height:38px}
+.ops-ledger-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0 12px}
+.ops-ledger-stat{min-width:0;border:1px solid #dce6ef;background:#f7fafc;border-radius:10px;padding:13px}
+.ops-ledger-stat span,.ops-ledger-stat b{display:block}
+.ops-ledger-stat span{font-size:11px;color:#647c8e;line-height:1.35}
+.ops-ledger-stat b{font-size:24px;line-height:1.25;color:#173a56;margin-top:6px;font-variant-numeric:tabular-nums}
+.ops-ledger-note{font-size:11px;color:#667e8e;line-height:1.5;padding:10px 12px;border-radius:8px;background:#f3f8fc;margin-bottom:12px}
+.ops-consumables-mobile{display:none}
+.ops-report-mobile-cards{display:none}
+
+@media(max-width:760px){
+  /* Make the PWA header three compact, predictable rows instead of stacked
+     flex-order rules that previously consumed a large part of the screen. */
+  .topbar{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:"brand status" "search search" "nav nav";
+    gap:6px 9px;
+    padding:7px 11px 0!important;
+    align-items:center;
+    min-height:0;
+  }
+  .topbar .brand{
+    grid-area:brand;
+    min-width:0;
+    margin:0;
+    padding:3px 0;
+    font-size:16px;
+    line-height:1.3;
+    gap:7px;
+    white-space:normal;
+  }
+  .topbar .brand .plane-logo{font-size:21px}
+  .topbar .brand small{display:none}
+  .topbar #cloudStatus{
+    grid-area:status;
+    min-width:0;
+    justify-self:end;
+    align-self:center;
+    white-space:nowrap;
+  }
+  .topbar #cloudStatus button{font-size:11px;padding:6px 9px;min-height:34px;max-width:135px;overflow:hidden;text-overflow:ellipsis}
+  .topbar .global-search{
+    grid-area:search;
+    order:initial;
+    min-width:0;
+    max-width:none;
+    width:100%;
+    flex:none;
+    margin:0!important;
+  }
+  .topbar .global-search input{height:37px;min-height:37px;font-size:13px}
+  .topbar .nav{
+    grid-area:nav;
+    order:initial;
+    flex:none;
+    width:100%;
+    min-width:0;
+    min-height:36px;
+    padding:0;
+    margin:0;
+    gap:3px;
+    overflow-x:auto;
+    overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+  .topbar .nav button{padding:9px 12px;font-size:12px;min-height:36px;flex:0 0 auto}
+  .shell{padding:9px!important}
+  #page-ops{padding-bottom:62px}
+  #page-ops>.card{padding:12px!important}
+  #page-ops .ops-page-head{margin:0 0 11px}
+  #page-ops .ops-page-head h1{font-size:20px}
+  #page-ops .ops-page-head p{font-size:11px}
+  #page-ops .ops-mobile-workspace{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  #page-ops .ops-mobile-workspace label{font-size:10px;margin:0;letter-spacing:.06em}
+  #page-ops .ops-mobile-workspace select{font-size:14px;font-weight:750;min-height:44px;background:#f6fafe;color:#173a56;border:1px solid #cddfe9;border-radius:9px}
+  #page-ops .ops-tabs-stable{display:none!important}
+  #page-ops .ops-panel{padding:13px;border-radius:10px}
+  #page-ops .ops-ledger-head h2{font-size:19px;margin-bottom:5px}
+  #page-ops .ops-ledger-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%;gap:8px}
+  #page-ops .ops-ledger-actions button{min-height:44px;padding:9px 8px;font-size:12px;white-space:normal}
+  #page-ops .ops-ledger-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:13px 0}
+  #page-ops .ops-ledger-stat{padding:11px}
+  #page-ops .ops-ledger-stat:last-child{grid-column:span 2}
+  #page-ops .ops-ledger-stat b{font-size:22px;margin-top:4px}
+  #page-ops .ops-ledger-note{font-size:11px;padding:10px 11px}
+  #page-ops .ops-consumables-desktop{display:none}
+  #page-ops .ops-consumables-mobile{display:grid;gap:10px}
+  #page-ops .ops-material-card{border:1px solid #dce7ef;border-radius:11px;padding:13px;background:#fff;min-width:0;overflow-wrap:anywhere}
+  #page-ops .ops-material-title{display:block;appearance:none;border:0;background:none;color:#15568a;font-size:15px;font-weight:800;text-align:left;line-height:1.4;padding:0;margin:0 0 4px;white-space:normal;overflow-wrap:anywhere;width:100%;cursor:pointer}
+  #page-ops .ops-material-meta{font-size:11px;color:#637e92;line-height:1.4}
+  #page-ops .ops-material-desc{font-size:11px;color:#75899b;line-height:1.4;margin-top:7px}
+  #page-ops .ops-material-numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+  #page-ops .ops-material-numbers>div{background:#f5f9fc;padding:10px 11px;border-radius:9px;min-width:0}
+  #page-ops .ops-material-numbers span,#page-ops .ops-material-numbers b{display:block}
+  #page-ops .ops-material-numbers span{font-size:10px;color:#617d91;margin-bottom:5px}
+  #page-ops .ops-material-numbers b{font-size:16px;line-height:1.3;font-variant-numeric:tabular-nums}
+  #page-ops .ops-material-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#6e8596;font-size:11px}
+  #page-ops .ops-material-footer button{min-height:38px;min-width:95px}
+  /* Date-range reporting: mobile controls and results should not require
+     sideways table scrolling. The regular table remains for desktop. */
+  #page-ops #consumptionReportPanel{margin-top:12px!important}
+  #page-ops #consumptionReportPanel .report-controls{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px!important;align-items:end!important}
+  #page-ops #consumptionReportPanel .report-controls label{min-width:0;margin:0;font-size:10px}
+  #page-ops #consumptionReportPanel .report-controls input,
+  #page-ops #consumptionReportPanel .report-controls select{min-width:0;width:100%;height:43px;font-size:13px}
+  #page-ops #consumptionReportPanel .report-controls button{min-height:43px;font-size:12px;white-space:normal}
+  #page-ops #consumptionReportPanel .report-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  #page-ops #consumptionReportPanel .report-summary>div{padding:10px}
+  #page-ops #consumptionReportPanel .report-summary b{font-size:18px}
+  #page-ops #consumptionReportPanel .ops-report-desktop-table{display:none}
+  #page-ops #consumptionReportPanel .ops-report-mobile-cards{display:grid;gap:9px}
+  #page-ops #consumptionReportPanel .ops-report-result{appearance:none;display:block;width:100%;text-align:left;border:1px solid #d9e5ee;border-radius:10px;background:#fff;color:#17324c;padding:12px;cursor:pointer;overflow-wrap:anywhere}
+  #page-ops #consumptionReportPanel .ops-report-result b{display:block;font-size:13px;line-height:1.45;margin-bottom:6px}
+  #page-ops #consumptionReportPanel .ops-report-result span{display:block;font-size:11px;color:#6b8191;line-height:1.5}
+  #page-ops #consumptionReportPanel .ops-report-result em{display:block;font-size:11px;color:#155b91;font-style:normal;font-weight:750;margin-top:8px}
+}

@@ -107,7 +107,7 @@ function stableRunRichTab(tab){
     }
     if(tab==='consumables'){
       const box=stableOpsContent();
-      if(box&&!box.querySelector('#opsConsumablesReportShortcut')){
+      if(box&&!box.querySelector('#opsConsumablesReportShortcut')&&!box.querySelector('#opsConsumptionGoReport')){
         box.insertAdjacentHTML('afterbegin',
           '<div id="opsConsumablesReportShortcut" class="notice" style="margin-bottom:13px">'+
           '<b>Parts & Consumables Usage Report</b> — Review parts actually used across Work Logs, filter by date and system, and export CSV or PDF. '+
@@ -125,7 +125,21 @@ setOpsTab=function(tab){
 renderOps=function(){
   const page=document.getElementById('page-ops');if(!page)return;
   const tab=window.__n594zsStableOpsTab||'status';
-  page.innerHTML=`<div class="card ops-shell"><div class="toolbar"><div><h1>Aircraft Ops</h1><div class="muted">Configuration, inspections, references, consumables, costs, test data, flight cards and aircraft history for N594ZS.</div></div><div class="action-row"><span class="mini-badge">10 workspaces</span><span class="mini-badge">v5.2 stable</span></div></div><div class="ops-tabs ops-tabs-stable">${STABLE_OPS_TABS.map(([k,l])=>`<button class="${tab===k?'active':''}" onclick="setOpsTab('${k}')">${esc(l)}</button>`).join('')}</div><div id="opsContent"></div></div>`;
+  page.innerHTML=`<div class="card ops-shell">
+    <div class="ops-page-head">
+      <div class="ops-eyebrow">N594ZS · MAINTENANCE WORKSPACE</div>
+      <h1>Aircraft Ops</h1>
+      <p>Aircraft systems, maintenance, service materials and activity reports.</p>
+    </div>
+    <div class="ops-mobile-workspace">
+      <label for="opsWorkspaceSelect">Workspace</label>
+      <select id="opsWorkspaceSelect" aria-label="Aircraft Ops workspace" onchange="setOpsTab(this.value)">
+        ${STABLE_OPS_TABS.map(([k,l])=>`<option value="${esc(k)}" ${tab===k?'selected':''}>${esc(l)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="ops-tabs ops-tabs-stable">${STABLE_OPS_TABS.map(([k,l])=>`<button class="${tab===k?'active':''}" onclick="setOpsTab('${k}')">${esc(l)}</button>`).join('')}</div>
+    <div id="opsContent"></div>
+  </div>`;
   stableRunRichTab(tab);
 };
 

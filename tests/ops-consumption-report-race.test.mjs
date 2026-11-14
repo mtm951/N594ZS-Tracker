@@ -60,6 +60,6 @@ assert.deepEqual(order,['costs']);
 assert.match(report,/window\.N594ZSConsumptionReport=Object\.freeze\(\{collect,aggregate,summary,csv,mount\}\)/);
 assert.match(report,/document\.getElementById\('consumptionReportPanel'\)/,
   'Report mount must stay idempotent across rich renderer and lifecycle hooks');
-assert.match(index,/app-39-aircraft-ops-stable\.js\?v=5\.19\.78/);
-assert.match(index,/app-72-consumption-report\.js\?v=5\.19\.78/);
+assert.match(index,/app-39-aircraft-ops-stable\.js\?v=5\.19\.79/);
+assert.match(index,/app-72-consumption-report\.js\?v=5\.19\.79/);
 console.log('PASS: consumables report survives asynchronous runtime recovery, renders under Reports, and has a Consumables shortcut');
