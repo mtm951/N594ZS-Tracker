@@ -14,9 +14,18 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.76** (Project Parts reads linked Work Log consumption; November 12).
+- Current release: **v5.19.77** (mobile Trash details and guarded Restore; November 13).
 
 
+
+## v5.19.77 mobile Trash record details & guarded Restore (November 13)
+
+- Added `app-73-trash-details.js` after the existing v5.19.76 modules and before app init. Trash now renders full-width, tappable record cards, with readable type/deletion date, filtering, and a modal containing original details and a **Restore record** button. All record types (including shared file metadata and flight/test records) are viewable without needing to horizontally scroll a wide table. Viewer is read-only; only Owner/Editor can restore.
+- Restores no longer directly set `deleted_at` with an unguarded update. Instead, a fresh cloud tombstone and `record_version` are compared with the displayed entry; a single `sync_tracker_records_guarded` RPC applies the restoration at the expected version. Conflicts fail closed. Offline, pending cloud sync, ongoing load, and pending atomic journals block restoration until resolved.
+- Work Logs show recorded parts and an inventory-use warning. Before restoring consumption, the app checks current server Work Logs; it **blocks auto-generated assigned/reserved use** that matches existing active consumption of the same part, quantity, linked project, and near date (e.g., four intentionally retired November 12 Fuel System duplicate records). Other potentially overlapping manual records trigger a separate warning, then the normal confirmation.
+- Does not restore any records automatically, alter cloud records, or clear local storage. Preserves full Work Log data and cross-links when a legitimate record is restored. No Supabase schema changes.
+- Added `tests/trash-details-restore.test.mjs` for mobile entry wiring, guarded writes, link/date/quantity duplicate checks, and pending transaction safety. Release/cache alignment APP_VERSION v5.19.77, seed, atomic script tag, and service-worker shell.
+- Acceptance: after cloud says Synced, open Trash on a real phone. Tap a non-inventory deleted test item → inspect original metadata → Restore; verify cloud/screen, other device, and no double record. Tap Fuel System duplicate automatic Work Log → show inventory warning and refuse restore because corresponding active Work Log already records the same physical use. Confirm Trash display remains accessible for Viewer but Restore requires edit access.
 
 ## v5.19.76 Project Parts visibility for linked Work Log use (November 12)
 
