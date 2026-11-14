@@ -137,7 +137,7 @@
       (found.undated?' '+found.undated+' undated consumption items are excluded.':'')+
       (found.invalidQty?' '+found.invalidQty+' items with invalid/zero quantities are excluded.':'')+
       '</div>'+
-      '<div class="table-wrap"><table><thead><tr><th>'+html(opts.group==='part'?'Part / Consumable':opts.group==='date'?'Date':'Project')+
+      '<div class="table-wrap ops-report-desktop-table"><table><thead><tr><th>'+html(opts.group==='part'?'Part / Consumable':opts.group==='date'?'Date':'Project')+
       '</th><th>'+quantityLabel+'</th><th>Work Logs</th><th>Known cost</th><th></th></tr></thead><tbody>'+
       (groups.map((g,i)=>'<tr class="click-row" tabindex="0" data-cr-group="'+i+'">'+
         '<td><b>'+html(g.label)+'</b></td>'+
@@ -146,7 +146,16 @@
         '<td>'+html(costLabel(g.cost,g.missing))+'</td>'+
         '<td><button class="icon-btn" data-cr-group="'+i+'" type="button">Details</button></td></tr>').join('')||
       '<tr><td colspan="5" class="empty">No Work Log consumption matches this date range and system.</td></tr>')+
-      '</tbody></table></div>';
+      '</tbody></table></div>'+
+      '<div class="ops-report-mobile-cards" aria-label="Usage report results">'+
+      (groups.map((g,i)=>'<button class="ops-report-result" type="button" data-cr-group="'+i+'">'+
+        '<b>'+html(g.label)+'</b>'+
+        '<span>'+html(opts.group==='part'?String(Number(g.qty.toFixed(6)))+' '+g.unit:String(g.entries.length)+' entries')+
+        ' · '+new Set(g.entries.map(e=>e.logId)).size+' Work Logs</span>'+
+        '<span>Known cost: '+html(costLabel(g.cost,g.missing))+'</span>'+
+        '<em>View source Work Logs</em></button>').join('')||
+        '<div class="empty">No Work Log consumption matches this filter.</div>')+
+      '</div>';
     box.querySelectorAll('[data-cr-group]').forEach(el=>{
       el.addEventListener('click',ev=>{ev.stopPropagation();openGroup(Number(el.dataset.crGroup));});
       if(el.tagName==='TR')el.addEventListener('keydown',ev=>{
