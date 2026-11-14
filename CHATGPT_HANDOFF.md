@@ -14,9 +14,19 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.78** (consumables report async-mount fix; November 13).
+- Current release: **v5.19.79** (mobile Aircraft Ops and consumables visual polish; November 13).
 
 
+
+## v5.19.79 Mobile Aircraft Ops layout and Consumables polish (November 13)
+
+- Owner mobile screenshot showed v5.19.76, a tall four-row sticky header, oversized 10-tab pill strip, ledger quantities with no spacing (\`Consumables3\`), sideways inventory table, and confusion between **Consumables Ledger** (Consumable-typed inventory items) and **Parts & Consumables Used Report** (all Work Log consumption).
+- CSS \`mobile-ops-polish.css\` compresses mobile PWA header to brand/sync, search, and a nav row while retaining cloud status. Aircraft Ops uses a native mobile **Workspace** selector for all 10 tabs; desktop retains full tabs. This changes display only. Browser cache-busted at v5.19.79.
+- Rich renderer \`app-33-aircraft-ops.js\`: Consumables Ledger now has clear header/action pair including **View Usage Report**, correctly spaced KPI tiles, explanatory distinction between inventory ledger and report, readable touch-friendly per-item mobile cards with Available / Used in Logs / Log Use. Desktop table retained. Previous aggregate mixed physical units (e.g., feet and ea) and was nonsensical; changed the metric to **Work Log usage entry count** across Consumable-typed parts; per-item quantities continue using the original functions and correct units.
+- Stable shell \`app-39-aircraft-ops-stable.js\`: trims internal version/workspace badges, provides mobile selector and avoids duplicating the rich renderer's report shortcut. Stable fallback still provides the report link.
+- \`app-72-consumption-report.js\`: mobile grouped result cards with source Work Log drill-down; desktop table kept. Existing CSV and Print / Save PDF outputs, calculation source, inventory transactions, and Supabase schema unchanged.
+- Regression: \`tests/mobile-ops-ledger-polish.test.mjs\` renders both real ledger and stable shell with sample mixed units, checks report navigation, responsive CSS and use records; existing release/caching tests updated.
+- Acceptance: after Synced/no pending atomic journal, verify footer **v5.19.79** on actual iOS/Android. Open Aircraft Ops → Consumables: mobile workspace picker, KPI cards, usage-report button, material cards. Open Reports via button; check grouped cards, date and system filters, CSV and print. Check desktop still retains full ledger and report tables. No user records changed.
 
 ## v5.19.78 Parts & Consumables report visibility / async Ops fix (November 13)
 
