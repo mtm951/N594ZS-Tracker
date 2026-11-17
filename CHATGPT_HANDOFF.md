@@ -14,9 +14,18 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.79** (mobile Aircraft Ops and consumables visual polish; November 13).
+- Current release: **v5.19.80** (searchable Order Part link and equivalent PN cross-references; November 17).
 
 
+
+## v5.19.80 Searchable Order part links & alternate part numbers (November 17)
+
+- User requested searching the **Change Linked Part** list and storing more than one equivalent PN against the *same* physical inventory item. Example McFarlane 2026 order W000261201 has MS24665-355, cross-referenced by McFarlane and Aircraft Spruce as AN380-4-5 (carbon-steel 1/8 × 1-1/4 cotter pin). Source: https://www.mcfarlaneaviation.com/products/MS24665-355/ .
+- **Orders** `app-08-orders.js`: Change/Link Inventory Part uses the existing shared searchable browse picker (instead of a long native select), including zero-stock items. A typed query must match a chosen suggestion before saving; unlinking a previously linked part requires explicit confirmation. Existing part ID, receipts, stock, projects and audit are unchanged by search. New Order item autocomplete also recognizes alternate PNs.
+- **Parts** `app-30-part-descriptions.js`: editable Alternate / Equivalent Part Numbers textarea (comma or newline-separated), normalized case-insensitive de-duplication and primary-PN exclusion, stored as `alternatePartNos: string[]`. Prevents an entered primary/alternate PN from colliding with another inventory part's primary/alternate. Part details visibly display aliases. No new separate part or stock mutation is created by adding an alias.
+- Shared `app-36-searchable-part-picker.js` searches the cross-references for Project Parts Used, Work Logs and Order linking; shows alternate PN in results. `app-53-parts-sort.js` enables filtering Parts by alternate PN, displays Alt: PN in table; stock remains one canonical Part record.
+- Regression `tests/searchable-order-part-aliases.test.mjs` covers picker, typed-only rejection, duplicate alias rejection, storage, zero-stock preservation, order-autocomplete and filtering; legacy `tests/zero-stock-inventory.test.mjs` updated to use the real new picker contract while checking no stock changes.
+- No cloud schema migration. Live part should be updated with alternate PN AN380-4-5 via guarded cloud write and safety snapshot separate from code release. PR and merge require full GitHub regression suite success; acceptance on real desktop/mobile after footer v5.19.80 and Sync state.
 
 ## v5.19.79 Mobile Aircraft Ops layout and Consumables polish (November 13)
 
