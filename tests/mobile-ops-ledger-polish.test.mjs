@@ -72,6 +72,6 @@ assert.match(report,/data-cr-group/);
 assert.match(report,/ops-report-desktop-table/);
 assert.match(index,/mobile-ops-polish\.css\?v=5\.19\.79/);
 assert.match(index,/app-33-aircraft-ops\.js\?v=5\.19\.79/);
-assert.match(index,/app-39-aircraft-ops-stable\.js\?v=5\.19\.79/);
+assert.match(index,/app-39-aircraft-ops-stable\.js\?v=5\.19\.81/);
 assert.match(index,/app-72-consumption-report\.js\?v=5\.19\.79/);
 console.log('PASS: mobile Ops layout, selectable Reports workspace, legible ledger cards and multi-unit accounting');
