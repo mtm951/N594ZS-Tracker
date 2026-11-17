@@ -104,8 +104,12 @@ assert.equal(base.partPickerSearchText(parts[0]).includes('an380-4-5'),true);
 // Part editor exposes alternate numbers, and the save persists cross-references
 // without modifying physical stock or creating a second Part.
 modals.length=0;
+// The real form inserts Description and Alternate PNs dynamically.
+// Do not pre-create that field in the fake DOM before the editor runs.
+controls.delete('ptDescription');
 base.openPartModal(501);
 assert.match(modals.at(-1),/ptAlternatePN/);
+controls.set('ptDescription',el('ptDescription'));
 controls.get('ptName').value=parts[0].name;
 controls.get('ptDescription').value=parts[0].description;
 controls.get('ptPN').value='MS24665-355';
