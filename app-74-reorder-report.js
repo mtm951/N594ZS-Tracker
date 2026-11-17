@@ -201,7 +201,7 @@
     const tables=groups(rows).map(([supplier,items])=>
       '<section><h2>'+E(supplier)+' · '+items.length+' items</h2>'+
       '<table><thead><tr><th>Part / PN</th><th>Unit</th><th>On hand</th><th>Reserved</th>'+
-      '<th>Free</th><th>Min</th><th>Incoming</th><th>Order qty</th><th>Status</th></tr></thead><tbody>'+
+      '<th>Free</th><th>Min</th><th>On order</th><th>Order qty</th><th>Status</th></tr></thead><tbody>'+
       items.map(r=>'<tr><td><b>'+E(r.name)+'</b><small>'+E(r.partNo)+
         (r.alternatePartNos.length?' · Alt '+E(r.alternatePartNos.join(', ')):'')+'</small></td>'+
         '<td>'+E(r.unit)+'</td><td>'+E(r.onHand===null?'—':fmt(r.onHand))+'</td>'+
