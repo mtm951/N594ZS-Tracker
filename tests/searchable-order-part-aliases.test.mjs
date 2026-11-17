@@ -39,7 +39,7 @@ const doc={
   createElement:()=>({textContent:'',id:'',style:{}}),
   head:{appendChild(){}},addEventListener(){},getElementById:id=>controls.get(id)||null
 };
-for(const id of ['ptName','ptDescription','ptPN','ptAlternatePN','ptSystem','ptUnit','ptStock',
+for(const id of ['modalBox','ptName','ptDescription','ptPN','ptAlternatePN','ptSystem','ptUnit','ptStock',
   'ptMin','ptStatus','ptVendor','ptUrl','ptCost','ptLocation','ptPurchase','ptNotes',
   'olSearch','olPartId','olResults','olSelected','partRows','partSearch','partSystem','partStatus']){
   controls.set(id,el(id));
