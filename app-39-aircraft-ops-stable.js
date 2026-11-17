@@ -105,6 +105,10 @@ function stableRunRichTab(tab){
       try{window.N594ZSConsumptionReport.mount()}
       catch(error){console.error('Consumables usage report mount failed',error)}
     }
+    if(tab==='reports'&&typeof window.N594ZSReorderReport?.mountOps==='function'){
+      try{window.N594ZSReorderReport.mountOps()}
+      catch(error){console.error('Reorder report mount failed',error)}
+    }
     if(tab==='consumables'){
       const box=stableOpsContent();
       if(box&&!box.querySelector('#opsConsumablesReportShortcut')&&!box.querySelector('#opsConsumptionGoReport')){
