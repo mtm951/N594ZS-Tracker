@@ -37,6 +37,8 @@ const ctx={
   unique:x=>[...new Set(x)],uid:()=>++id,nextNumericId:(xs,min)=>Math.max(min-1,...xs.map(x=>Number(x.id)||0))+1,
   val:k=>String(controls[k]??''),selectedNumber:k=>controls[k]?Number(controls[k]):null,
   systemOptions:()=>'<option value="Fuel">Fuel</option>',
+  partPickerId:prefix=>controls.olPart?Number(controls.olPart):null,
+  searchablePartPicker:(prefix,selected,label)=>'<input type="search" id="'+prefix+'Search" aria-label="'+label+'">',
   partOptions:current=>'<option value="">None</option>'+db.parts.map(x=>
     '<option value="'+x.id+'"'+(Number(current)===Number(x.id)?' selected':'')+'>'+x.name+'</option>').join(''),
   projectOptions:()=>'',trackerSystemFilterOptions:()=>'',trackerRecordMatchesSystem:()=>true,
