@@ -136,9 +136,9 @@ assert.equal(db.projects[0].steps[0].done,false,'starting a session does not com
 const sessionId=db.projects[0].guidedWorkSessions[0].id;
 function click(action){
   assert.ok(root?.handlers.click,'session click handler missing');
-  root.handlers.click({target:{closest:()=>({
+  root.handlers.click({target:{closest:selector=>selector==='[data-gws-action]'?({
     getAttribute:name=>name==='data-gws-action'?action:null
-  })}});
+  }):null}});
 }
 inputValues={notes:'Observed intact clamp',reading:'1.2',unit:'in. clearance'};
 click('save');
