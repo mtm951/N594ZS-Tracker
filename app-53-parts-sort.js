@@ -69,7 +69,7 @@
   window.renderParts=function(){
     const systems=unique(db.parts.map(x=>x.system).filter(Boolean)).sort();
     document.getElementById('page-parts').innerHTML=`<div class="card">
-      <div class="toolbar"><div><h1>Parts & Materials</h1><div class="muted">Physical inventory, project reservations, usage history and purchasing provenance. Click a column heading to sort.</div></div><button class="btn primary" onclick="openPartModal()">+ Add Part</button></div>
+      <div class="toolbar"><div><h1>Parts & Materials</h1><div class="muted">Physical inventory, project reservations, usage history and purchasing provenance. Click a column heading to sort.</div></div><div class="action-row"><button class="btn secondary" type="button" onclick="N594ZSReorderReport.openParts()">Reorder Report</button><button class="btn primary" onclick="openPartModal()">+ Add Part</button></div></div>
       <div class="controls"><input id="partSearch" placeholder="Search name, PN or alternate PN…" oninput="renderPartRows()"><select id="partSystem" onchange="renderPartRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select><select id="partStatus" onchange="renderPartRows()"><option value="">All statuses</option>${unique(db.parts.map(p=>p.status).filter(Boolean)).map(s=>`<option>${esc(s)}</option>`).join('')}</select></div>
       <div class="table-wrap" style="margin-top:11px"><table><thead><tr>
         ${partSortHead('Part / material','name')}
@@ -84,6 +84,7 @@
       </tr></thead><tbody id="partRows"></tbody></table></div>
     </div>`;
     renderPartRows();
+    if(typeof window.N594ZSReorderReport?.mountParts==='function')window.N594ZSReorderReport.mountParts();
   };
 
   window.renderPartRows=function(){
