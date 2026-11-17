@@ -144,5 +144,5 @@ assert.doesNotMatch(controls.get('partRows').innerHTML,/MS24665-283/);
 assert.match(index,/app-08-orders\.js\?v=5\.19\.80/);
 assert.match(index,/app-30-part-descriptions\.js\?v=5\.19\.80/);
 assert.match(index,/app-36-searchable-part-picker\.js\?v=5\.19\.80/);
-assert.match(index,/app-53-parts-sort\.js\?v=5\.19\.80/);
+assert.match(index,/app-53-parts-sort\.js\?v=5\.19\.81/);
 console.log('PASS: searchable Order part link, alternate PNs, shared inventory, duplicate protection and Parts search');
