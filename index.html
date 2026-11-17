@@ -32,6 +32,7 @@
   <section class="page" id="page-weightbalance"></section>
   <section class="page" id="page-readiness"></section>
   <section class="page" id="page-ops"></section>
+  <section class="page" id="page-planner"></section>
   <section class="page" id="page-projects"></section>
   <section class="page" id="page-parts"></section>
   <section class="page" id="page-orders"></section>
@@ -62,7 +63,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';</script>
-<script src="app-01-seed.js?v=5.19.81"></script>
+<script src="app-01-seed.js?v=5.19.82"></script>
 <script>document.getElementById("appVersionFooter").textContent=typeof APP_VERSION==="string"?"v"+APP_VERSION:"Version unavailable";</script>
 <script>if(!NAV.some(x=>x[0]==='ops')){const i=NAV.findIndex(x=>x[0]==='readiness');const j=i>=0?i+1:Math.max(0,NAV.findIndex(x=>x[0]==='projects'));NAV.splice(j<0?NAV.length:j,0,['ops','Aircraft Ops']);}</script>
 <script src="app-02-data.js?v=5.19.10"></script>
@@ -127,9 +128,9 @@
 <script src="app-60-rotax-line-maintenance.js?v=5.19.10"></script>
 <script src="app-64-kitfox-poh.js?v=5.19.10"></script>
 <script src="app-65-component-view.js?v=5.19.61"></script>
-<script src="app-61-performance.js?v=5.19.10"></script>
+<script src="app-61-performance.js?v=5.19.82"></script>
 <script src="app-62-storage-resilience.js?v=5.19.10"></script>
-<script src="app-66-atomic-receipt-outbox.js?v=5.19.81"></script>
+<script src="app-66-atomic-receipt-outbox.js?v=5.19.82"></script>
 <script src="app-67-linked-order-blockers.js?v=5.19.29"></script>
 <script src="app-68-kitfox-manual-checklists.js?v=5.19.61"></script>
 <script src="app-69-commissioning-readiness.js?v=5.19.72"></script>
@@ -139,6 +140,7 @@
 <script src="app-74-reorder-report.js?v=5.19.81"></script>
 <script src="app-73-trash-details.js?v=5.19.77"></script>
 <script src="app-19-pwa.js?v=5.19.35"></script>
+<script src="app-75-maintenance-planner-guided-work.js?v=5.19.82"></script>
 <script src="app-15-init.js?v=5.19.10"></script>
 </body>
 </html>
