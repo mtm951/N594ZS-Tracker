@@ -30,6 +30,7 @@ const make=()=>({
   ],
   parts:[{id:201,name:'Hose clamp',stockQty:4,unit:'ea'}],
   orders:[],
+  logs:[],
   checklists:[
     {id:601,projectId:105,name:'Rotax fuel controls',items:[
       {id:'m1',text:'Inspect throttle cable security',done:false,sourcePage:25},
