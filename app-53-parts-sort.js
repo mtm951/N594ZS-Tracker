@@ -70,7 +70,7 @@
     const systems=unique(db.parts.map(x=>x.system).filter(Boolean)).sort();
     document.getElementById('page-parts').innerHTML=`<div class="card">
       <div class="toolbar"><div><h1>Parts & Materials</h1><div class="muted">Physical inventory, project reservations, usage history and purchasing provenance. Click a column heading to sort.</div></div><button class="btn primary" onclick="openPartModal()">+ Add Part</button></div>
-      <div class="controls"><input id="partSearch" placeholder="Search parts…" oninput="renderPartRows()"><select id="partSystem" onchange="renderPartRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select><select id="partStatus" onchange="renderPartRows()"><option value="">All statuses</option>${unique(db.parts.map(p=>p.status).filter(Boolean)).map(s=>`<option>${esc(s)}</option>`).join('')}</select></div>
+      <div class="controls"><input id="partSearch" placeholder="Search name, PN or alternate PN…" oninput="renderPartRows()"><select id="partSystem" onchange="renderPartRows()"><option value="">All systems</option>${systems.map(s=>`<option>${esc(s)}</option>`).join('')}</select><select id="partStatus" onchange="renderPartRows()"><option value="">All statuses</option>${unique(db.parts.map(p=>p.status).filter(Boolean)).map(s=>`<option>${esc(s)}</option>`).join('')}</select></div>
       <div class="table-wrap" style="margin-top:11px"><table><thead><tr>
         ${partSortHead('Part / material','name')}
         ${partSortHead('PN / spec','partNo')}
@@ -90,7 +90,7 @@
     const el=document.getElementById('partRows');if(!el)return;
     const q=(val('partSearch')||'').toLowerCase(),sys=val('partSystem'),st=val('partStatus');
     const rows=sortRows(db.parts.filter(p=>
-      (!q||[p.name,p.partNo,p.system,p.vendor,p.notes,p.location,p.partType].join(' ').toLowerCase().includes(q))&&
+      (!q||[p.name,p.partNo,...(typeof partAlternateCodes==='function'?partAlternateCodes(p):[]),p.description,p.system,p.vendor,p.notes,p.location,p.partType].join(' ').toLowerCase().includes(q))&&
       (!sys||(typeof systemRecordMatches==='function'?systemRecordMatches(p,sys,'parts'):p.system===sys))&&
       (!st||p.status===st)
     ));
@@ -100,7 +100,7 @@
       const free=typeof partFreeQty==='function'?partFreeQty(p):on;
       return `<tr class="click-row" onclick="openPartDetail(${p.id})">
         <td><div class="task-title">${esc(p.name)}</div><div class="task-note">${esc(p.description||p.notes||'')}</div></td>
-        <td>${esc(p.partNo||'—')}</td>
+        <td>${esc(p.partNo||'—')}${typeof partAlternateCodes==='function'&&partAlternateCodes(p).length?`<div class="task-note">Alt: ${esc(partAlternateCodes(p).join(', '))}</div>`:''}</td>
         <td>${esc(p.system||'—')}</td>
         <td>${on===null||on===undefined?'—':esc(on+' '+(p.unit||''))}</td>
         <td>${esc(r+' '+(p.unit||''))}</td>

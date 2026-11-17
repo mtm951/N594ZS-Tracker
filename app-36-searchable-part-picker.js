@@ -23,11 +23,11 @@
 function searchablePartPicker(prefix,selectedId=null,label='Inventory part (optional)'){
   const selected=selectedId?partById(Number(selectedId)):null;
   const selectedText=selected?partPickerLabel(selected):'';
-  return `<div class="full part-picker" id="${prefix}Picker"><label>${esc(label)}</label><input type="search" id="${prefix}Search" autocomplete="off" placeholder="Search name, PN, description, system, vendor…" value="${esc(selectedText)}" onfocus="renderPartPickerResults('${prefix}')" oninput="partPickerTyped('${prefix}')"><input type="hidden" id="${prefix}PartId" value="${selected?esc(selected.id):''}"><button type="button" class="part-picker-clear" title="Clear selection" aria-label="Clear part selection" onclick="clearPartPicker('${prefix}')">×</button><div class="part-picker-results" id="${prefix}Results"></div><div class="part-picker-selected" id="${prefix}Selected" style="${selected?'':'display:none'}">${selected?partPickerSelectedHTML(selected):''}</div></div>`;
+  return `<div class="full part-picker" id="${prefix}Picker"><label>${esc(label)}</label><input type="search" id="${prefix}Search" autocomplete="off" placeholder="Search name, primary or alternate PN, system…" value="${esc(selectedText)}" onfocus="renderPartPickerResults('${prefix}')" oninput="partPickerTyped('${prefix}')"><input type="hidden" id="${prefix}PartId" value="${selected?esc(selected.id):''}"><button type="button" class="part-picker-clear" title="Clear selection" aria-label="Clear part selection" onclick="clearPartPicker('${prefix}')">×</button><div class="part-picker-results" id="${prefix}Results"></div><div class="part-picker-selected" id="${prefix}Selected" style="${selected?'':'display:none'}">${selected?partPickerSelectedHTML(selected):''}</div></div>`;
 }
 function partPickerLabel(p){return `${p.name||'Part'}${p.partNo?` • ${p.partNo}`:''}`}
-function partPickerSelectedHTML(p){const a=partAvailable(p);return `<b>${esc(p.name||'Part')}</b>${p.partNo?` • PN ${esc(p.partNo)}`:''}${p.system?` • ${esc(p.system)}`:''}${a!==null?` • Available ${esc(a)} ${esc(p.unit||'ea')}`:''}`}
-function partPickerSearchText(p){return [p.name,p.partNo,p.description,p.system,p.vendor,p.location,p.status].filter(Boolean).join(' ').toLowerCase()}
+function partPickerSelectedHTML(p){const a=partAvailable(p),aliases=typeof partAlternateCodes==='function'?partAlternateCodes(p):[];return `<b>${esc(p.name||'Part')}</b>${p.partNo?` • PN ${esc(p.partNo)}`:''}${aliases.length?` • Also ${esc(aliases.join(', '))}`:''}${p.system?` • ${esc(p.system)}`:''}${a!==null?` • Available ${esc(a)} ${esc(p.unit||'ea')}`:''}`}
+function partPickerSearchText(p){return [p.name,p.partNo,...(typeof partAlternateCodes==='function'?partAlternateCodes(p):[]),p.description,p.system,p.vendor,p.location,p.status].filter(Boolean).join(' ').toLowerCase()}
 function partPickerTyped(prefix){
   const hidden=document.getElementById(prefix+'PartId');if(hidden)hidden.value='';
   const selected=document.getElementById(prefix+'Selected');if(selected)selected.style.display='none';
@@ -43,7 +43,7 @@ function renderPartPickerResults(prefix){
     return aStock-bStock||String(a.name||'').localeCompare(String(b.name||''));
   });
   rows=rows.slice(0,40);
-  box.innerHTML=rows.length?rows.map(p=>{const a=partAvailable(p);return `<button type="button" class="part-picker-item" onclick="choosePartPicker('${prefix}',${Number(p.id)})"><b>${esc(p.name||'Part')}${p.partNo?` • ${esc(p.partNo)}`:''}</b><small>${esc(p.system||'General')}${p.vendor?` • ${esc(p.vendor)}`:''}${a!==null?` • Available ${esc(a)} ${esc(p.unit||'ea')}`:''}${p.location?` • ${esc(p.location)}`:''}</small></button>`}).join(''):`<div class="part-picker-empty">No inventory parts match “${esc(input.value)}”. You can still enter a manual item below.</div>`;
+  box.innerHTML=rows.length?rows.map(p=>{const a=partAvailable(p);return `<button type="button" class="part-picker-item" onclick="choosePartPicker('${prefix}',${Number(p.id)})"><b>${esc(p.name||'Part')}${p.partNo?` • ${esc(p.partNo)}`:''}</b><small>${typeof partAlternateCodes==='function'&&partAlternateCodes(p).length?`Also PN ${esc(partAlternateCodes(p).join(', '))} • `:''}${esc(p.system||'General')}${p.vendor?` • ${esc(p.vendor)}`:''}${a!==null?` • Available ${esc(a)} ${esc(p.unit||'ea')}`:''}${p.location?` • ${esc(p.location)}`:''}</small></button>`}).join(''):`<div class="part-picker-empty">No inventory parts match “${esc(input.value)}”. You can still enter a manual item below.</div>`;
   box.classList.add('open');
 }
 function choosePartPicker(prefix,id){

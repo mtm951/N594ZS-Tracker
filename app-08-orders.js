@@ -46,9 +46,11 @@ function orderItemMatches(q){
   const text=String(q).toLowerCase();
   const rank=p=>{
     const name=String(p.name||'').toLowerCase(),pn=String(p.partNo||'').toLowerCase();
-    return name.startsWith(text)?0:pn.startsWith(text)?1:name.includes(text)?2:3;
+    const alternates=typeof partAlternateCodes==='function'?partAlternateCodes(p):[];
+    return name.startsWith(text)?0:pn.startsWith(text)?1:
+      alternates.some(x=>x.toLowerCase().startsWith(text))?2:name.includes(text)?3:4;
   };
-  return arr(db.parts).filter(p=>[p.name,p.partNo,p.vendor,p.system]
+  return arr(db.parts).filter(p=>[p.name,p.partNo,p.vendor,p.system,...(typeof partAlternateCodes==='function'?partAlternateCodes(p):[])]
     .some(v=>String(v||'').toLowerCase().includes(text)))
     .sort((a,b)=>rank(a)-rank(b)||String(a.name||'').localeCompare(String(b.name||'')))
     .slice(0,8);
@@ -71,7 +73,7 @@ function renderOrderItemSuggestions(){
   }
   orderItemSuggestionActive=0;
   box.innerHTML=matches.map((p,i)=>
-    `<button type="button" role="option" aria-selected="${i===0}" class="order-item-suggestion${i===0?' active':''}" id="order-suggest-${p.id}" data-part-id="${esc(p.id)}" onclick="chooseOrderItemSuggestion(${Number(p.id)})"><b>${esc(p.name)}${p.partNo?' • '+esc(p.partNo):''}</b><small>${esc(p.system||'General')}${p.vendor?' • '+esc(p.vendor):''} • Link existing inventory</small></button>`
+    `<button type="button" role="option" aria-selected="${i===0}" class="order-item-suggestion${i===0?' active':''}" id="order-suggest-${p.id}" data-part-id="${esc(p.id)}" onclick="chooseOrderItemSuggestion(${Number(p.id)})"><b>${esc(p.name)}${p.partNo?' • '+esc(p.partNo):''}</b><small>${typeof partAlternateCodes==='function'&&partAlternateCodes(p).length?'Also: '+esc(partAlternateCodes(p).join(', '))+' • ':''}${esc(p.system||'General')}${p.vendor?' • '+esc(p.vendor):''} • Link existing inventory</small></button>`
   ).join('');
   box.hidden=false;input.setAttribute('aria-expanded','true');
   input.setAttribute('aria-activedescendant','order-suggest-'+matches[0].id);
@@ -231,16 +233,40 @@ function removeOrderProjectLink(orderId,pid){
   },'Project link removed.');openOrderProjectLinkModal(orderId);}
   catch(e){alert('Project link was not removed: '+e.message)}
 }
+
 function openOrderPartLinkModal(orderId){
   const o=orderById(orderId);if(!o)return;
-  openModal(`${modalHeader(o.partId?'Change Linked Part':'Link Inventory Part',o.item)}<div class="notice">Choose the inventory item that should receive this order. Stock is not increased until quantity is received.</div><div class="form-grid" style="margin-top:12px"><div class="full"><label>Inventory part</label><select id="olPart">${partOptions(o.partId)}</select><small>All parts appear here, including 0 on hand. Linking never receives stock.</small></div></div><div class="modal-actions"><button class="btn secondary" onclick="openOrderDetail(${orderId})">Cancel</button>${o.partId?'':`<button class="btn secondary" onclick="openCreatePartFromOrder(${orderId})">Create New Part (0 On Hand)</button>`}<button class="btn primary" onclick="saveOrderPartLink(${orderId})">Save Part Link</button></div>`);
+  const selected=o.partId&&partById(o.partId)?o.partId:null;
+  const picker=searchablePartPicker('ol',selected,'Inventory part');
+  openModal(`${modalHeader(o.partId?'Change Linked Part':'Link Inventory Part',o.item)}
+    <div class="notice">Search by description, primary part number, or alternate part number. Select the actual inventory record to link. Stock is not increased until quantity is received.</div>
+    <div class="form-grid" style="margin-top:12px">${picker}
+      <div class="full"><small>All inventory parts are searchable, including parts with 0 on hand. Equivalent part numbers refer to the same physical inventory record.</small></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="openOrderDetail(${orderId})">Cancel</button>
+      ${o.partId?'':`<button class="btn secondary" onclick="openCreatePartFromOrder(${orderId})">Create New Part (0 On Hand)</button>`}
+      <button class="btn primary" onclick="saveOrderPartLink(${orderId})">Save Part Link</button>
+    </div>`);
 }
 function saveOrderPartLink(orderId){
   const o=orderById(orderId);if(!o)return;
-  const partId=selectedNumber('olPart');o.partId=partId;
-  if(partId){const p=partById(partId);if(p){p.linkedProjectIds=arr(p.linkedProjectIds);for(const pid of orderProjectIds(o))if(!p.linkedProjectIds.some(x=>Number(x)===pid))p.linkedProjectIds.push(pid)}}
-  closeModal();saveDB(partId?'Order linked to inventory part.':'Inventory part link removed.');setTimeout(()=>openOrderDetail(orderId),50);
+  const partId=partPickerId('ol');
+  const typed=String(document.getElementById('olSearch')?.value||'').trim();
+  if(typed&&!partId)return alert('Choose a matching inventory part from the suggestions. Typed text alone does not select a part.');
+  if(partId&&!partById(partId))return alert('That inventory part is unavailable. Reopen the picker and search again.');
+  if(!partId&&o.partId&&!confirm('Remove the current inventory part link? This does not reverse any previously received inventory.'))return;
+  if(Number(o.partId||0)===Number(partId||0)){closeModal();return openOrderDetail(orderId);}
+  o.partId=partId;
+  if(partId){
+    const p=partById(partId);
+    p.linkedProjectIds=arr(p.linkedProjectIds);
+    for(const pid of orderProjectIds(o))if(!p.linkedProjectIds.some(x=>Number(x)===pid))p.linkedProjectIds.push(pid);
+  }
+  closeModal();saveDB(partId?'Order linked to inventory part.':'Inventory part link removed.');
+  setTimeout(()=>openOrderDetail(orderId),50);
 }
+
 function applyOrderReceipt(tx,orderId,qty,receiptDate=''){
   const o=tx.read('order',orderId);
   if(!o)throw new Error('Order is no longer available.');
