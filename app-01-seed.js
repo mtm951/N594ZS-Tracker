@@ -1,10 +1,10 @@
 'use strict';
 
-const APP_VERSION='5.19.81';
+const APP_VERSION='5.19.82';
 const DB_KEY='n594zs_v3';
 const OLD_DB_KEY='n594zs_v2';
 const NAV=[
-  ['dashboard','Dashboard'],['aircraft','Aircraft'],['projects','Projects'],['parts','Parts'],['orders','Orders'],
+  ['dashboard','Dashboard'],['aircraft','Aircraft'],['planner','Planner'],['projects','Projects'],['parts','Parts'],['orders','Orders'],
   ['documents','Documents'],['checklists','Checklists'],['logbook','Work Log'],['settings','Settings']
 ];
 

@@ -21,6 +21,7 @@
     weightbalance:['renderWeightBalance'],
     ops:['smartRenderOpsSafe','renderOps'],
     readiness:['renderReadiness'],
+    planner:['renderMaintenancePlanner'],
     projects:['renderProjects'],
     parts:['renderParts'],
     orders:['renderOrders'],
