@@ -241,7 +241,7 @@ function openOrderPartLinkModal(orderId){
   openModal(`${modalHeader(o.partId?'Change Linked Part':'Link Inventory Part',o.item)}
     <div class="notice">Search by description, primary part number, or alternate part number. Select the actual inventory record to link. Stock is not increased until quantity is received.</div>
     <div class="form-grid" style="margin-top:12px">${picker}
-      <div class="full"><small>All inventory parts are searchable, including parts with zero on hand. Equivalent part numbers refer to the same physical inventory record.</small></div>
+      <div class="full"><small>All inventory parts are searchable, including parts with 0 on hand. Equivalent part numbers refer to the same physical inventory record.</small></div>
     </div>
     <div class="modal-actions">
       <button class="btn secondary" onclick="openOrderDetail(${orderId})">Cancel</button>
@@ -256,7 +256,7 @@ function saveOrderPartLink(orderId){
   if(typed&&!partId)return alert('Choose a matching inventory part from the suggestions. Typed text alone does not select a part.');
   if(partId&&!partById(partId))return alert('That inventory part is unavailable. Reopen the picker and search again.');
   if(!partId&&o.partId&&!confirm('Remove the current inventory part link? This does not reverse any previously received inventory.'))return;
-  if(Number(o.partId||0)===Number(partId||0))return openOrderDetail(orderId);
+  if(Number(o.partId||0)===Number(partId||0)){closeModal();return openOrderDetail(orderId);}
   o.partId=partId;
   if(partId){
     const p=partById(partId);
