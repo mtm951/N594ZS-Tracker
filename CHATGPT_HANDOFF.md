@@ -14,9 +14,19 @@ This file exists to preserve development continuity across ChatGPT conversations
 - Supabase workspace id: `1ead2eeb-4aeb-443f-bdf7-ad7a1c901bca`
 - Canonical cloud records: `public.tracker_records`
 - Cloud snapshots: `public.tracker_snapshots`
-- Current release: **v5.19.80** (searchable Order Part link and equivalent PN cross-references; November 17).
+- Current release: **v5.19.81** (on-screen vendor Reorder Report and printable list; November 17).
 
 
+
+## v5.19.81 On-screen vendor Reorder Report and printable shopping list (Nov 17, 2026)
+
+- Added `app-74-reorder-report.js` as a read-only, interactive **Reorder Report** surfaced in **Aircraft Ops → Reports** and via **Parts → Reorder Report**. Stable Reports lifecycle mounts it directly (like the existing consumables usage report), unaffected by legacy async script recovery. Parts report can be closed and re-opened without leaving Parts; continues to mount when the normal renderer refreshes.
+- Report defaults to **Below reorder minimum** (a part whose Free = adjusted on hand minus active project reservations is strictly below its configured `minQty`). Excludes missing/unknown stock and missing minimums from default shortage list. Uses **Work Log use and inventoryAdjustments once**, never duplicates Project Parts Used. Honors saved `minQty`, including 0, with negative free recognized as under zero. **Unreceived** Ordered/Backordered/Shipped quantities (including partial receipts) offset the suggested quantity but **never credit physical stock**. Display both below-minimum items covered by incoming orders and items needing additional purchases. Search matches name, main PN, alternate PN, system, vendor, description.
+- Vendor dropdown (e.g., Aircraft Spruce), **Below minimum / Still needs ordering / All vendor items** modes, vendor-grouped desktop rows or readable mobile cards, editable quantity suggestions, and clickable **Part details / Incoming order / Draft order**. Draft order opens the existing standard New Order editor with part/vendor and proposed quantity prefilled; nothing is placed, received, or saved until user confirms in the normal order editor. Warn if the low-stock item is already covered by incoming orders. All vendor items includes items with no threshold so owners can identify add-ons when shopping with a supplier.
+- On-screen report summary: below minimum, still to order, covered by incoming, displayed. Estimate from stored per-unit costs labeled historical, not live quotes, and excludes unpriced. **Print / Save PDF** creates a clean Letter landscape printable report of the filtered visible list using browser's native PDF option; **Export CSV** includes quantities, vendor, PNs and statuses. No PDF generated server-side. Does not alter Supabase schema or cloud data.
+- Live data inspection at implementation: 365 active inventory parts, 13 with a configured numeric reorder minimum (9 positive), 160 vendor-tagged Aircraft Spruce. Feature may show few default shortages until users set minimums on more Parts; vendor catalog remains useful immediately.
+- Regression in `tests/reorder-vendor-shopping-report.test.mjs`: adjusted stock minus Work Log uses, active reservations excluding done projects, partial incoming orders without stock credit, vendor and alternate-PN filtering, missing-minimum handling, fractional quantities, printable/CSV source consistency, and order editor wiring. Verified entire CI prior to merge.
+- Acceptance on phone and desktop: from a Synced v5.19.81 app, **Parts → Reorder Report**, select Aircraft Spruce, view Below minimum then All vendor items, search a PN and create a draft Order. Verify suggested qty editable, no automatic receipt and the same open order appears under Orders once saved. **Aircraft Ops → Reports** shows both reorder and parts usage reports. Print to PDF and inspect Letter landscape formatting.
 
 ## v5.19.80 Searchable Order part links & alternate part numbers (November 17)
 
