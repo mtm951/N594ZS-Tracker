@@ -24,13 +24,13 @@
   function cards(p,data){
     const own=steps(p);
     if(own.length)return own.map(s=>({key:'project:'+S(s.id),kind:'project',id:s.id,text:S(s.text||'Task'),
-      note:S(s.note),done:!!s.done,source:'Project task',sourcePage:null,checklistId:null}));
+      note:S(s.note),done:!!s.done,estimatedMinutes:s.estimatedMinutes??null,source:'Project task',sourcePage:null,checklistId:null}));
     const cs=linkedChecks(p,data);
     const result=[];
     for(const c of cs){
       for(const item of A(c.items)){
         result.push({key:'checklist:'+S(c.id)+':'+S(item.id),kind:'checklist',id:item.id,checklistId:c.id,
-          text:S(item.text||'Checklist requirement'),note:S(item.note),done:!!item.done,
+          text:S(item.text||'Checklist requirement'),note:S(item.note),done:!!item.done,estimatedMinutes:item.estimatedMinutes??null,
           source:S(c.name),sourcePage:item.sourcePage??null,sourceDocumentId:item.sourceDocumentId||c.sourceDocumentId||null});
       }
     }
@@ -40,7 +40,11 @@
       done:false,source:'Project next-step note',sourcePage:null,checklistId:null}];
   }
   function nextCard(p,data){
-    return cards(p,data).find(c=>!c.done)||cards(p,data)[0];
+    const items=cards(p,data),session=activeSession(p);
+    // A session can record review of a source requirement, but only the source
+    // Checklist can verify it. Prefer the next not-yet-reviewed card for planning.
+    return items.find(c=>!c.done&&session?.cards?.[c.key]?.status!=='completed')||
+      items.find(c=>!c.done)||items[0];
   }
   function timeHint(card,p){
     const explicit=Number(card?.estimatedMinutes||p?.plannerMinutes||0);
@@ -294,6 +298,7 @@
       'To document actual work, prepare a Work Log and add consumed parts in the normal atomic workflow.</p></div>'+
       '<div class="mp-session-foot-actions">'+
       (card.kind==='checklist'?'<button type="button" class="secondary" data-gws-action="source">Open Source Checklist</button>':'')+
+      linkedChecks(p,db).map(c=>'<button type="button" class="secondary" data-gws-checklist="'+E(c.id)+'">Source: '+E(c.name)+'</button>').join('')+
       '<button type="button" class="secondary" data-gws-action="worklog">Prepare Work Log</button>'+
       '<button type="button" class="secondary" data-gws-action="pause">Pause Session</button>'+
       '<button type="button" class="secondary" data-gws-action="finish">Finish Session</button></div></div>';
@@ -394,6 +399,13 @@
       document.getElementById('page-planner')?.classList.contains('active'))renderMaintenancePlanner();}
   }
   function onSessionClick(event){
+    const checklistButton=event.target.closest('[data-gws-checklist]');
+    if(checklistButton){
+      if(!persist('save'))return;
+      const id=checklistButton.getAttribute('data-gws-checklist');
+      if(typeof openChecklistDetail==='function')return openChecklistDetail(id);
+      return alert('Source Checklist editor unavailable.');
+    }
     const b=event.target.closest('[data-gws-action]');if(!b)return;
     const action=b.getAttribute('data-gws-action');
     if(action==='worklog')return prepareLog();
